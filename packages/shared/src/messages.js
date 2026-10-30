@@ -1,0 +1,216 @@
+// WebSocket protocol (contracts.md §7). Each channel maps a message type to its payload schema.
+import { z } from "zod";
+import { ConfigSchema } from "./config.js";
+import { PROTOCOL_VERSION } from "./enums.js";
+import { newId } from "./ids.js";
+import {
+  CoachTipSchema,
+  FailReasonSchema,
+  GhostTraceSchema,
+  LeaderboardEntrySchema,
+  PlayerViewSchema,
+  RosterEntrySchema,
+  RunEventSchema,
+  RunSchema,
+  RunStartSchema,
+  SectionIdSchema,
+  SessionSchema,
+  SplitsSchema,
+  WeatherKindSchema,
+  WeatherStateSchema,
+} from "./schemas.js";
+
+const ms = z.number().int().nonnegative();
+const empty = z.object({});
+const progress = z.number().min(0).max(1);
+
+const hello = z.discriminatedUnion("role", [
+  z.object({ role: z.literal("phone") }), // the bk_device cookie identifies the device
+  z.object({ role: z.literal("game"), gameKey: z.string() }),
+  z.object({ role: z.literal("admin"), pin: z.string() }),
+]);
+
+const errorPayload = z.object({
+  code: z.string(),
+  message: z.string(),
+  refId: z.string().optional(),
+});
+
+const broadcasts = {
+  "leaderboard.updated": z.array(LeaderboardEntrySchema),
+  "session.updated": SessionSchema,
+  "config.updated": ConfigSchema,
+  error: errorPayload,
+};
+
+const phoneBroadcasts = {
+  ...broadcasts,
+  "weather.updated": WeatherStateSchema,
+};
+
+const runResult = {
+  runId: z.string(),
+  elapsedMs: ms,
+  splits: SplitsSchema,
+  events: z.array(RunEventSchema),
+  boostsUsed: z.number().int().nonnegative(),
+  weatherSeen: z.array(WeatherKindSchema),
+};
+
+export const CHANNELS = {
+  phoneToServer: {
+    hello,
+    "phone.go": empty,
+    "phone.boost": z.object({ runId: z.string() }),
+  },
+  adminToServer: {
+    hello,
+  },
+  gameToServer: {
+    hello,
+    "game.run.started": z.object({ runId: z.string() }),
+    "game.run.progress": z.object({
+      runId: z.string(),
+      progress,
+      elapsedMs: ms,
+      section: SectionIdSchema,
+      boostsLeft: z.number().int().nonnegative(),
+    }),
+    "game.run.section": z.object({ runId: z.string(), section: SectionIdSchema, splitMs: ms }),
+    "game.run.finished": z.object({ ...runResult, trace: GhostTraceSchema }),
+    "game.run.failed": z.object({
+      ...runResult,
+      reason: FailReasonSchema,
+      section: SectionIdSchema,
+    }),
+    "game.weather": WeatherStateSchema,
+    "game.capacity": z.object({ freeSlots: z.number().int().nonnegative() }),
+  },
+  serverToPhone: {
+    ...phoneBroadcasts,
+    welcome: z.object({
+      session: SessionSchema,
+      config: ConfigSchema,
+      me: PlayerViewSchema.optional(),
+      weather: WeatherStateSchema,
+    }),
+    "player.updated": PlayerViewSchema,
+    "run.queued": z.object({ run: RunSchema }),
+    "run.started": z.object({ run: RunSchema }),
+    "run.progress": z.object({
+      runId: z.string(),
+      progress,
+      elapsedMs: ms,
+      section: SectionIdSchema,
+      deltaVsBestMs: z.number().int().optional(),
+      boostsLeft: z.number().int().nonnegative(),
+    }),
+    "run.section": z.object({
+      runId: z.string(),
+      section: SectionIdSchema,
+      splitMs: ms,
+      bestSplitMs: ms.optional(),
+    }),
+    "run.ended": z.object({
+      run: RunSchema,
+      isPersonalBest: z.boolean(),
+      rank: z.number().int().positive().optional(),
+      coach: CoachTipSchema,
+    }),
+  },
+  // Not spelled out in contracts.md: the console gets the phone broadcasts plus the full
+  // player list, so it can show every racer live.
+  serverToAdmin: {
+    ...phoneBroadcasts,
+    welcome: z.object({
+      session: SessionSchema,
+      config: ConfigSchema,
+      players: z.array(PlayerViewSchema),
+      weather: WeatherStateSchema,
+    }),
+    "player.updated": PlayerViewSchema,
+    "player.removed": z.object({ playerId: z.string() }),
+  },
+  serverToGame: {
+    ...broadcasts,
+    welcome: z.object({
+      session: SessionSchema,
+      config: ConfigSchema,
+      roster: z.array(RosterEntrySchema),
+      activeRuns: z.array(RunStartSchema),
+    }),
+    "roster.updated": z.array(RosterEntrySchema),
+    "run.start": RunStartSchema,
+    "run.boost": z.object({ runId: z.string() }),
+    "run.abort": z.object({ runId: z.string(), reason: z.string() }),
+  },
+};
+
+/** Channels a role sends on, and receives on. */
+export const ROLE_CHANNELS = {
+  phone: { send: "phoneToServer", receive: "serverToPhone" },
+  admin: { send: "adminToServer", receive: "serverToAdmin" },
+  game: { send: "gameToServer", receive: "serverToGame" },
+};
+
+/**
+ * Builds a validated message envelope. Throws if the payload doesn't match the contract,
+ * since that is a bug in the sender.
+ * @param {keyof typeof CHANNELS} channel
+ * @param {string} type
+ * @param {unknown} payload
+ */
+export function makeMsg(channel, type, payload) {
+  const schema = CHANNELS[channel]?.[type];
+  if (!schema) throw new Error(`Unknown message type "${type}" on channel "${channel}"`);
+  return {
+    v: PROTOCOL_VERSION,
+    type,
+    id: newId("message"),
+    ts: new Date().toISOString(),
+    payload: schema.parse(payload),
+  };
+}
+
+const EnvelopeSchema = z.object({
+  v: z.literal(PROTOCOL_VERSION),
+  type: z.string(),
+  id: z.string(),
+  ts: z.string(),
+  payload: z.unknown(),
+});
+
+/**
+ * Parses and validates a raw message (string or object) received on a channel.
+ * @param {keyof typeof CHANNELS} channel
+ * @param {unknown} raw
+ * @returns {{ ok: true, msg: { v: 1, type: string, id: string, ts: string, payload: any } }
+ *   | { ok: false, error: { code: "bad_message", message: string, refId?: string } }}
+ */
+export function parseMsg(channel, raw) {
+  let data = raw;
+  if (typeof raw === "string") {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return fail("message is not valid JSON");
+    }
+  }
+  const env = EnvelopeSchema.safeParse(data);
+  if (!env.success) return fail(`bad envelope: ${issues(env.error)}`);
+  const schema = CHANNELS[channel]?.[env.data.type];
+  if (!schema) return fail(`unknown message type "${env.data.type}"`, env.data.id);
+  const payload = schema.safeParse(env.data.payload);
+  if (!payload.success)
+    return fail(`bad ${env.data.type} payload: ${issues(payload.error)}`, env.data.id);
+  return { ok: true, msg: { ...env.data, payload: payload.data } };
+}
+
+const issues = (error) =>
+  error.issues.map((i) => `${i.path.join(".") || "(root)"} ${i.message}`).join("; ");
+const fail = (message, refId) => ({ ok: false, error: { code: "bad_message", message, refId } });
+
+/** Message type names per channel, e.g. MESSAGE_TYPES.gameToServer. */
+export const MESSAGE_TYPES = Object.fromEntries(
+  Object.entries(CHANNELS).map(([ch, types]) => [ch, Object.keys(types)]),
+);

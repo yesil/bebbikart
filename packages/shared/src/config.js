@@ -1,0 +1,88 @@
+import { z } from "zod";
+
+/** Defaults from contracts.md §2. The server merges bebbikart.config.json and env vars on top. */
+export const DEFAULT_CONFIG = Object.freeze({
+  sessionMinutes: 30,
+  maxPlayers: 20,
+  maxConcurrentRuns: 20,
+  starsTotal: 10,
+  starsMaxPerAbility: 5,
+  boostsPerRun: 3,
+  runTimeCapMs: 90_000,
+  stuckTimeoutMs: 3_000,
+  launchCooldownMs: 2_000, // after a run ends, before the same racer can launch again
+  weather: Object.freeze({
+    rain: Object.freeze({
+      minCalmMs: 20_000,
+      maxCalmMs: 90_000,
+      minMs: 6_000,
+      maxMs: 15_000,
+      warningMs: 5_000,
+    }),
+    wind: Object.freeze({
+      minCalmMs: 25_000,
+      maxCalmMs: 120_000,
+      minMs: 5_000,
+      maxMs: 40_000,
+      warningMs: 5_000,
+      maxStrength: 1.0,
+    }),
+  }),
+  ghostEnabled: true,
+  deleteUploadsOnReset: true,
+});
+
+const ms = z.number().int().nonnegative();
+const weatherCycle = z.object({
+  minCalmMs: ms,
+  maxCalmMs: ms,
+  minMs: ms,
+  maxMs: ms,
+  warningMs: ms,
+});
+
+export const ConfigSchema = z.object({
+  sessionMinutes: z.number().positive(),
+  maxPlayers: z.number().int().positive(),
+  maxConcurrentRuns: z.number().int().positive(),
+  starsTotal: z.number().int().positive(),
+  starsMaxPerAbility: z.number().int().positive(),
+  boostsPerRun: z.number().int().nonnegative(),
+  runTimeCapMs: ms,
+  stuckTimeoutMs: ms,
+  launchCooldownMs: ms,
+  weather: z.object({
+    rain: weatherCycle,
+    wind: weatherCycle.extend({ maxStrength: z.number().min(0).max(1) }),
+  }),
+  ghostEnabled: z.boolean(),
+  deleteUploadsOnReset: z.boolean(),
+});
+
+/** Body of PATCH /api/admin/config: any subset, nested weather included. */
+export const ConfigPatchSchema = ConfigSchema.extend({
+  weather: z
+    .object({
+      rain: weatherCycle.partial(),
+      wind: weatherCycle.extend({ maxStrength: z.number().min(0).max(1) }).partial(),
+    })
+    .partial(),
+}).partial();
+
+/**
+ * Deep-merges a partial config onto a base and validates the result.
+ * @param {z.infer<typeof ConfigSchema>} base
+ * @param {unknown} patch
+ * @returns {z.infer<typeof ConfigSchema>}
+ */
+export function mergeConfig(base, patch) {
+  const p = ConfigPatchSchema.parse(patch);
+  return ConfigSchema.parse({
+    ...base,
+    ...p,
+    weather: {
+      rain: { ...base.weather.rain, ...p.weather?.rain },
+      wind: { ...base.weather.wind, ...p.weather?.wind },
+    },
+  });
+}

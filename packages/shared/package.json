@@ -1,0 +1,29 @@
+{
+  "name": "@bebbikart/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./testing": "./testing/index.js",
+    "./msw": "./testing/msw-handlers.js"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "nanoid": "^5.1.5",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "msw": "^2.10.0"
+  },
+  "peerDependenciesMeta": {
+    "msw": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "msw": "^2.10.0"
+  }
+}
