@@ -7,12 +7,16 @@
 #   godot --path apps/game -- --server=ws://host:8080/ws --game-key=KEY   (or env BK_GAME_KEY)
 # Options (after --): --mock (default), --server[=URL], --game-key=KEY, --racers=N, --seed=N,
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
+#   --track=countryside|village (mock mode; with --server the session config picks the track),
 #   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full
 # Keys: C camera mode, Tab next racer, F next fork shot, R/W start next rain/wind phase,
 #   K toggle forced calm, B boost the followed racer, H hide overlay.
 extends Node3D
 
 const Course = preload("res://sim/course.gd")
+const VillageCourse = preload("res://sim/village_course.gd")
+const VILLAGE_WORLD_SCENE := "res://world/village/village_world.tscn"
+const VILLAGE_DECOR_SCENE := "res://world/village/village_decor.tscn"
 const Sim = preload("res://sim/sim.gd")
 const Racer = preload("res://sim/racer.gd")
 const Messages = preload("res://net/messages.gd")
@@ -29,7 +33,10 @@ const CameraRig = preload("res://world/camera_rig.gd")
 const FORCED := {"calm": [0.0, 0.0], "rain": [1.0, 0.0], "wind": [0.0, 0.8], "storm": [1.0, 0.8]}
 
 var args := {}
-var course: Course
+var course                 # sim/course.gd or sim/village_course.gd (loop)
+var track := ""            # TrackId of the loaded course and world
+## Track to load after a reload (config.track changed while the game was running).
+static var next_track := ""
 var config: Dictionary
 var sim: Sim
 var net                    # net/mock_net.gd or net/server_net.gd (same interface)
@@ -58,7 +65,11 @@ func _ready() -> void:
 	Engine.physics_ticks_per_second = int(Protocol.SIM_TICK_HZ * speed)
 	Engine.max_physics_steps_per_frame = maxi(8, int(8 * speed))
 	config = Messages.default_config()
-	course = Course.new()
+	track = next_track if next_track != "" else String(args.get("track", config["track"]))
+	config["track"] = track
+	course = _make_course(track)
+	if course == null:
+		return
 	sim = Sim.new(course, config, seed_)
 	if args.has("weather"):
 		var w: Array = FORCED.get(args["weather"], [0.0, 0.0])
@@ -108,14 +119,17 @@ func _build_scene() -> void:
 	camera = CameraRig.new()
 	add_child(camera)
 	camera.make_current()
-	if not _load_countryside_world():
+	if not (_load_village_world() if track == "village" else _load_countryside_world()):
 		return
 	camera.mode = {"follow": CameraRig.Mode.FOLLOW, "wide": CameraRig.Mode.WIDE, "forks": CameraRig.Mode.FORKS}.get(args.get("cam", "follow"), CameraRig.Mode.FOLLOW)
-	camera.fork_shots = [
-		[Vector3(18, 9, 60), Vector3(3, 0, 78)],      # ramp: jump vs around
-		[Vector3(25, 14, 145), Vector3(-10, 0, 170)], # pond: water vs bridge
-		[Vector3(-14, 9, 230), Vector3(6, 1, 252)],   # crossing: exposed vs sheltered
-	]
+	if track == "village":
+		camera.fork_shots = _village_fork_shots()
+	else:
+		camera.fork_shots = [
+			[Vector3(18, 9, 60), Vector3(3, 0, 78)],      # ramp: jump vs around
+			[Vector3(25, 14, 145), Vector3(-10, 0, 170)], # pond: water vs bridge
+			[Vector3(-14, 9, 230), Vector3(6, 1, 252)],   # crossing: exposed vs sheltered
+		]
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)
@@ -152,12 +166,77 @@ func _load_countryside_world() -> bool:
 	return true
 
 
+## Course for a TrackId, or null after reporting an unknown track and quitting.
+func _make_course(id: String):
+	match id:
+		"countryside":
+			return Course.new()
+		"village":
+			var c := VillageCourse.new()
+			if not c.errors.is_empty():
+				push_error("village course is broken: %s" % "; ".join(c.errors))
+				get_tree().quit(1)
+				return null
+			return c
+	push_error("unknown track \"%s\" (known: %s)" % [id, ", ".join(Protocol.TRACK_IDS)])
+	get_tree().quit(1)
+	return null
+
+
+## The Swiss village loop: baked from sim/village_course.gd + world/village/village_plan.gd by
+## tools/bake_village.gd, plus the hand-placed village_decor.tscn. Returns false (and quits
+## with an error) if it is missing or broken.
+func _load_village_world() -> bool:
+	if not ResourceLoader.exists(VILLAGE_WORLD_SCENE):
+		push_error("%s is missing; run tools/bake_village.gd" % VILLAGE_WORLD_SCENE)
+		get_tree().quit(1)
+		return false
+	var world: Node3D = (load(VILLAGE_WORLD_SCENE) as PackedScene).instantiate()
+	add_child(world)
+	if ResourceLoader.exists(VILLAGE_DECOR_SCENE):
+		add_child((load(VILLAGE_DECOR_SCENE) as PackedScene).instantiate())
+	var terrain := world.get_node_or_null("Terrain")
+	if terrain == null:
+		push_error("%s has no Terrain node; re-run tools/bake_village.gd" % VILLAGE_WORLD_SCENE)
+		get_tree().quit(1)
+		return false
+	terrain.call("set_camera", camera)
+	return true
+
+
+## A shot of each village fork from just before its split, looking down both branches.
+func _village_fork_shots() -> Array:
+	var shots: Array = []
+	for pair in [["ramp_jump", "ramp_around"], ["pond_water", "pond_bridge"], ["cross_exposed", "cross_sheltered"]]:
+		var a = course.segments[pair[0]]["route"]
+		var b = course.segments[pair[1]]["route"]
+		var mid: Vector3 = (a.pos_at(a.length * 0.5) + b.pos_at(b.length * 0.5)) * 0.5
+		var back: Vector3 = a.pos_at(0.0) - a.tangent_at(0.0) * 14.0
+		shots.append([back + Vector3(0, 12, 0), mid])
+	return shots
+
+
+## The server's session config picked another track: reload once the course is empty.
+func _check_track() -> void:
+	if String(config["track"]) == track or sim.active_count() > 0:
+		return
+	if not Protocol.TRACK_IDS.has(String(config["track"])):
+		push_error("config.track \"%s\" is not a known track" % config["track"])
+		_result("ERROR unknown track %s" % config["track"])
+		config["track"] = track
+		return
+	print("track change: %s -> %s, reloading" % [track, config["track"]])
+	next_track = String(config["track"])
+	get_tree().reload_current_scene()
+
+
 # ---------------------------------------------------------------- sim loop (60 Hz)
 
 func _physics_process(_delta: float) -> void:
 	var free_slots := int(config["maxConcurrentRuns"]) - sim.active_count()
 	for msg in net.poll(1.0 / float(Protocol.SIM_TICK_HZ), free_slots):
 		_handle(msg)
+	_check_track()
 	sim.step()
 	for m in sim.outbox:
 		_outgoing(m["type"], m["payload"])
@@ -196,6 +275,8 @@ func _handle(msg: Dictionary) -> void:
 			net.remember_run(pl["runId"], nicks.get(pl["playerId"], "?"))
 		Messages.RUN_BOOST:
 			sim.boost(pl["runId"])
+		Messages.RUN_STOP:
+			sim.stop(pl["runId"])
 		Messages.RUN_ABORT:
 			sim.abort(pl["runId"])
 		Messages.ROSTER_UPDATED:
@@ -233,7 +314,12 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 				follow_run = ""
 			return
 		Messages.GAME_RUN_FINISHED:
-			_result("%-6s %6.2f s" % [_nick_of(pl["runId"]), int(pl["elapsedMs"]) / 1000.0])
+			if pl.has("bestLapMs"):
+				_result("%-6s best lap %6.2f s (%d laps)" % [_nick_of(pl["runId"]), int(pl["bestLapMs"]) / 1000.0, (pl["laps"] as Array).size()])
+			else:
+				_result("%-6s %6.2f s" % [_nick_of(pl["runId"]), int(pl["elapsedMs"]) / 1000.0])
+		Messages.GAME_RUN_LAP:
+			_result("%-6s lap %d %6.2f s%s" % [_nick_of(pl["runId"]), pl["lap"], int(pl["lapMs"]) / 1000.0, " *" if pl["isBest"] else ""])
 		Messages.GAME_RUN_FAILED:
 			_result("%-6s FAIL %s @%s" % [_nick_of(pl["runId"]), pl["reason"], pl["section"]])
 	net.send(type, pl)
