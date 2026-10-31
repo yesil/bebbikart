@@ -80,6 +80,7 @@ var overlay: Label
 var follow_run := ""
 var run_time := 0.0
 var shot_taken := false
+var next_shot := 0.0       # --shots=DIR: time of the next periodic screenshot
 var forced_calm := false
 var menu: OptionsMenu
 var quitting := false
@@ -640,6 +641,11 @@ func _process(delta: float) -> void:
 	if args.has("screenshot") and not shot_taken and run_time >= float(args.get("shot-at", str(dur - 0.5 if dur > 1 else 12.0))):
 		shot_taken = true
 		_screenshot(args["screenshot"])
+	# --shots=DIR [--shot-every=SEC]: a screenshot every few seconds while racers are on the
+	# track (multiplayer harness: start grid, mid-race, finish), named by time and racer count.
+	if args.has("shots") and run_time >= next_shot and not sim.racers.is_empty():
+		next_shot = run_time + float(args.get("shot-every", "2"))
+		_screenshot("%s/t%05.1f_r%d.jpg" % [args["shots"], run_time, sim.racers.size()])
 	if dur > 0.0 and run_time >= dur:
 		_quit()
 
@@ -747,7 +753,10 @@ func _screenshot(path: String) -> void:
 	if img == null:
 		print("screenshot: no image (headless?)")
 		return
-	img.save_png(path)
+	if path.ends_with(".jpg"):
+		img.save_jpg(path, 0.85)
+	else:
+		img.save_png(path)
 	print("screenshot saved to ", path)
 
 
