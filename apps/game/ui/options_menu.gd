@@ -1,9 +1,11 @@
-# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, track and quit.
+# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, sound, track and quit.
 # The game manager sets the game options here, on the big screen; phones only join and quit.
 # It does not pause the sim: in server mode phones keep racing while it is open.
 # In server mode a track change during a running session ends that session (fresh
 # leaderboard), so the first click asks for a second click to confirm.
 extends CanvasLayer
+
+const AudioSettings = preload("res://audio/audio_settings.gd")
 
 signal fullscreen_toggled
 signal track_chosen(id: String)
@@ -16,6 +18,7 @@ var _panel: PanelContainer
 var _fullscreen: CheckButton
 var _tracks := {}            # TrackId -> Button
 var _qualities := {}         # preset id -> Button
+var _volumes := {}           # audio bus -> HSlider
 var _track_note: Label
 var _resume: Button
 var _current_track := ""
@@ -75,6 +78,23 @@ func setup(current_track: String, server_mode: bool) -> void:
 	qnote.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(qnote)
 
+	box.add_child(_label("Sound", 20))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 16)
+	box.add_child(grid)
+	for bus in AudioSettings.BUSES:
+		grid.add_child(_label({"Master": "Volume", "Sfx": "Effects"}.get(bus, bus), 17))
+		var sl := HSlider.new()
+		sl.min_value = 0.0
+		sl.max_value = 1.0
+		sl.step = 0.05
+		sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sl.custom_minimum_size = Vector2(0, 28)
+		sl.value_changed.connect(func(v: float): AudioSettings.set_volume(bus, v))
+		grid.add_child(sl)
+		_volumes[bus] = sl
+
 	box.add_child(_label("Track", 20))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
@@ -119,6 +139,8 @@ func is_open() -> bool:
 
 func open() -> void:
 	_fullscreen.set_pressed_no_signal(_is_fullscreen())
+	for bus in _volumes:
+		_volumes[bus].set_value_no_signal(AudioSettings.get_volume(bus))
 	_cancel_confirm()
 	visible = true
 	_resume.grab_focus()

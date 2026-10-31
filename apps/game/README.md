@@ -40,7 +40,7 @@ Keys:
 | R / W | Advance the rain / wind phase |
 | K | Toggle forced calm |
 | H | Hide the overlay |
-| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, track, quit |
+| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, sound, track, quit |
 | Ctrl+Cmd+F, or F11 | Toggle fullscreen (on a Mac keyboard F11 may need fn) |
 | Cmd+Q, or closing the window | Quit (prints the run summary) |
 
