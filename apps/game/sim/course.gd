@@ -1,7 +1,8 @@
 extends RefCounted
 ## Course V1 (game.md "Course (V1)"): start -> hills (ramp fork) -> pond (water/bridge fork)
 ## -> crossing (exposed/sheltered fork) -> bends -> finish. All junctions sit at x = 0 so every
-## fork variant joins the same next segment. Pure data, no nodes.
+## fork variant joins the same next segment. Pure data, no nodes. This is the single source of
+## truth for the racing line; the baked world (tools/bake_world.gd) is generated from it.
 
 const Route = preload("res://sim/route.gd")
 const Tuning = preload("res://sim/tuning.gd")
@@ -17,38 +18,120 @@ var ordered_ids: Array[String] = []
 
 
 func _init() -> void:
-	_add("start", "hills", "", "", [Vector3(0, 0, 0), Vector3(0, 0, 7), Vector3(0, 0, 15)], 5.0, {})
-	_add("hills1", "hills", "", "", [
-		Vector3(0, 0, 15), Vector3(0, 0, 19), Vector3(3, 1.2, 30), Vector3(-2, 0.3, 42), Vector3(0, 0, 51), Vector3(0, 0, 55)
-	], 4.0, {"bumps": [12.0, 26.0]})
-	_add("ramp_jump", "hills", "ramp", "jump", [Vector3(0, 0, 55), Vector3(0, 0, 75), Vector3(0, 0, 95)], 3.0, {
-		"ramp": {"kick_a": 8.0, "lip_s": 14.0, "lip_h": 2.0, "land_s": 32.0, "pit_depth": 0.4},
+	# The trunk runs along +z near x = 0. Routes are drawn "turtle style" from straights and
+	# constant-radius arcs (`_draw`), so radii are exact and every fork is a clean Y-split: both
+	# branches leave the junction on a shared straight stub, the detour peels off to one side
+	# with a mirrored S-curve while the direct line runs straight on, and they merge the same
+	# way. Heights come from smooth (s, y) keys. tools/layout_map.gd checks the result against
+	# the terrain features in world/landscape.gd.
+	var p := _draw("start", Vector3.ZERO, [["S", 15.0]], [[0.0, 0.0]])
+	_add("start", "hills", "", "", p, 5.0, {})
+	# Gentle double chicane over two crests.
+	p = _draw("hills1", _end("start"), [["S", 3.0], ["A", 18.0, 15.0], ["A", 18.0, -30.0], ["A", 18.0, 15.0],
+		["A", 18.0, -15.0], ["A", 18.0, 30.0], ["A", 18.0, -15.0]],
+		[[0.0, 0.0], [14.0, 1.0], [28.0, 0.4], [40.0, 0.0]])
+	_add("hills1", "hills", "", "", p, 4.0, {"bumps": [12.0, 26.0]})
+	# Jump: straight over a muddy dip. Around: an S out to the right round a knoll and back.
+	var ramp_out := [["S", 3.0], ["A", 11.0, 67.3], ["A", 11.0, -67.3], ["S", 2.0], ["A", 11.0, -67.3], ["A", 11.0, 67.3], ["S", 3.0]]
+	var j1 := _end("hills1")
+	var around_pts := _draw("ramp_around", j1, ramp_out, [[0.0, 0.0]])
+	_add("ramp_jump", "hills", "ramp", "jump", _draw("ramp_jump", j1, [["S", _forward_pts(around_pts)]], [[0.0, 0.0]]), 3.0, {
+		"ramp": {"kick_a": 9.0, "lip_s": 15.0, "lip_h": 2.0, "land_s": 33.0, "pit_depth": 0.4},
 	})
-	_add("ramp_around", "hills", "ramp", "around", [
-		Vector3(0, 0, 55), Vector3(0, 0, 59), Vector3(5, 0, 66), Vector3(8, 0, 75), Vector3(7, 0, 85), Vector3(3, 0, 91), Vector3(0, 0, 95)
-	], 3.5, {})
-	_add("hills2", "hills", "", "", [Vector3(0, 0, 95), Vector3(0, 0, 99), Vector3(0, 1.5, 106), Vector3(0, 0, 113), Vector3(0, 0, 120)], 4.0, {
-		"boosts": [[10.0, 20.0]],
-	})
-	_add("pond_water", "pond", "pond", "water", [
-		Vector3(0, 0, 120), Vector3(0, 0, 124), Vector3(2, -0.2, 150), Vector3(-2, -0.2, 190), Vector3(0, 0, 216), Vector3(0, 0, 220)
-	], 4.0, {"water": [[10.0, 90.0]]})
-	_add("pond_bridge", "pond", "pond", "bridge", [
-		Vector3(0, 0, 120), Vector3(0, 0, 124), Vector3(-17, 0, 135), Vector3(-38, 1.6, 170), Vector3(-17, 0, 206), Vector3(0, 0, 216), Vector3(0, 0, 220)
-	], 2.8, {"rails": true})
-	_add("cross_exposed", "crossing", "crossing", "exposed", [
-		Vector3(0, 0, 220), Vector3(0, 0, 224), Vector3(0, 2.5, 234), Vector3(1, 2.5, 266), Vector3(0, 0, 276), Vector3(0, 0, 280)
-	], 2.6, {"exposure": 1.0, "edge": Tuning.OFF_TRACK_MARGIN_RAILS})
-	_add("cross_sheltered", "crossing", "crossing", "sheltered", [
-		Vector3(0, 0, 220), Vector3(0, 0, 224), Vector3(11, 0, 234), Vector3(18, 0, 250), Vector3(11, 0, 266), Vector3(0, 0, 276), Vector3(0, 0, 280)
-	], 3.5, {"exposure": 0.0})
-	_add("bends", "bends", "", "", [
-		Vector3(0, 0, 280), Vector3(0, 0, 286), Vector3(-12, 0, 298), Vector3(-12, 0, 312), Vector3(4, 0, 322), Vector3(14, 0, 336),
-		Vector3(4, 0, 350), Vector3(0, 0, 358), Vector3(0, 0, 378)
-	], 3.5, {})
+	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {})
+	p = _draw("hills2", _end("ramp_jump"), [["S", 25.0]], [[0.0, 0.0], [13.0, 1.0], [25.0, 0.4]])
+	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[10.0, 20.0]]})
+	# Water: a shallow stone ford straight through the pond. Bridge: a fenced lane that swings
+	# west round the pond and crosses its inflow stream on a humped stone bridge.
+	var j3 := _end("hills2")
+	# A tight first arc gets the lane clear of the ford before the ford dips into the water.
+	var bridge_ops := [["S", 3.0], ["A", 10.0, -80.0], ["A", 26.3, 80.0], ["S", 22.5], ["A", 26.3, 80.0], ["A", 10.0, -80.0], ["S", 3.0]]
+	var bridge_pts := _draw("pond_bridge", j3, bridge_ops, [[0.0, 0.4]])
+	var bl := _length(bridge_pts)
+	bridge_pts = _draw("pond_bridge", j3, bridge_ops, [[0.0, 0.4], [bl * 0.5 - 12.0, 0.4], [bl * 0.5, 1.6], [bl * 0.5 + 12.0, 0.4], [bl, 0.4]])
+	var ford_len := _forward_pts(bridge_pts)
+	_add("pond_water", "pond", "pond", "water", _draw("pond_water", j3, [["S", ford_len]],
+		[[0.0, 0.4], [9.0, 0.4], [18.0, -0.2], [ford_len - 18.0, -0.2], [ford_len - 9.0, 0.4], [ford_len, 0.4]]), 4.0,
+		{"water": [[10.0, 90.0]]})
+	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true})
+	# Exposed: a low causeway straight across a shallow valley. Sheltered: a hedged lane that
+	# loops right round the valley head.
+	var j4 := _end("pond_water")
+	var shelter_ops := [["S", 3.0], ["A", 12.0, 78.0], ["A", 12.0, -78.0], ["S", 7.0], ["A", 12.0, -78.0], ["A", 12.0, 78.0], ["S", 3.0]]
+	var shelter_pts := _draw("cross_sheltered", j4, shelter_ops, [[0.0, 0.4]])
+	var xl := _forward_pts(shelter_pts)
+	_add("cross_exposed", "crossing", "crossing", "exposed", _draw("cross_exposed", j4, [["S", xl]],
+		[[0.0, 0.4], [3.0, 0.4], [13.0, 1.4], [xl - 13.0, 1.4], [xl - 3.0, 0.4], [xl, 0.4]]), 2.6,
+		{"exposure": 1.0, "edge": Tuning.OFF_TRACK_MARGIN_RAILS})
+	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
+	# Rainbow bends: two mirrored chicanes, then the finish straight.
+	p = _draw("bends", _end("cross_exposed"), [["S", 6.0], ["A", 12.0, -55.0], ["A", 12.0, 110.0], ["A", 12.0, -55.0],
+		["A", 12.0, 55.0], ["A", 12.0, -110.0], ["A", 12.0, 55.0], ["S", 20.0]], [[0.0, 0.4], [30.0, 0.2], [70.0, 0.0]])
+	_add("bends", "bends", "", "", p, 3.5, {})
 	var b: Dictionary = segments["bends"]
-	var bl: float = (b["route"] as Route).length
-	b["boosts"] = [[bl - 18.0, bl - 8.0]]
+	var bl2: float = (b["route"] as Route).length
+	b["boosts"] = [[bl2 - 18.0, bl2 - 8.0]]
+
+
+## Control points every metre along straights ("S", length) and arcs ("A", radius, degrees;
+## positive turns towards +x), starting at `from` heading +z. Heights: smoothstep between
+## (s, y) keys, flat at each key.
+func _draw(_id: String, from: Vector3, ops: Array, ykeys: Array) -> Array:
+	var pos := Vector2(from.x, from.z)
+	var h := 0.0
+	var pts2: Array[Vector2] = [pos]
+	for op in ops:
+		if op[0] == "S":
+			var n := maxi(1, int(ceil(float(op[1]))))
+			for i in n:
+				pos += Vector2(sin(h), cos(h)) * float(op[1]) / n
+				pts2.append(pos)
+		else:
+			var r := float(op[1])
+			var ang := deg_to_rad(float(op[2]))
+			var n := maxi(2, int(ceil(absf(ang) * r)))
+			for i in n:
+				var dh := ang / n
+				# Chord of the arc step, taken at the mid heading.
+				var chord := 2.0 * r * sin(absf(dh) * 0.5)
+				pos += Vector2(sin(h + dh * 0.5), cos(h + dh * 0.5)) * chord
+				h += dh
+				pts2.append(pos)
+	var out: Array = []
+	var acc := 0.0
+	for i in pts2.size():
+		if i > 0:
+			acc += pts2[i].distance_to(pts2[i - 1])
+		out.append(Vector3(pts2[i].x, _key_y(ykeys, acc), pts2[i].y))
+	return out
+
+
+static func _key_y(keys: Array, s: float) -> float:
+	if s <= float(keys[0][0]):
+		return float(keys[0][1])
+	for i in keys.size() - 1:
+		var a: Array = keys[i]
+		var b: Array = keys[i + 1]
+		if s <= float(b[0]):
+			return lerpf(float(a[1]), float(b[1]), smoothstep(float(a[0]), float(b[0]), s))
+	return float(keys[keys.size() - 1][1])
+
+
+func _end(id: String) -> Vector3:
+	var r: Route = segments[id]["route"]
+	return r.pos_at(r.length)
+
+
+## Straight-line distance along +z covered by a route (for the direct sibling of a detour).
+static func _forward_pts(pts: Array) -> float:
+	return (pts[pts.size() - 1] as Vector3).z - (pts[0] as Vector3).z
+
+
+static func _length(pts: Array) -> float:
+	var acc := 0.0
+	for i in range(1, pts.size()):
+		acc += Vector2(pts[i].x, pts[i].z).distance_to(Vector2(pts[i - 1].x, pts[i - 1].z))
+	return acc
 
 
 func _add(id: String, section: String, fork: String, choice: String, ctrl: Array, half_width: float, extra: Dictionary) -> void:
