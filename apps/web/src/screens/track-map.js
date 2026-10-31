@@ -33,6 +33,27 @@ function middle(segs, at) {
 }
 
 /**
+ * Where each stretch's icon goes: the middle of its route piece; the two pieces of a fork that run
+ * close (the village ski jump and churchyard lane) are pushed apart so their icons don't overlap.
+ */
+function spreadForks(stretches, mid, gap) {
+  const at = Object.fromEntries(stretches.map((st) => [st.id, mid(st.id)]));
+  for (const a of stretches) {
+    const b = a.fork && stretches.find((x) => x.fork === a.fork && x.id > a.id);
+    if (!b) continue;
+    const [ax, ay] = at[a.id];
+    const [bx, by] = at[b.id];
+    const len = Math.hypot(bx - ax, by - ay);
+    if (len >= gap) continue;
+    const [dx, dy] = len > 0.01 ? [(bx - ax) / len, (by - ay) / len] : [0, 1];
+    const push = (gap - len) / 2;
+    at[a.id] = [ax - dx * push, ay - dy * push];
+    at[b.id] = [bx + dx * push, by + dy * push];
+  }
+  return at;
+}
+
+/**
  * Props:
  *   track, routes            whose route is drawn on top (fork pieces off it thin)
  *   tone      {stretchId: "good" | "bad"}   result: against your best (absent: neutral)
@@ -63,6 +84,9 @@ export function TrackMap(p) {
   const windy = wx && wx.wind.phase !== "calm";
   const scale = Math.max(w, h) / 320; // SVG units per CSS pixel at 320 px wide
   const icon = 15 * scale;
+  const iconAt = p.icons
+    ? spreadForks(stretches, (id) => middle(routeSegs(id), at), icon * 2.2)
+    : {};
   return html`
     <svg class="track-map" viewBox=${`0 0 ${w.toFixed(1)} ${h.toFixed(1)}`} role="img"
       aria-label=${COPY.map.label}>
@@ -85,7 +109,7 @@ export function TrackMap(p) {
       ${
         p.icons
           ? stretches.map((st) => {
-              const [x, y] = middle(routeSegs(st.id), at);
+              const [x, y] = iconAt[st.id];
               const off = !segsOf(st.id).some((s) => onRoute(s, p.routes));
               const badge =
                 (rainy && segsOf(st.id).some((s) => s.rain) ? COPY.map.rain : "") +
