@@ -40,13 +40,25 @@ Keys:
 | R / W | Advance the rain / wind phase |
 | K | Toggle forced calm |
 | H | Hide the overlay |
-| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, track, quit |
+| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, track, quit |
 | Ctrl+Cmd+F, or F11 | Toggle fullscreen (on a Mac keyboard F11 may need fn) |
 | Cmd+Q, or closing the window | Quit (prints the run summary) |
 
-The options menu does not pause the race. Picking a track reloads the course in mock mode; in
-server mode the track is locked to the session config (end the session and change it on the
-admin page, the big screen follows).
+The options menu is where the game manager sets the game options on the big screen (phones only
+join and quit). It does not pause the race.
+
+- **Track**: mock mode reloads on the new course. Server mode sends `game.config.set {track}` to
+  the server; if a session is running the menu asks for a second click, then sends
+  `game.session.end`, `game.config.set` and `game.session.start` (new session, empty
+  leaderboard). The course reloads on `config.updated` once the racers are off the track.
+  Refusals (`error`, e.g. `track_locked`) and a disconnected server show in red in the menu.
+- **Graphics** (`--quality=low|medium|high`, saved in `user://settings.cfg`, default Medium):
+  caps the 3D resolution (Low 720p, Medium 1080p, High native; MetalFX upscaling on Metal, FSR
+  elsewhere) and scales shadows, SSAO, glow and vegetation range. On a 5K Retina screen in
+  fullscreen, High renders 5120×2880; Medium cut the GPU load from about +45 to +9 points on an
+  M4 Max.
+- Frame rate is capped at 60 fps (also on 120 Hz screens) and 30 fps while the window is in the
+  background.
 
 Sweep flags:
 

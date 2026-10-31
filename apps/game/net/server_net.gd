@@ -15,6 +15,7 @@ var game_key := ""
 var cfg: Dictionary
 var log_mode := "summary"   # none | summary | full
 var status := "connecting"  # connecting | online | offline (shown in the overlay)
+var session_status := "?"   # idle | running | ended, from welcome and session.updated
 var course = null           # unused; mock_net uses it
 var players: Array = []     # unused; mock_net fills it at start-up
 var sent_counts := {}
@@ -115,9 +116,13 @@ func _receive(text: String) -> void:
 			for rs in pl.get("activeRuns", []):
 				_active[rs["runId"]] = true
 				_inbox.append(Messages.make_msg(Messages.RUN_START, rs))
+			session_status = String(pl.get("session", {}).get("status", "?"))
 			print("ServerNet: welcome, %d racers, session %s" % [(pl.get("roster", []) as Array).size(), pl.get("session", {}).get("status", "?")])
 		"config.updated":
 			cfg.merge(pl, true)
+		"session.updated":
+			session_status = String(pl.get("status", "?"))
+			_inbox.append(msg)
 		"run.start":
 			_active[pl["runId"]] = true
 			_inbox.append(msg)

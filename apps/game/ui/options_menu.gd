@@ -1,7 +1,8 @@
-# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, track and quit.
+# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, track and quit.
+# The game manager sets the game options here, on the big screen; phones only join and quit.
 # It does not pause the sim: in server mode phones keep racing while it is open.
-# In server mode the session config owns the track, so the track buttons are locked
-# and the menu says where to change it instead of switching locally.
+# In server mode a track change during a running session ends that session (fresh
+# leaderboard), so the first click asks for a second click to confirm.
 extends CanvasLayer
 
 signal fullscreen_toggled
@@ -19,6 +20,8 @@ var _track_note: Label
 var _resume: Button
 var _current_track := ""
 var _server := false
+var _session := "?"          # server session status (server mode)
+var _confirm := ""           # track waiting for its confirming second click
 
 
 func setup(current_track: String, server_mode: bool) -> void:
@@ -78,10 +81,10 @@ func setup(current_track: String, server_mode: bool) -> void:
 	box.add_child(row)
 	for id in Protocol.TRACK_IDS:
 		var b := Button.new()
-		b.text = String(id).capitalize()
+		b.text = String(id).capitalize() + ("  ✓" if id == current_track else "")
 		b.toggle_mode = true
 		b.button_pressed = id == current_track
-		b.disabled = server_mode or id == current_track
+		b.disabled = id == current_track
 		b.custom_minimum_size = Vector2(150, 44)
 		b.add_theme_font_size_override("font_size", 18)
 		b.pressed.connect(_on_track.bind(id))
@@ -100,6 +103,12 @@ func setup(current_track: String, server_mode: bool) -> void:
 	visible = false
 
 
+func set_session(status: String) -> void:
+	_session = status
+	if _confirm == "":
+		_set_track_note()
+
+
 func set_quality(id: String) -> void:
 	_qualities[id].set_pressed_no_signal(true)
 
@@ -110,19 +119,13 @@ func is_open() -> bool:
 
 func open() -> void:
 	_fullscreen.set_pressed_no_signal(_is_fullscreen())
+	_cancel_confirm()
 	visible = true
 	_resume.grab_focus()
 
 
 func close() -> void:
 	visible = false
-
-
-func toggle() -> void:
-	if visible:
-		close()
-	else:
-		open()
 
 
 ## The window mode changed outside the menu (key shortcut or the green title-bar button).
@@ -134,25 +137,44 @@ func sync_fullscreen() -> void:
 func show_error(text: String) -> void:
 	_track_note.text = text
 	_track_note.modulate = Color(1.0, 0.45, 0.4)
+	for k in _tracks:
+		_tracks[k].disabled = k == _current_track
 
 
 func _on_track(id: String) -> void:
-	if _server:
-		# The buttons are disabled in server mode; reaching here is a bug, say so.
-		show_error("The server session owns the track; it was not changed.")
+	if _server and _session == "running" and _confirm != id:
+		_cancel_confirm()
+		_confirm = id
+		_tracks[id].text = "End session → %s" % id.capitalize()
+		_tracks[id].set_pressed_no_signal(false)
+		_track_note.modulate = Color(1.0, 0.85, 0.4)
+		_track_note.text = ("A session is running. Switching to %s ends it for everyone on the track and "
+			+ "starts a new session with an empty leaderboard. Click again to confirm.") % id.capitalize()
 		return
+	_confirm = ""
 	for k in _tracks:
 		_tracks[k].disabled = true
-	_track_note.text = "Loading %s…" % id.capitalize()
+	_track_note.modulate = Color(1, 1, 1, 0.75)
+	_track_note.text = ("Asking the server for %s… the course reloads once the racers are off the track." if _server
+		else "Loading %s…") % id.capitalize()
 	track_chosen.emit(id)
 
 
+func _cancel_confirm() -> void:
+	if _confirm != "":
+		_tracks[_confirm].text = _confirm.capitalize()
+		_confirm = ""
+	_set_track_note()
+
+
 func _set_track_note() -> void:
-	if _server:
-		_track_note.text = ("Locked: the server session picks the track (now %s). "
-			+ "End the session and change the track on the admin page; the big screen follows.") % _current_track.capitalize()
-	else:
+	_track_note.modulate = Color(1, 1, 1, 0.75)
+	if not _server:
 		_track_note.text = "Switching reloads the course and restarts the mock race."
+	elif _session == "running":
+		_track_note.text = "Session running on %s. Switching ends it and starts a new one." % _current_track.capitalize()
+	else:
+		_track_note.text = "Session %s. The track you pick is sent to the server for the next session." % _session
 
 
 func _is_fullscreen() -> bool:

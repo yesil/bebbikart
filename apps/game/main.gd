@@ -34,6 +34,7 @@ const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
 const OptionsMenu = preload("res://ui/options_menu.gd")
+const AudioDirector = preload("res://audio/audio_director.gd")
 
 ## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
 ## resolution (0 = native; upscaled with MetalFX on Metal, FSR elsewhere), so a fullscreen 5K
@@ -78,6 +79,7 @@ var forced_calm := false
 var menu: OptionsMenu
 var quitting := false
 var quality := ""
+var audio: AudioDirector
 
 
 func _ready() -> void:
@@ -158,6 +160,10 @@ func _build_scene() -> void:
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)
 	fx.follow = camera
+	audio = AudioDirector.new()
+	add_child(audio)
+	if not audio.setup(sim, track, camera, args.has("mute")):
+		_result("ERROR audio failed to load, see the log")
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var panel := PanelContainer.new()
@@ -229,7 +235,7 @@ func apply_quality(id: String) -> void:
 ## 3D resolution for the current quality and window size; re-run whenever the window resizes.
 func _apply_render_scale() -> void:
 	var vp := get_viewport()
-	var h := float(vp.get_visible_rect().size.y)
+	var h := float(get_window().size.y)  # pixels; the visible rect is in stretched 2D units
 	var cap := float(QUALITY[quality]["render_height"])
 	var k := 1.0 if cap <= 0.0 or h <= cap else cap / h
 	vp.scaling_3d_scale = k
@@ -269,22 +275,39 @@ static func _open_options_from_menu(_tag) -> void:
 	if main == null or main.get("menu") == null:
 		push_error("Options menu: no running game scene to open it in")
 		return
-	main.menu.open()
+	main.open_menu()
 
 
-## Mock mode only (the menu locks the track in server mode): reload on the chosen course.
-func _switch_track(id: String) -> void:
+func open_menu() -> void:
 	if assets != null:
-		push_error("track switch refused: the server session owns the track")
-		menu.show_error("Refused: the server session owns the track.")
-		return
+		menu.set_session(net.session_status)  # the welcome may have arrived after setup
+	menu.open()
+
+
+## Track picked in the options menu. Mock mode reloads on it. Server mode asks the server
+## (the game manager owns the options): a running session is ended, the track set and a new
+## session started; config.updated then reloads the course via _check_track once it is empty.
+func _switch_track(id: String) -> void:
 	if not Protocol.TRACK_IDS.has(id):
 		push_error("track switch: unknown track \"%s\"" % id)
 		menu.show_error("Unknown track \"%s\"." % id)
 		return
-	print("track change (options menu): %s -> %s, reloading" % [track, id])
-	next_track = id
-	get_tree().reload_current_scene()
+	if assets == null:
+		print("track change (options menu): %s -> %s, reloading" % [track, id])
+		next_track = id
+		get_tree().reload_current_scene()
+		return
+	if net.status != "online":
+		push_error("track switch: server is %s" % net.status)
+		menu.show_error("Not connected to the server (%s); the track was not changed." % net.status)
+		return
+	print("track change (options menu): asking the server for %s (session %s)" % [id, net.session_status])
+	if net.session_status == "running":
+		net.send("game.session.end", {})
+		net.send("game.config.set", {"track": id})
+		net.send("game.session.start", {})
+	else:
+		net.send("game.config.set", {"track": id})
 
 
 ## The countryside course world: baked from course.gd by tools/bake_world.gd, plus the
@@ -394,6 +417,8 @@ func _physics_process(_delta: float) -> void:
 	_check_track()
 	sim.step()
 	for m in sim.outbox:
+		if audio != null:
+			audio.on_event(m["type"], m["payload"])
 		_outgoing(m["type"], m["payload"])
 	sim.outbox.clear()
 
@@ -436,6 +461,13 @@ func _handle(msg: Dictionary) -> void:
 			sim.abort(pl["runId"])
 		Messages.ROSTER_UPDATED:
 			_on_roster(pl)
+		"session.updated":
+			menu.set_session(String(pl.get("status", "?")))
+		"error":
+			# Refusals of what the game sent, e.g. track_locked for a track change.
+			var err := "ERROR server refused: %s: %s" % [pl.get("code", "?"), pl.get("message", "")]
+			_result(err)
+			menu.show_error("Server refused: %s" % pl.get("message", pl.get("code", "?")))
 
 
 ## Server roster: names and colours for racers, and their kit assets (spec, drawing, renders).
@@ -501,6 +533,7 @@ func _process(delta: float) -> void:
 	if follow_run == "" or not views.has(follow_run):
 		follow_run = racing[0].run_id if not racing.is_empty() else ""
 	camera.target = views.get(follow_run)
+	audio.follow_run = follow_run
 	camera.targets = views.values()
 	for v in views.values():
 		v.sync()
@@ -551,10 +584,13 @@ func _unhandled_input(e: InputEvent) -> void:
 	# Window keys: Esc toggles the options menu, ⌘, opens it, ⌘Q quits;
 	# F11 or Ctrl+Cmd+F (the macOS shortcut) toggles fullscreen.
 	if k.keycode == KEY_ESCAPE:
-		menu.toggle()
+		if menu.is_open():
+			menu.close()
+		else:
+			open_menu()
 		return
 	if k.keycode == KEY_COMMA and k.meta_pressed:
-		menu.open()
+		open_menu()
 		return
 	if k.keycode == KEY_Q and k.meta_pressed:
 		_quit()
