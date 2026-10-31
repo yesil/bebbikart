@@ -1,0 +1,271 @@
+// Duel mode (contracts §2i) and Push (§2g) over real HTTP + WebSockets: the line, the two halves,
+// the champion who rests, judging, offline phones, the session end; Push relayed to the game.
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createMockClient } from "@bebbikart/asset-pipeline";
+import { DEFAULT_CONFIG, makeMsg } from "@bebbikart/shared";
+import { loadSettings, REPO_ROOT } from "../src/env.js";
+import { startServer } from "../src/index.js";
+
+const SAMPLES = join(REPO_ROOT, "packages/asset-pipeline/samples");
+const RESULT_MS = 150;
+let srv;
+let base;
+let settings;
+const admin = () => ({ "x-admin-pin": settings.adminPin, "content-type": "application/json" });
+
+beforeAll(() => {
+  settings = {
+    ...loadSettings({}),
+    port: 0,
+    dataDir: mkdtempSync(join(tmpdir(), "bk-duel-")),
+    designClient: createMockClient({ designId: "pair01" }),
+    config: { ...DEFAULT_CONFIG, track: "village", mode: "duel", duelResultMs: RESULT_MS },
+  };
+  settings.dbFile = ":memory:";
+  srv = startServer(settings, { log: () => {} });
+  base = `http://localhost:${srv.server.port}`;
+  settings.publicUrl = base;
+});
+afterAll(() => srv?.stop());
+
+/** A WS client that records messages and can wait for one by type. */
+function client(headers, hello) {
+  const ws = new WebSocket(`${base.replace("http", "ws")}/ws`, { headers });
+  const msgs = [];
+  const waiters = [];
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    msgs.push(m);
+    for (const w of [...waiters]) {
+      if (!w.pred(m)) continue;
+      waiters.splice(waiters.indexOf(w), 1);
+      w.res(m);
+    }
+  };
+  const opened = new Promise((r) => (ws.onopen = r));
+  return {
+    ws,
+    msgs,
+    async start() {
+      await opened;
+      ws.send(JSON.stringify(makeMsg("phoneToServer", "hello", hello)));
+    },
+    send: (ch, type, payload) => ws.send(JSON.stringify(makeMsg(ch, type, payload))),
+    last: (type) => msgs.findLast((m) => m.type === type)?.payload,
+    wait(type, pred = () => true, ms = 8000) {
+      const hit = msgs.find((m) => m.type === type && pred(m.payload));
+      if (hit) return Promise.resolve(hit);
+      return new Promise((res, rej) => {
+        const w = { pred: (m) => m.type === type && pred(m.payload), res };
+        waiters.push(w);
+        setTimeout(() => rej(new Error(`timeout waiting for ${type}`)), ms);
+      });
+    },
+  };
+}
+
+/** A ready racer with a phone online. */
+async function racer(nickname) {
+  const dev = await fetch(`${base}/api/device`, { method: "POST" });
+  const cookie = dev.headers.get("set-cookie").split(";")[0];
+  const me = await (
+    await fetch(`${base}/api/players`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ nickname }),
+    })
+  ).json();
+  const phone = client({ cookie }, { role: "phone" });
+  await phone.start();
+  await phone.wait("welcome");
+  const form = new FormData();
+  for (const [k, f] of [
+    ["character", "pair01-character-cat.jpg"],
+    ["vehicle", "pair01-vehicle-kart.jpg"],
+  ])
+    form.append(k, new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }));
+  await fetch(`${base}/api/players/me/drawings`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  await phone.wait("player.updated", (p) => p.status === "ready", 20000);
+  return { me, phone, cookie, go: () => phone.send("phoneToServer", "phone.go", {}) };
+}
+
+const stretches = (lapMs) => [{ id: "main_street", ms: lapMs, lostMs: 0 }];
+/** The game reports one finished lap (a duel run is one lap). */
+function finishLap(game, runId, lapMs) {
+  game.send("gameToServer", "game.run.started", { runId });
+  game.send("gameToServer", "game.run.lap", {
+    runId,
+    lap: 1,
+    lapMs,
+    elapsedMs: lapMs,
+    splits: {},
+    stretches: stretches(lapMs),
+    weatherSeen: [],
+    isBest: true,
+  });
+  game.send("gameToServer", "game.run.finished", {
+    runId,
+    elapsedMs: lapMs,
+    laps: [lapMs],
+    bestLapMs: lapMs,
+    splits: {},
+    stretches: stretches(lapMs),
+    events: [],
+    boostsUsed: 0,
+    weatherSeen: [],
+    trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
+  });
+}
+const lineOf = (q) => q.line.map((e) => e.nickname);
+
+test("duel: Go joins the line, a free half launches it, the champion rests, laps are judged", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey, track: "village" });
+  await game.start();
+  await game.wait("welcome");
+  const a = await racer("Ava");
+  const b = await racer("Ben");
+  const c = await racer("Cleo");
+  expect((await game.wait("queue.updated", (q) => q.split)).payload.line).toEqual([]);
+
+  // Ava and Ben go straight onto the two halves (left first), one lap each.
+  a.go();
+  const startA = (await game.wait("run.start", (p) => p.playerId === a.me.id)).payload;
+  expect([startA.side, startA.lapsPerRun]).toEqual(["left", 1]);
+  b.go();
+  const startB = (await game.wait("run.start", (p) => p.playerId === b.me.id)).payload;
+  expect(startB.side).toBe("right");
+  expect((await b.phone.wait("run.queued")).payload.run.side).toBe("right");
+
+  // Both halves busy: Cleo waits; a second Go is refused, and REST Go answers with the line.
+  const rest = await fetch(`${base}/api/players/me/runs`, {
+    method: "POST",
+    headers: { cookie: c.cookie },
+  });
+  expect(rest.status).toBe(202);
+  expect(lineOf(await rest.json())).toEqual(["Cleo"]);
+  c.go();
+  expect((await c.phone.wait("error")).payload.code).toBe("in_line");
+  const busy = await c.phone.wait("queue.updated", (q) => q.racing.length === 2);
+  expect(busy.payload.racing.map((r) => [r.side, r.nickname])).toEqual([
+    ["left", "Ava"],
+    ["right", "Ben"],
+  ]);
+
+  // Ava sets the first record: champion. Her half shows the result, then Cleo starts there.
+  finishLap(game, startA.runId, 50_000);
+  const endA = await a.phone.wait("run.ended", (p) => p.run.id === startA.runId);
+  expect(endA.payload.duel).toEqual({ newChampion: true });
+  const t0 = Date.now();
+  const startC = (await game.wait("run.start", (p) => p.playerId === c.me.id)).payload;
+  expect(Date.now() - t0).toBeGreaterThanOrEqual(RESULT_MS - 20);
+  expect(startC.side).toBe("left");
+
+  // The champion may join, but rests behind anyone who comes later.
+  a.go();
+  await a.phone.wait("queue.updated", (q) => lineOf(q).join() === "Ava");
+  finishLap(game, startB.runId, 52_000);
+  const endB = await b.phone.wait("run.ended", (p) => p.run.id === startB.runId);
+  expect(endB.payload.duel).toEqual({ newChampion: false, gapMs: 2000, recordNickname: "Ava" });
+  const tried = await b.phone.wait("queue.updated", (q) => q.champion?.tries === 1);
+  expect(tried.payload.champion).toMatchObject({ nickname: "Ava", timeMs: 50_000 });
+  b.go();
+  const ordered = await b.phone.wait("queue.updated", (q) => q.line.length === 2);
+  expect(lineOf(ordered.payload)).toEqual(["Ben", "Ava"]);
+  const startB2 = (
+    await game.wait("run.start", (p) => p.playerId === b.me.id && p.runId !== startB.runId)
+  ).payload;
+  expect(startB2.side).toBe("right");
+
+  // Cleo beats the record: new champion, tries start again; Ava is a challenger again and races.
+  finishLap(game, startC.runId, 49_000);
+  const endC = await c.phone.wait("run.ended", (p) => p.run.id === startC.runId);
+  expect(endC.payload.duel).toEqual({ newChampion: true, gapMs: -1000, recordNickname: "Ava" });
+  const newChamp = await c.phone.wait("queue.updated", (q) => q.champion?.nickname === "Cleo");
+  expect(newChamp.payload.champion.tries).toBe(0);
+  const startA2 = (
+    await game.wait("run.start", (p) => p.playerId === a.me.id && p.runId !== startA.runId)
+  ).payload;
+  expect(startA2.side).toBe("left");
+
+  // Push (§2g): relayed to the game; a phone that goes away lets go.
+  a.phone.send("phoneToServer", "phone.push", { runId: startA2.runId, on: true });
+  expect((await game.wait("run.push", (p) => p.runId === startA2.runId && p.on)).payload.on).toBe(
+    true,
+  );
+  a.phone.ws.close();
+  await game.wait("run.push", (p) => p.runId === startA2.runId && !p.on);
+  game.send("gameToServer", "game.run.failed", {
+    runId: startA2.runId,
+    reason: "off_track",
+    section: "hills",
+    stretch: "main_street",
+    elapsedMs: 9000,
+    splits: {},
+    stretches: [],
+    events: [],
+    boostsUsed: 0,
+    weatherSeen: [],
+  });
+  finishLap(game, startB2.runId, 51_000);
+  await b.phone.wait("run.ended", (p) => p.run.id === startB2.runId);
+  await c.phone.wait("queue.updated", (q) => q.racing.length === 0 && q.champion?.tries === 2);
+  for (const r of [b, c]) r.phone.ws.close();
+  game.ws.close();
+});
+
+test("duel: an offline phone loses its turn loudly; leave the line; mode locked; session end closes the line", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey, track: "village" });
+  await game.start();
+  await game.wait("welcome");
+  const d = await racer("Dan");
+  const e = await racer("Eve");
+  const f = await racer("Finn");
+  const g = await racer("Gus");
+
+  // The mode can't change while the session runs.
+  const locked = await fetch(`${base}/api/admin/config`, {
+    method: "PATCH",
+    headers: admin(),
+    body: JSON.stringify({ mode: "race" }),
+  });
+  expect((await locked.json()).error.code).toBe("mode_locked");
+
+  d.go();
+  const runD = (await game.wait("run.start", (p) => p.playerId === d.me.id)).payload.runId;
+  e.go();
+  const runE = (await game.wait("run.start", (p) => p.playerId === e.me.id)).payload.runId;
+  f.go();
+  g.go();
+  await g.phone.wait("queue.updated", (q) => lineOf(q).join() === "Finn,Gus");
+  // Gus changes his mind; Finn's phone goes offline before his turn.
+  g.phone.send("phoneToServer", "phone.queue.leave", {});
+  await d.phone.wait("queue.updated", (q) => lineOf(q).join() === "Finn");
+  f.phone.ws.close();
+  await Bun.sleep(100);
+  finishLap(game, runD, 55_000);
+  const skipped = await d.phone.wait("queue.updated", (q) => q.skipped.includes(f.me.id));
+  expect(skipped.payload.line).toEqual([]);
+  await Bun.sleep(RESULT_MS + 100);
+  expect(game.msgs.some((m) => m.type === "run.start" && m.payload.playerId === f.me.id)).toBe(
+    false,
+  );
+
+  // Session end: the line closes, the lap on track still finishes.
+  g.go();
+  await g.phone.wait("run.queued");
+  d.go();
+  await d.phone.wait("queue.updated", (q) => lineOf(q).join() === "Dan");
+  await fetch(`${base}/api/admin/session/end`, { method: "POST", headers: admin() });
+  await d.phone.wait("queue.updated", (q) => q.line.length === 0 && q.skipped.length === 0);
+  finishLap(game, runE, 54_000);
+  await e.phone.wait("run.ended", (p) => p.run.id === runE);
+  for (const r of [d, e, g]) r.phone.ws.close();
+  game.ws.close();
+});

@@ -1,6 +1,6 @@
 // Sample data for tests and the phone site's MSW mock API (contracts.md §9).
 // Every object here is checked against its schema in test/fixtures.test.js.
-import { DEFAULT_BUILD } from "../src/build.js";
+import { DEFAULT_BUILD, routesFor } from "../src/build.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { DEFAULT_SPEC } from "../src/default-spec.js";
 import { DEFAULT_PACKAGE_ID } from "../src/enums.js";
@@ -212,9 +212,8 @@ export const BUILDS = PLAYERS.map((p, i) => ({
   createdAt: at(90_000 + i * 10_000),
 }));
 BUILDS[1].stars = { speed: 4, jump: 1, grip: 3, water: 0, stability: 1, bounce: 1 };
-BUILDS[1].style = "daring";
-BUILDS[2].stars = { speed: 2, jump: 0, grip: 2, water: 4, stability: 2, bounce: 0 };
-BUILDS[2].routes = { pond: "water", ramp: "around", crossing: "sheltered" };
+BUILDS[2].stars = { speed: 2, jump: 0, grip: 2, water: 6, stability: 0, bounce: 0 };
+for (const b of BUILDS) b.routes = routesFor(b.stars);
 
 const splits = (hills, pond, crossing, bends) =>
   Object.fromEntries(
@@ -376,7 +375,6 @@ export const JOBS = PLAYERS.map((p, i) => ({
 const setupOf = (b, run) => ({
   stars: { ...b.stars },
   routes: { ...b.routes },
-  style: b.style,
   weather: [...run.weatherSeen],
 });
 

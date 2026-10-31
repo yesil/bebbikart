@@ -1,6 +1,6 @@
 // Data model and REST shapes (contracts.md §4–6).
 import { z } from "zod";
-import { BuildInputSchema, BuildSchema } from "./build.js";
+import { BuildInputSchema, BuildSchema, ForkChoiceSchema } from "./build.js";
 import {
   ABILITIES,
   DRAWING_KINDS,
@@ -17,6 +17,7 @@ import {
   RUN_STATUSES,
   SECTION_IDS,
   SESSION_STATUSES,
+  SIDES,
   STRETCH_IDS,
   TRACK_IDS,
   WEATHER_KINDS,
@@ -38,6 +39,7 @@ export const PlayerStatusSchema = z.enum(PLAYER_STATUSES);
 export const JobStatusSchema = z.enum(JOB_STATUSES);
 export const RejectReasonSchema = z.enum(REJECT_REASONS);
 export const RenderKeySchema = z.enum(RENDER_KEYS);
+export const SideSchema = z.enum(SIDES);
 
 /** Partial<Record<SectionId, ms>> */
 export const SplitsSchema = z.partialRecord(SectionIdSchema, ms);
@@ -46,10 +48,11 @@ export const SplitsSchema = z.partialRecord(SectionIdSchema, ms);
 export const StretchTimeSchema = z.object({ id: StretchIdSchema, ms, lostMs: ms });
 
 /**
- * The setup a time was set with (contracts §2f): the build raced and the weather on that lap
- * (loop tracks: the lap's own weatherSeen; point to point: the run's).
+ * The setup a time was set with (contracts §2f): the stars raced, the routes they chose (§2h)
+ * and the weather on that lap (loop tracks: the lap's own weatherSeen; point to point: the run's).
  */
 export const SetupSchema = BuildInputSchema.extend({
+  routes: ForkChoiceSchema,
   weather: z.array(z.enum(WEATHER_KINDS)),
 });
 
@@ -119,7 +122,8 @@ export const RunSchema = z.object({
   endedAt: iso.optional(),
   elapsedMs: ms.optional(), // sim time, finished runs only
   track: TrackIdSchema.optional(), // set by the server when the run is queued
-  lapsPerRun: z.number().int().positive().optional(), // loop tracks: the laps this run races (config.lapsPerRun when it was queued)
+  lapsPerRun: z.number().int().positive().optional(), // loop tracks: the laps this run races (config.lapsPerRun when it was queued; 1 in a duel)
+  side: SideSchema.optional(), // duel runs: the half of the big screen it races in (§2i)
   laps: z.array(ms).optional(), // loop tracks: every completed lap, in order
   bestLapMs: ms.optional(), // loop tracks: fastest of `laps` (what ranks)
   splits: SplitsSchema.optional(), // loop tracks: the best lap's splits
@@ -233,6 +237,32 @@ export const RunStartSchema = z.object({
   bestTrace: GhostTraceSchema.optional(),
   bestSplits: SplitsSchema.optional(),
   lapsPerRun: z.number().int().positive().optional(), // loop tracks (required there): the laps to race
+  side: SideSchema.optional(), // duel mode (required there): its half; own start lights, no collisions
+});
+
+/** Duel mode (contracts §2i): the line, the two halves and the champion (queue.updated). */
+export const QueueStateSchema = z.object({
+  line: z.array(z.object({ playerId: z.string(), nickname: z.string() })), // launch order, champion last
+  racing: z.array(
+    z.object({ side: SideSchema, playerId: z.string(), nickname: z.string(), runId: z.string() }),
+  ),
+  champion: z
+    .object({
+      playerId: z.string(),
+      nickname: z.string(),
+      timeMs: ms,
+      tries: z.number().int().nonnegative(), // duel laps by others since the record was set
+    })
+    .optional(),
+  split: z.boolean(), // 2+ racers in the session: the big screen splits
+  skipped: z.array(z.string()), // taken out of the line: phone offline at their turn
+});
+
+/** run.ended in a duel (contracts §2i): judged against the record when the lap ended. */
+export const DuelResultSchema = z.object({
+  newChampion: z.boolean(),
+  gapMs: z.number().int().optional(), // this lap minus the record (positive = slower)
+  recordNickname: z.string().optional(), // whose record it was judged against
 });
 
 export const CoachTipSchema = z.object({

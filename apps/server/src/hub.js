@@ -91,6 +91,10 @@ export function createHub({ settings, log = console.log }) {
             }
           } else if (type === "phone.watch") {
             game.watch(p.id, payload.runId);
+          } else if (type === "phone.push") {
+            game.push(p.id, payload.runId, payload.on);
+          } else if (type === "phone.queue.leave") {
+            game.leaveLine(p.id);
           }
         }
       },
@@ -136,6 +140,8 @@ export function createHub({ settings, log = console.log }) {
       });
       send(ws, "serverToPhone", "leaderboard.updated", game.leaderboard());
       send(ws, "serverToPhone", "paddock.updated", game.paddock());
+      if (game.config.mode === "duel")
+        send(ws, "serverToPhone", "queue.updated", game.queueState());
     } else if (h.role === "game") {
       if (h.gameKey !== settings.gameKey) {
         ws.close(WS_CLOSE_UNAUTHORIZED, "bad game key");
@@ -158,6 +164,8 @@ export function createHub({ settings, log = console.log }) {
         roster: game.roster(),
         activeRuns: game.activeRunStarts(),
       });
+      if (game.config.mode === "duel") send(ws, "serverToGame", "queue.updated", game.queueState());
+      game.gameChanged();
     } else if (h.role === "admin") {
       if (h.pin !== settings.adminPin) {
         ws.close(WS_CLOSE_UNAUTHORIZED, "bad pin");
@@ -171,6 +179,8 @@ export function createHub({ settings, log = console.log }) {
         players: game.allPlayerViews(),
         weather: game.weather,
       });
+      if (game.config.mode === "duel")
+        send(ws, "serverToAdmin", "queue.updated", game.queueState());
     }
   }
 

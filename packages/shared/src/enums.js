@@ -9,7 +9,10 @@ export const ABILITIES = /** @type {const} */ ([
   "stability",
   "bounce",
 ]);
-export const DRIVING_STYLES = /** @type {const} */ (["careful", "balanced", "daring"]);
+/** Session modes (contracts §2i): free races, or a duel for the champion's time. */
+export const GAME_MODES = /** @type {const} */ (["race", "duel"]);
+/** Duel mode: the halves of the big screen (contracts §2i). Left races in red, right in blue. */
+export const SIDES = /** @type {const} */ (["left", "right"]);
 /** Timed sections, in course order. */
 export const SECTION_IDS = /** @type {const} */ (["hills", "pond", "crossing", "bends"]);
 /** Courses. `countryside` is point to point; `village` is a loop raced lap after lap. */
@@ -61,6 +64,15 @@ export const FORK_CHOICES = /** @type {const} */ ({
   ramp: ["jump", "around"],
   crossing: ["exposed", "sheltered"],
 });
+/**
+ * Stars choose the route at each fork (contracts §2h): `stars` or more of `ability` take `choice`,
+ * else the fork's other (safe) way. The thresholds are the sweep's crossovers (tools/sweep.gd).
+ */
+export const ROUTE_STARS = /** @type {const} */ ({
+  ramp: { ability: "jump", stars: 8, choice: "jump" },
+  pond: { ability: "water", stars: 6, choice: "water" },
+  crossing: { ability: "stability", stars: 4, choice: "exposed" },
+});
 export const FAIL_REASONS = /** @type {const} */ (["off_track", "flipped", "stuck", "timeout"]);
 /** aborted = session ended, game restarted, admin stop */
 export const RUN_OUTCOMES = /** @type {const} */ (["finished", "failed", "aborted"]);
@@ -105,6 +117,7 @@ export const RUN_EVENT_KINDS = /** @type {const} */ ([
   "bumped",
   "bumped_other",
   "missed_exit", // loop tracks: went round the roundabout again
+  "push_slide", // slid wide in a bend taken too hot with Push held (contracts §2g)
 ]);
 /** Languages the game and phones speak. The game manager picks one on the big screen (config.language). */
 export const LANGUAGES = /** @type {const} */ (["en", "de"]);
@@ -142,6 +155,8 @@ export const ERROR_CODES = /** @type {const} */ ([
   "reroll_limit",
   "track_locked",
   "track_changing",
+  "mode_locked",
+  "in_line",
 ]);
 
 /** WS close code when `hello` is missing or rejected. */

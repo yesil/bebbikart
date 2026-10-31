@@ -32,6 +32,20 @@ const STYLE_PASS_OFFSET := {"careful": 2.4, "balanced": 2.0, "daring": 1.6}
 const STYLE_MISJUDGE := {"careful": 0.08, "balanced": 0.15, "daring": 0.25}
 const STYLE_WIND_CAUTION := {"careful": 0.15, "balanced": 0.1, "daring": 0.05}
 
+# Push (contracts §2g): held on the phone, the kart drives "daring" (the STYLE_* daring entries)
+# with more top speed, brakes late and corners as if the road were dry and grippy, past the real
+# limit on tight bends (SLIP_MARGIN), so it slides wide and loses time there; let go, the
+# autopilot drives balanced. A slide up to PUSH_SLIDE_GRACE_S after letting go still counts as
+# pushed (the phone's release reaches the kart 80 to 200 ms late).
+const PUSH_TOP_SPEED := 0.08      # top speed x (1 + this)
+const PUSH_CORNER := 1.4          # corner speed vs. the calm estimate (the real limit is SLIP_MARGIN)
+const PUSH_PLAN_DECEL := 12.0     # how late it brakes for a bend
+const PUSH_RAIN_PERCEIVED := 0.0  # the wet it allows for: none
+const PUSH_SLIDE_GRACE_S := 0.5
+const PUSH_SLIDE_RECOVER_S := 1.0 # after a pushed slide the kart fishtails this long...
+const PUSH_SLIDE_RECOVER_MULT := 0.65  # ...at this share of its target speed
+const PUSH_WISE_MARGIN := 0.97    # bots push while every bend within reach is under this share of the real limit
+
 # Rain: real grip vs. what the autopilot assumes (it under-reacts, careful less so)
 const RAIN_GRIP_LOSS := 0.22
 const WET_GRIP_PER_STAR := 0.12   # grip level cuts the grip rain and mud (segment "grip") take away

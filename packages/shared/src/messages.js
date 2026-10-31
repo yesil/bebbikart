@@ -5,12 +5,14 @@ import { PROTOCOL_VERSION } from "./enums.js";
 import { newId } from "./ids.js";
 import {
   CoachTipSchema,
+  DuelResultSchema,
   FailReasonSchema,
   GhostTraceSchema,
   HeatEntrySchema,
   LeaderboardEntrySchema,
   PaddockEntrySchema,
   PlayerViewSchema,
+  QueueStateSchema,
   RosterEntrySchema,
   RunEventSchema,
   RunSchema,
@@ -84,6 +86,10 @@ export const CHANNELS = {
     "phone.stop": z.object({ runId: z.string() }),
     // "Show me on the big screen": the game's camera cuts to this racer soon.
     "phone.watch": z.object({ runId: z.string() }),
+    // Push held down (on) or let go (contracts §2g).
+    "phone.push": z.object({ runId: z.string(), on: z.boolean() }),
+    // Duel mode: leave the line (contracts §2i).
+    "phone.queue.leave": empty,
   },
   adminToServer: {
     hello,
@@ -130,6 +136,7 @@ export const CHANNELS = {
       lapsPerRun: true,
       sessionMinutes: true,
       language: true,
+      mode: true,
     })
       .partial()
       .strict(),
@@ -196,6 +203,7 @@ export const CHANNELS = {
       // run.stretches with the player's best and the session's fastest on each (§2d); empty
       // for an aborted run.
       stretches: z.array(StretchResultSchema),
+      duel: DuelResultSchema.optional(), // duel runs (§2i)
     }),
     // The racers who left the start with this one: places so far, sent on each of their results;
     // done once the last of them is home (§7 "Heats").
@@ -209,6 +217,8 @@ export const CHANNELS = {
       playerId: z.string().optional(),
       runId: z.string().optional(),
     }),
+    // Duel mode (§2i): the line, the halves and the champion; after welcome and on every change.
+    "queue.updated": QueueStateSchema,
   },
   // Not spelled out in contracts.md: the console gets the phone broadcasts plus the full
   // player list, so it can show every racer live.
@@ -222,6 +232,7 @@ export const CHANNELS = {
     }),
     "player.updated": PlayerViewSchema,
     "player.removed": z.object({ playerId: z.string() }),
+    "queue.updated": QueueStateSchema,
   },
   serverToGame: {
     ...broadcasts,
@@ -236,6 +247,8 @@ export const CHANNELS = {
     "run.boost": z.object({ runId: z.string() }),
     "run.stop": z.object({ runId: z.string() }), // loop tracks: finish at the next line crossing
     "run.watch": z.object({ runId: z.string() }), // a phone asked for the big screen
+    "run.push": z.object({ runId: z.string(), on: z.boolean() }), // Push held or let go (§2g)
+    "queue.updated": QueueStateSchema, // duel mode (§2i)
     "run.abort": z.object({ runId: z.string(), reason: z.string() }),
   },
 };

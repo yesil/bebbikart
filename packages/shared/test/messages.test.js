@@ -128,3 +128,30 @@ test("lap messages for loop tracks", () => {
       .payload.isLapBest,
   ).toBe(true);
 });
+
+test("duel mode and Push (contracts §2g, §2i)", () => {
+  expect(DEFAULT_CONFIG.mode).toBe("race");
+  expect(DEFAULT_CONFIG.duelResultMs).toBe(5_000);
+  const ok = (ch, type, payload) => parseMsg(ch, makeMsg(ch, type, payload)).ok;
+  expect(ok("phoneToServer", "phone.push", { runId: "run_x", on: true })).toBe(true);
+  expect(() => makeMsg("phoneToServer", "phone.push", { runId: "run_x" })).toThrow();
+  expect(ok("phoneToServer", "phone.queue.leave", {})).toBe(true);
+  expect(ok("serverToGame", "run.push", { runId: "run_x", on: false })).toBe(true);
+  expect(ok("gameToServer", "game.config.set", { mode: "duel" })).toBe(true);
+  expect(() => makeMsg("gameToServer", "game.config.set", { mode: "cup" })).toThrow();
+  const queue = {
+    line: [{ playerId: "ply_a", nickname: "Ava" }],
+    racing: [{ side: "left", playerId: "ply_b", nickname: "Ben", runId: "run_b" }],
+    champion: { playerId: "ply_c", nickname: "Cleo", timeMs: 52_300, tries: 4 },
+    split: true,
+    skipped: [],
+  };
+  for (const ch of ["serverToPhone", "serverToAdmin", "serverToGame"])
+    expect(ok(ch, "queue.updated", queue)).toBe(true);
+  expect(() =>
+    makeMsg("serverToGame", "queue.updated", {
+      ...queue,
+      racing: [{ ...queue.racing[0], side: "middle" }],
+    }),
+  ).toThrow();
+});

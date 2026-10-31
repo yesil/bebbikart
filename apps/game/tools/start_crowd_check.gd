@@ -176,7 +176,6 @@ func _one_tap(track: String, course, n: int, at: float, weather: String) -> bool
 	var fails := 0
 	var fails_no_tap := 0
 	var reasons := {}
-	var styles := {}
 	var lost: Array = []
 	var slips := 0
 	for i in n:
@@ -187,7 +186,6 @@ func _one_tap(track: String, course, n: int, at: float, weather: String) -> bool
 		if tap["failed"] != "":
 			fails += 1
 			reasons[tap["failed"]] = int(reasons.get(tap["failed"], 0)) + 1
-			styles[b["style"]] = int(styles.get(b["style"], 0)) + 1
 		elif base["failed"] == "" and tap["tapped"]:
 			# Distance short of the untapped run at EARLY_S, in seconds at the untapped speed.
 			lost.append((base["gs"] - tap["gs"]) / maxf(1.0, base["v"]))
@@ -197,9 +195,9 @@ func _one_tap(track: String, course, n: int, at: float, weather: String) -> bool
 	var ok := share <= float(MAX_ONETAP_FAILS[weather])
 	var med: float = lost[lost.size() / 2] if not lost.is_empty() else NAN
 	var p90: float = lost[int(lost.size() * 0.9)] if not lost.is_empty() else NAN
-	print("%-11s one tap at %.0f s, %-4s: fails %3d/%d (%.1f%%, max %.0f%%) · no tap %d · %s %s · time vs no tap: median %+.2f s, p90 %+.2f s · slipped %d%s" % [
+	print("%-11s one tap at %.0f s, %-4s: fails %3d/%d (%.1f%%, max %.0f%%) · no tap %d · %s · time vs no tap: median %+.2f s, p90 %+.2f s · slipped %d%s" % [
 		track, at, weather, fails, n, 100.0 * share, 100.0 * float(MAX_ONETAP_FAILS[weather]), fails_no_tap,
-		reasons, styles, med, p90, slips, "" if ok else "  <-- FAIL"])
+		reasons, med, p90, slips, "" if ok else "  <-- FAIL"])
 	return ok
 
 

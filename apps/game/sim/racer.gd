@@ -9,7 +9,14 @@ const Route = preload("res://sim/route.gd")
 var run_id := ""
 var player_id := ""
 var build: Dictionary
+## The autopilot's manner: "balanced", or "daring" while Push is held (contracts §2g). Builds have
+## no driving style any more.
 var style := "balanced"
+var pushing := false           # Push held on the phone
+var real_corner_f := 1.0       # this tick's real grip limit as a corner factor (push_wise)
+var push_grace := 0.0          # s left in which a slide still counts as pushed after letting go
+var push_ticks := 0            # ticks raced with Push held
+var push_recover_t := 0.0      # s left fishtailing after a slide with Push (contracts §2g)
 var st := {}  # effect level per ability: stars * Tuning.STAR_STEP (0..5)
 
 var state := "queued"  # queued | racing | finished | failed | aborted
@@ -121,7 +128,7 @@ func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, c
 	half_len = clampf(size.y, Tuning.SIZE_HALF_WIDTH.x, Tuning.SIZE_HALF_LENGTH_MAX)
 	player_id = p_player_id
 	build = p_build
-	style = String(build.get("style", "balanced"))
+	style = "balanced"
 	var stars: Dictionary = build.get("stars", {})
 	for a in ["speed", "jump", "grip", "water", "stability", "bounce"]:
 		st[a] = int(stars.get(a, 0)) * Tuning.STAR_STEP
@@ -195,13 +202,45 @@ func is_active() -> bool:
 	return state == "racing"
 
 
+## Push held down or let go (run.push). Kept while the run waits on the grid.
+func set_push(on: bool) -> void:
+	if pushing and not on:
+		push_grace = Tuning.PUSH_SLIDE_GRACE_S
+	pushing = on
+	style = "daring" if on else "balanced"
+
+
+## Top speed now: Push adds a little.
+func top_now() -> float:
+	return top * (1.0 + Tuning.PUSH_TOP_SPEED) if pushing else top
+
+
+## A slide now counts as Push's doing: held, or just let go.
+func push_slide() -> bool:
+	return pushing or push_grace > 0.0
+
+
+## Bots and the sweep (a kid who knows the track): hold Push unless a bend within reach at the
+## pushed top speed (lag_s of reaction included) is tighter than the kart can really take at that
+## speed, i.e. where pushing would slide.
+func push_wise(lag_s := 0.15) -> bool:
+	if in_water:
+		return false
+	var vp := top * (1.0 + Tuning.PUSH_TOP_SPEED)
+	var decel := Tuning.PUSH_PLAN_DECEL
+	var horizon := vp * vp / (2.0 * decel) + 6.0 + vp * lag_s
+	var target: float = _plan(real_corner_f * Tuning.PUSH_WISE_MARGIN, decel, horizon)[0]
+	return target >= minf(vp, v + 3.0)
+
+
 # ---------------------------------------------------------------- planning
 
 ## Lowest speed the autopilot wants within its look-ahead window.
 ## Returns [target, calm_reference]. corner_f scales corner speeds for the "perceived" target.
-func _plan(corner_f: float, decel: float) -> Array:
-	var horizon := v * v / (2.0 * decel) + 6.0
-	var best := top
+func _plan(corner_f: float, decel: float, horizon := -1.0) -> Array:
+	if horizon < 0.0:
+		horizon = v * v / (2.0 * decel) + 6.0
+	var best := top_now()
 	var best_ref := top
 	var base_ref := grip_f * float(Tuning.STYLE_CORNER[style])
 	var i := seg_idx
@@ -273,6 +312,10 @@ func step(sim) -> void:
 	var dt := Tuning.DT
 	ticks += 1
 	stretch_log.back()["ticks"] += 1
+	if pushing:
+		push_ticks += 1
+	push_grace = maxf(0.0, push_grace - dt)
+	push_recover_t = maxf(0.0, push_recover_t - dt)
 	var weather = sim.weather
 	var rain: float = weather.rain_intensity()
 	if rain > 0.05:
@@ -314,20 +357,24 @@ func step(sim) -> void:
 	var rain_true := (1.0 - Tuning.RAIN_GRIP_LOSS * wet) * (1.0 - (1.0 - float(seg.get("grip", 1.0))) * bite)
 	# The autopilot knows its tyres: its rain estimate shrinks with grip too (wrong by style).
 	# Mud it sees (the stretch's sign); rain it misjudges.
-	var rain_seen := (1.0 - float(Tuning.RAIN_PERCEIVED_LOSS[style]) * wet) * (1.0 - (1.0 - float(seg.get("grip", 1.0))) * bite)
+	var perceived: float = Tuning.PUSH_RAIN_PERCEIVED if pushing else float(Tuning.RAIN_PERCEIVED_LOSS[style])
+	var rain_seen := (1.0 - perceived * wet) * (1.0 - (1.0 - float(seg.get("grip", 1.0))) * bite)
 	var boost_grip := Tuning.BOOST_WEAK_GRIP if weak_grip_t > 0.0 else 1.0
 	plan_t -= 1
 	if plan_t <= 0:
 		plan_t = 3
 		# Spinning wheels after an off-zone tap: the autopilot knows and drives to the lower grip.
-		var corner_f := grip_f * float(Tuning.STYLE_CORNER[style]) * rain_seen * boost_grip * noise
-		var p := _plan(corner_f, float(Tuning.STYLE_PLAN_DECEL[style]))
+		real_corner_f = grip_f * rain_true * boost_grip * Tuning.SLIP_MARGIN
+		var style_corner: float = Tuning.PUSH_CORNER if pushing else float(Tuning.STYLE_CORNER[style])
+		var corner_f := grip_f * style_corner * rain_seen * boost_grip * noise
+		var p := _plan(corner_f, Tuning.PUSH_PLAN_DECEL if pushing else float(Tuning.STYLE_PLAN_DECEL[style]))
 		target_v = p[0]
 		ref_v = p[1]
 	var tv := target_v * (1.0 + boost_amt)
 	if weak_grip_t > 0.0:
 		tv *= Tuning.BOOST_WEAK_DRIVE
-	var cap := top * (1.0 + boost_amt)
+	var top_v := top_now()
+	var cap := top_v * (1.0 + boost_amt)
 	tv = minf(tv, cap)
 	if in_water:
 		# Rain swells the fords; water stars wade through anyway.
@@ -339,13 +386,13 @@ func step(sim) -> void:
 	rain_capped = false
 	wind_capped = false
 	var wet_safe: float = Tuning.RAIN_SAFE_BASE + Tuning.RAIN_SAFE_PER_GRIP * st["grip"]
-	var wet_cap := (top - rain * maxf(0.0, top - wet_safe)) * (1.0 + boost_amt)
+	var wet_cap := (top_v - rain * maxf(0.0, top_v - wet_safe)) * (1.0 + boost_amt)
 	if tv > wet_cap:
 		tv = wet_cap
 		rain_capped = true
 	var gale := clampf(exposure * weather.wind_strength() / Tuning.WIND_SAFE_FULL, 0.0, 1.0)
 	var wind_safe: float = Tuning.WIND_SAFE_BASE + Tuning.WIND_SAFE_PER_STAB * st["stability"]
-	var wind_cap := (top - gale * maxf(0.0, top - wind_safe)) * (1.0 + boost_amt)
+	var wind_cap := (top_v - gale * maxf(0.0, top_v - wind_safe)) * (1.0 + boost_amt)
 	if tv > wind_cap:
 		tv = wind_cap
 		wind_capped = true
@@ -360,6 +407,8 @@ func step(sim) -> void:
 		tv *= 1.0 - float(Tuning.STYLE_WIND_CAUTION[style]) * minf(1.0, absf(wind_a) / Tuning.WIND_ACCEL)
 	if recover_t > 0.0:
 		tv *= recover_mult
+	if push_recover_t > 0.0:
+		tv *= Tuning.PUSH_SLIDE_RECOVER_MULT
 	if not detour.is_empty():
 		tv *= 0.85  # gone round again by mistake: the racer slows while finding the exit
 	if follow_v >= 0.0:
@@ -391,6 +440,9 @@ func step(sim) -> void:
 			var vlim := sqrt(Tuning.CORNER_ACCEL / ak) * grip_f * rain_true * boost_grip * Tuning.SLIP_MARGIN
 			if v > vlim:
 				slipping = true
+				if push_slide():
+					# Pushed into a bend too hot: the kart fishtails out of it (slower for a while).
+					push_recover_t = Tuning.PUSH_SLIDE_RECOVER_S
 				var excess := v - vlim
 				vd += signf(k) * excess * Tuning.SLIP_DRIFT * dt
 				v -= excess * Tuning.SLIP_SCRUB * dt
@@ -610,7 +662,9 @@ func bumped_other(other_player: String) -> void:
 
 func _cause(k: float, exposure: float) -> String:
 	if slipping:
-		return "slip"
+		return "push_slide" if push_slide() else "slip"
+	if push_recover_t > 0.0:
+		return "push_slide"
 	if weak_grip_t > 0.0:
 		return "boost_weak"
 	if rain_capped:

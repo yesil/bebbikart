@@ -50,6 +50,11 @@ export function createHttp({ game, jobs, settings }) {
   const assetsDir = join(settings.dataDir, "assets");
 
   const me = (req) => game.mustPlayer(deviceIdOf(req));
+  /** Go: a free race answers 201 with the run; a duel joins the line, 202 with the line. */
+  const go = (playerId) => {
+    const out = game.launch(playerId);
+    return json(out, game.config.mode === "duel" ? 202 : 201);
+  };
   const admin = (req) => {
     if (req.headers.get("x-admin-pin") !== settings.adminPin)
       throw new ApiError("unauthorized", "Wrong PIN", 401);
@@ -130,7 +135,9 @@ export function createHttp({ game, jobs, settings }) {
       "/api/players/me/build",
       async (req) => json(game.setBuild(me(req).id, await body(req))),
     ],
-    ["POST", "/api/players/me/runs", (req) => json(game.launch(me(req).id), 201)],
+    // Duel mode (contracts §2i): Go joins the line, 202 with the line.
+    ["POST", "/api/players/me/runs", (req) => go(me(req).id)],
+    ["DELETE", "/api/players/me/queue", (req) => json(game.leaveLine(me(req).id))],
     ["POST", "/api/players/me/runs/current/boost", (req) => json({ ok: game.boost(me(req).id) })],
     [
       "GET",
@@ -185,11 +192,7 @@ export function createHttp({ game, jobs, settings }) {
       "/api/admin/players/:id/build",
       async (req, p) => json(game.setBuild(adminPlayer(p.id).id, await body(req))),
     ],
-    [
-      "POST",
-      "/api/admin/players/:id/runs",
-      (_req, p) => json(game.launch(adminPlayer(p.id).id), 201),
-    ],
+    ["POST", "/api/admin/players/:id/runs", (_req, p) => go(adminPlayer(p.id).id)],
     [
       "POST",
       "/api/admin/players/:id/approve",

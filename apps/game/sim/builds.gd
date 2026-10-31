@@ -21,33 +21,27 @@ static func random_stars(rng: RandomNumberGenerator, total: int = int(Protocol.D
 	return stars
 
 
-static func random_routes(rng: RandomNumberGenerator) -> Dictionary:
+## The way the stars take at each fork (contracts §2h, Protocol.ROUTE_STARS); the server does the
+## same (routesFor in packages/shared), so a build from the server already carries them.
+static func routes_for(stars: Dictionary) -> Dictionary:
 	var r := {}
-	for f in Protocol.FORK_IDS:
-		var ch: Array = Protocol.FORK_CHOICES[f]
-		r[f] = ch[rng.randi_range(0, 1)]
+	for f in Protocol.ROUTE_STARS:
+		var rule: Dictionary = Protocol.ROUTE_STARS[f]
+		var risky: String = rule["choice"]
+		var safe: String = Protocol.FORK_CHOICES[f][1] if Protocol.FORK_CHOICES[f][0] == risky else Protocol.FORK_CHOICES[f][0]
+		r[f] = risky if int(stars.get(rule["ability"], 0)) >= int(rule["stars"]) else safe
 	return r
 
 
 static func random_build(rng: RandomNumberGenerator) -> Dictionary:
 	var stars := random_stars(rng)
-	var routes := random_routes(rng)
-	# Players tend to pick routes that suit their stars.
-	if rng.randf() < 0.6:
-		routes["ramp"] = "jump" if int(stars["jump"]) >= 8 else "around"
-		routes["pond"] = "water" if int(stars["water"]) >= 6 else "bridge"
-		routes["crossing"] = "exposed" if int(stars["stability"]) >= 4 else "sheltered"
-	return {
-		"stars": stars,
-		"routes": routes,
-		"style": Protocol.DRIVING_STYLES[rng.randi_range(0, 2)],
-	}
+	return {"stars": stars, "routes": routes_for(stars)}
 
 
 static func describe(build: Dictionary) -> String:
 	var st: Dictionary = build["stars"]
 	var r: Dictionary = build["routes"]
-	return "spd%d jmp%d grp%d wat%d stb%d bnc%d %s %s/%s/%s" % [
+	return "spd%d jmp%d grp%d wat%d stb%d bnc%d %s/%s/%s" % [
 		int(st["speed"]), int(st["jump"]), int(st["grip"]), int(st["water"]), int(st["stability"]), int(st["bounce"]),
-		String(build["style"]).substr(0, 4), r["ramp"], r["pond"], r["crossing"],
+		r["ramp"], r["pond"], r["crossing"],
 	]

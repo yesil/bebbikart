@@ -15,11 +15,6 @@ const DRAWING_KINDS = [
 	"character",
 	"vehicle"
 ]
-const DRIVING_STYLES = [
-	"careful",
-	"balanced",
-	"daring"
-]
 const ERROR_CODES = [
 	"bad_request",
 	"bad_message",
@@ -35,7 +30,9 @@ const ERROR_CODES = [
 	"game_offline",
 	"reroll_limit",
 	"track_locked",
-	"track_changing"
+	"track_changing",
+	"mode_locked",
+	"in_line"
 ]
 const FAIL_REASONS = [
 	"off_track",
@@ -61,6 +58,10 @@ const FORK_IDS = [
 	"pond",
 	"ramp",
 	"crossing"
+]
+const GAME_MODES = [
+	"race",
+	"duel"
 ]
 const GHOST_HZ = 10
 const ID_PREFIXES = {
@@ -128,6 +129,23 @@ const ROLES = [
 	"game",
 	"admin"
 ]
+const ROUTE_STARS = {
+	"ramp": {
+		"ability": "jump",
+		"stars": 8,
+		"choice": "jump"
+	},
+	"pond": {
+		"ability": "water",
+		"stars": 6,
+		"choice": "water"
+	},
+	"crossing": {
+		"ability": "stability",
+		"stars": 4,
+		"choice": "exposed"
+	}
+}
 const RUN_EVENT_KINDS = [
 	"slip",
 	"water_slow",
@@ -139,7 +157,8 @@ const RUN_EVENT_KINDS = [
 	"bounce_wobble",
 	"bumped",
 	"bumped_other",
-	"missed_exit"
+	"missed_exit",
+	"push_slide"
 ]
 const RUN_OUTCOMES = [
 	"finished",
@@ -161,6 +180,10 @@ const SESSION_STATUSES = [
 	"idle",
 	"running",
 	"ended"
+]
+const SIDES = [
+	"left",
+	"right"
 ]
 const SIM_TICK_HZ = 60
 const STRETCH_IDS = [
@@ -331,6 +354,8 @@ const DEFAULT_CONFIG = {
 	"track": "countryside",
 	"lapsPerRun": 3,
 	"language": "en",
+	"mode": "race",
+	"duelResultMs": 5000,
 	"weather": {
 		"rain": {
 			"minCalmMs": 20000,
@@ -361,11 +386,10 @@ const DEFAULT_BUILD = {
 		"bounce": 2
 	},
 	"routes": {
-		"pond": "bridge",
 		"ramp": "around",
-		"crossing": "sheltered"
-	},
-	"style": "balanced"
+		"pond": "bridge",
+		"crossing": "exposed"
+	}
 }
 
 const MSG_PHONE_TO_SERVER = [
@@ -373,7 +397,9 @@ const MSG_PHONE_TO_SERVER = [
 	"phone.go",
 	"phone.boost",
 	"phone.stop",
-	"phone.watch"
+	"phone.watch",
+	"phone.push",
+	"phone.queue.leave"
 ]
 const MSG_ADMIN_TO_SERVER = [
 	"hello"
@@ -413,7 +439,8 @@ const MSG_SERVER_TO_PHONE = [
 	"run.section",
 	"run.ended",
 	"run.heat",
-	"camera.updated"
+	"camera.updated",
+	"queue.updated"
 ]
 const MSG_SERVER_TO_ADMIN = [
 	"leaderboard.updated",
@@ -423,7 +450,8 @@ const MSG_SERVER_TO_ADMIN = [
 	"weather.updated",
 	"welcome",
 	"player.updated",
-	"player.removed"
+	"player.removed",
+	"queue.updated"
 ]
 const MSG_SERVER_TO_GAME = [
 	"leaderboard.updated",
@@ -436,5 +464,7 @@ const MSG_SERVER_TO_GAME = [
 	"run.boost",
 	"run.stop",
 	"run.watch",
+	"run.push",
+	"queue.updated",
 	"run.abort"
 ]

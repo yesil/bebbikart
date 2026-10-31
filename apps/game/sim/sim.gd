@@ -104,6 +104,14 @@ func boost(run_id: String) -> void:
 		r.boost(self)
 
 
+## Push held down or let go on the phone (run.push, contracts §2g).
+func push(run_id: String, on: bool) -> void:
+	var r: Racer = by_run.get(run_id)
+	if r != null and r.pushing != on:
+		r.set_push(on)
+		emit("sim.push", {"runId": run_id, "on": on})
+
+
 ## Loop tracks: finish the run when the racer next crosses the line ("pit in").
 func stop(run_id: String) -> void:
 	var r: Racer = by_run.get(run_id)

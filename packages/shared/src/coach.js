@@ -1,6 +1,6 @@
 // Coach tips (contracts.md §8). WS3 owns the gameplay knowledge and tunes the rules. All
 // kid-facing copy is in COACH_COPY / STRETCH_NAMES / ROUTE_NAMES so it is reviewed in one place.
-import { LANGUAGES, TRACK_STRETCHES } from "./enums.js";
+import { LANGUAGES, ROUTE_STARS, TRACK_STRETCHES } from "./enums.js";
 
 /**
  * Where each stretch is, per language and track, with its preposition ("on the muddy farm
@@ -134,6 +134,7 @@ export const COACH_ABILITY = {
   fail_bounce_wobble: "bounce",
   fail_bumped: "stability",
   fail_off_track: "grip",
+  fail_push_slide: "grip",
   fail_flipped: "stability",
   fail_stuck: "speed",
   fail_timeout: "speed",
@@ -142,61 +143,62 @@ export const COACH_ABILITY = {
 
 /**
  * Text templates per language (config.language). {where} = a STRETCH_NAMES entry, {s} = seconds
- * lost, {ability} = an ABILITY_NAMES entry, {alt} = a ROUTE_NAMES entry. Each fits 70 chars with
- * the longest names (coach.test.js). Both languages have exactly the same keys.
+ * lost, {ability} = an ABILITY_NAMES entry, {alt} = a ROUTE_NAMES entry, {n} = the stars of
+ * {ability} that take the other way at a fork (ROUTE_STARS, contracts §2h). Each fits 70 chars with the longest names (coach.test.js).
+ * Both languages have exactly the same keys.
  */
 export const COACH_COPY = {
   en: {
     // Rule 1: failed runs, by reason and the dominant event on the stretch where it ended.
-    fail_slip: "Slipped {where}! Try +2 grip or Careful style.",
+    fail_slip: "Slipped {where}! Try +2 grip.",
+    fail_push_slide: "Slid off {where}! Let go of Push before the bend.",
     fail_wind_push: "Blown off {where}! Try +2 stability.",
     fail_water_slow: "Stuck {where}! Try +2 water.",
     fail_bad_landing: "Crash landing {where}! Try +2 bounce.",
     fail_bounce_wobble: "Too wobbly {where}! Try -2 bounce.",
     fail_bumped: "Bumped off {where}! Try +2 stability.",
-    fail_off_track: "Off the road {where}! Try Careful style.",
+    fail_off_track: "Off the road {where}! Let go of Push sooner.",
     fail_flipped: "Flipped over {where}! Try +2 stability.",
-    fail_stuck: "Got stuck {where}! Try a different route.",
+    fail_stuck: "Got stuck {where}! Try other stars.",
     fail_timeout: "Out of time {where}! Try +2 speed.",
     // Rule 2: the stretch that cost most against your best (first run: the session's fastest).
     loss_stretch: "Lost {s} s {where}. Try +2 {ability}!",
-    loss_route: "Lost {s} s {where}. Try {alt} next time!",
-    loss_slick: "Lost {s} s on the wet, slippery bridge. Try {alt}!",
+    loss_route: "Lost {s} s {where}. Try {n} {ability} stars!",
+    loss_slick: "Lost {s} s on the wet, slippery bridge. Try {n} {ability} stars!",
+    loss_push_slide: "Lost {s} s sliding {where}. Let go of Push sooner!",
     loss_boost_weak: "Lost {s} s {where}. Boost on the glowing zones!",
     loss_bumped: "Lost {s} s to bumps {where}. Wait for a quiet track!",
-    loss_missed_exit: "Lost {s} s going round the roundabout again! Try Careful.",
+    loss_missed_exit: "Lost {s} s going round the roundabout again! Let go of Push.",
     close: "So close to your best! Go again?",
     // Rule 3: first finish or new best, plus one experiment.
-    best_try_water: "New best! Brave enough to try the water shortcut?",
-    best_try_jump: "New best! Dare to jump the big ramp next time?",
-    best_try_exposed: "New best! Try the fast windy causeway next time?",
-    best_try_daring: "New best! Try Daring style for even more speed?",
+    best_try_route: "New best! Try {n} {ability} stars: they take {alt}!",
+    best_try_push: "New best! Hold Push on the straights for more speed!",
     best_keep: "New best! Can you beat it again?",
     // The run was stopped (session ended, game gone, admin).
     aborted: "That race was stopped. Press Go! to try again.",
   },
   de: {
-    fail_slip: "Ausgerutscht {where}! +2 Grip oder Vorsichtig!",
+    fail_slip: "Ausgerutscht {where}! Probier +2 Grip.",
+    fail_push_slide: "Abgerutscht {where}! Lass Push vor der Kurve los.",
     fail_wind_push: "Weggeweht {where}! Probier +2 Stabilität.",
     fail_water_slow: "Stecken geblieben {where}! Probier +2 Wasser.",
     fail_bad_landing: "Bruchlandung {where}! Probier +2 Federung.",
     fail_bounce_wobble: "Zu wackelig {where}! Probier -2 Federung.",
     fail_bumped: "Weggerempelt {where}! Warte auf freie Bahn.",
-    fail_off_track: "Abgeflogen {where}! Probier Vorsichtig.",
+    fail_off_track: "Abgeflogen {where}! Lass Push früher los.",
     fail_flipped: "Überschlagen {where}! Probier +2 Stabilität.",
-    fail_stuck: "Stecken geblieben {where}! Nimm eine andere Route.",
+    fail_stuck: "Stecken geblieben {where}! Probier andere Sterne.",
     fail_timeout: "Zeit abgelaufen {where}! Probier +2 Tempo.",
     loss_stretch: "{s} s verloren {where}. Probier +2 {ability}!",
-    loss_route: "{s} s verloren {where}. Probier {alt}!",
-    loss_slick: "{s} s auf der nassen, rutschigen Brücke verloren. Nimm {alt}!",
+    loss_route: "{s} s verloren {where}. Nimm {n} Sterne {ability}!",
+    loss_slick: "{s} s auf der nassen Brücke verloren. Nimm {n} Sterne {ability}!",
+    loss_push_slide: "{s} s gerutscht {where}. Lass Push früher los!",
     loss_boost_weak: "{s} s verloren {where}. Boost auf Leuchtfeldern!",
     loss_bumped: "{s} s durch Rempler {where}. Warte auf freie Bahn!",
-    loss_missed_exit: "{s} s verloren, nochmal um den Kreisel! Probier Vorsichtig.",
+    loss_missed_exit: "{s} s verloren, nochmal um den Kreisel! Lass Push los.",
     close: "Ganz knapp an deiner Bestzeit! Nochmal?",
-    best_try_water: "Neue Bestzeit! Traust du dich durch die Wasser-Abkürzung?",
-    best_try_jump: "Neue Bestzeit! Wagst du nächstes Mal den grossen Sprung?",
-    best_try_exposed: "Neue Bestzeit! Nächstes Mal über den schnellen windigen Damm?",
-    best_try_daring: "Neue Bestzeit! Probier Mutig für noch mehr Tempo?",
+    best_try_route: "Neue Bestzeit! {n} Sterne {ability} und du nimmst {alt}!",
+    best_try_push: "Neue Bestzeit! Halt Push auf den Geraden für mehr Tempo!",
     best_keep: "Neue Bestzeit! Schaffst du es noch schneller?",
     aborted: "Das Rennen wurde gestoppt. Drück Los! und versuch es nochmal.",
   },
@@ -206,6 +208,7 @@ export const COACH_COPY = {
 export const MIN_STRETCH_LOSS_MS = 300;
 
 const FAIL_EVENT_KEYS = [
+  "push_slide",
   "slip",
   "wind_push",
   "water_slow",
@@ -214,7 +217,7 @@ const FAIL_EVENT_KEYS = [
   "bumped",
 ];
 // Loss events whose fix isn't the stretch's star: they get their own tip.
-const OWN_TIP_EVENTS = ["boost_weak", "bumped", "missed_exit"];
+const OWN_TIP_EVENTS = ["boost_weak", "bumped", "missed_exit", "push_slide"];
 const LOSS_EVENT_KEYS = [
   "slip",
   "water_slow",
@@ -276,20 +279,22 @@ export function coachTip(run, build, best, language, stretches) {
     if (!newBest) return tip(language, run.track, "close", {});
   }
 
-  const experiment = [
-    ["pond", "water", "best_try_water"],
-    ["ramp", "jump", "best_try_jump"],
-    ["crossing", "exposed", "best_try_exposed"],
-  ].find(([fork, choice]) => build.routes[fork] !== choice);
-  if (experiment)
+  // A risky way the stars don't take yet (contracts §2h), in this order.
+  const fork = ["pond", "ramp", "crossing"].find((f) => build.routes[f] !== ROUTE_STARS[f].choice);
+  if (fork) {
+    const rule = ROUTE_STARS[fork];
+    const alt = track.find((t) => t.fork === fork && t.choice === rule.choice);
     return tip(
       language,
       run.track,
-      experiment[2],
-      {},
-      { fork: experiment[0], choice: experiment[1] },
+      "best_try_route",
+      { alt: alt.id, ability: rule.ability, n: rule.stars },
+      { fork, choice: rule.choice },
     );
-  return tip(language, run.track, build.style === "daring" ? "best_keep" : "best_try_daring", {});
+  }
+  // No slide all run: maybe Push was hardly used.
+  const slid = events.some((e) => e.kind === "push_slide");
+  return tip(language, run.track, slid ? "best_keep" : "best_try_push", {});
 }
 
 /** The tip for the stretch that cost most: its own event's tip, else its star, else the other route. */
@@ -311,11 +316,13 @@ function stretchTip(language, run, track, st, lossMs, events) {
   const alt = track.find((t) => t.fork === meta.fork && t.choice !== meta.choice);
   if (!alt) throw new Error(`coach: stretch "${st.id}" has no ability and no other route`);
   const key = meta.slick && (run.weatherSeen ?? []).includes("rain") ? "loss_slick" : "loss_route";
+  // The stars choose the route (§2h): name how many it takes.
+  const rule = ROUTE_STARS[alt.fork];
   return tip(
     language,
     run.track,
     key,
-    { stretch: st.id, lossMs, alt: alt.id },
+    { stretch: st.id, lossMs, alt: alt.id, ability: rule.ability, n: rule.stars },
     { fork: alt.fork, choice: alt.choice },
   );
 }
@@ -349,7 +356,7 @@ function copyFor(language) {
   return COACH_COPY[language];
 }
 
-function tip(language, track, key, { stretch, lossMs, ability, alt }, route) {
+function tip(language, track, key, { stretch, lossMs, ability, alt, n }, route) {
   const template = copyFor(language)[key];
   if (template === undefined) throw new Error(`coach: no "${language}" text for tip "${key}"`);
   const fill = (table, id, what) => {
@@ -357,7 +364,7 @@ function tip(language, track, key, { stretch, lossMs, ability, alt }, route) {
     if (v === undefined) throw new Error(`coach: no "${language}" ${what} for ${track} "${id}"`);
     return v;
   };
-  let text = template.replace("{s}", ((lossMs ?? 0) / 1000).toFixed(1));
+  let text = template.replace("{s}", ((lossMs ?? 0) / 1000).toFixed(1)).replace("{n}", String(n));
   if (text.includes("{where}"))
     text = text.replace("{where}", fill(STRETCH_NAMES, stretch, "name"));
   if (text.includes("{alt}")) text = text.replace("{alt}", fill(ROUTE_NAMES, alt, "route name"));

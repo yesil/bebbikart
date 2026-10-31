@@ -2,18 +2,21 @@ extends SceneTree
 ## Headless balance sweep (game.md task #5).
 ##   godot --headless --path apps/game --script res://tools/sweep.gd -- --builds=200 --seeds=3
 ## Options: --builds=N random builds (default 200), --seeds=N repeats per measurement (default 3),
-##          --boost=perfect|none, --quick (smaller run), --json=path (dump raw results)
-##          --trace=jump:3,ramp:jump[,weather:rain]  run one build and print its splits + events
+##          --boost=perfect|none, --push=wise|always|never (how the bots drive Push, default wise:
+##          held except where a bend within reach needs braking, Racer.push_wise),
+##          --quick (smaller run), --json=path (dump raw results)
+##          --trace=jump:3,ramp:jump[,weather:rain][,push:always]  run one build and print its splits + events
 ## Village loop balance (lap 2 of 2, solo, boosts on the zones), a few minutes:
 ##   godot --headless --path apps/game --script res://tools/sweep.gd -- --track=village [--builds=300 --seeds=3]
 ## Builds are ranked by their expected lap: the mean over the seeds of the clean lap 2 (slips
 ## included, a missed exit's extra circle taken out) plus the missed-exit risk priced exactly (the
 ## racer's chance at the exit x the time of one more circle), a fail counting as a lap of
 ## runTimeCapMs. Best build per weather (random
-## screen + hill-climb: move stars, flip a route, change style), a cross table of those builds in
-## every weather, the best build held to each fork choice and to each style with its gap to the
-## best, each stretch's 0-vs-10-star gain for the ability it tests, the fork-by-stars tables, fail
-## rates and how much slower than calm each weather is.
+## screen + hill-climb: move stars; the stars choose the routes, contracts §2h), a cross table of
+## those builds in every weather, the best build held to each fork choice (the route forced) and
+## driven with each Push habit, with its gap to the best, each stretch's 0-vs-10-star gain for the
+## ability it tests, the fork-by-stars tables (where ROUTE_STARS comes from), fail rates and how
+## much slower than calm each weather is.
 
 const Course = preload("res://sim/course.gd")
 const Sim = preload("res://sim/sim.gd")
@@ -34,6 +37,8 @@ const WEATHERS := {
 var course: Course
 var cfg: Dictionary
 var boost_mode := "perfect"
+var push_mode := "wise"
+const PUSH_MODES := ["never", "always", "wise"]
 var seeds := 3
 var n_builds := 200
 var raw: Array = []
@@ -47,6 +52,11 @@ func _init() -> void:
 	n_builds = int(args.get("builds", "200"))
 	seeds = int(args.get("seeds", "3"))
 	boost_mode = String(args.get("boost", "perfect"))
+	push_mode = String(args.get("push", "wise"))
+	if not push_mode in PUSH_MODES:
+		push_error("sweep: --push must be one of %s" % [PUSH_MODES])
+		quit(1)
+		return
 	if args.has("quick"):
 		n_builds = 40
 		seeds = 2
@@ -56,6 +66,10 @@ func _init() -> void:
 	if args.get("track", "countryside") == "village":
 		n_builds = int(args.get("builds", "300"))
 		seeds = int(args.get("seeds", "3"))
+		if args.get("section", "") == "push":
+			_village_push()
+			quit()
+			return
 		if not _village():
 			quit(1)
 			return
@@ -66,10 +80,14 @@ func _init() -> void:
 		_trace_one(String(args["trace"]))
 		quit()
 		return
+	if args.get("section", "") == "push":
+		_section_push()
+		quit()
+		return
 
 	_section_routes()
 	_section_default()
-	_section_styles()
+	_section_push()
 	_section_random()
 	_section_forks()
 	_section_crowd()
@@ -99,11 +117,15 @@ func run_group(builds: Array, weather: String, seed_: int, collisions: bool) -> 
 		sim.add_run(id, "p%d" % i, builds[i], Tuning.DEFAULT_SIZE)
 	var results := {}
 	var racers := {}
-	for id in ids:
-		racers[id] = sim.by_run[id]
+	var habit := {}
+	for i in ids.size():
+		racers[ids[i]] = sim.by_run[ids[i]]
+		habit[ids[i]] = String(builds[i].get("push", push_mode))
 	var guard := 0
 	while results.size() < ids.size() and guard < 60 * 120:
 		guard += 1
+		for r in sim.racers:
+			drive_push(r, habit[r.run_id])
 		if boost_mode == "perfect":
 			for r in sim.racers:
 				var rc: Racer = r
@@ -156,6 +178,13 @@ func fmt(m: Dictionary) -> String:
 	return s
 
 
+## The bot's thumb on Push (contracts §2g): never, always, or wise (Racer.push_wise).
+static func drive_push(r: Racer, habit: String) -> void:
+	var want := habit == "always" or (habit == "wise" and r.push_wise())
+	if r.pushing != want:
+		r.set_push(want)
+
+
 # ---------------------------------------------------------------- sections
 
 func _section_routes() -> void:
@@ -174,16 +203,16 @@ func _section_default() -> void:
 		print("  %-6s %s" % [w, fmt(measure(Builds.default_build(), w))])
 
 
-func _section_styles() -> void:
-	print("\n== Driving style (default stars/routes) ==")
+func _section_push() -> void:
+	print("\n== Push habit (default build): never / always / wise (held except before bends that need braking) ==")
 	var line := "  %-9s" % ""
 	for w in WEATHERS:
 		line += "%-24s" % w
 	print(line)
-	for style in Protocol.DRIVING_STYLES:
+	for habit in PUSH_MODES:
 		var b := Builds.default_build()
-		b["style"] = style
-		line = "  %-9s" % style
+		b["push"] = habit
+		line = "  %-9s" % habit
 		for w in WEATHERS:
 			line += "%-24s" % fmt(measure(b, w))
 		print(line)
@@ -315,8 +344,8 @@ func _trace_one(spec: String) -> void:
 			continue
 		if kv[0] == "weather":
 			weather = kv[1]
-		elif kv[0] == "style":
-			b["style"] = kv[1]
+		elif kv[0] == "push":
+			b["push"] = kv[1]
 		elif b["routes"].has(kv[0]):
 			b["routes"][kv[0]] = kv[1]
 		else:
@@ -325,10 +354,11 @@ func _trace_one(spec: String) -> void:
 	var w: Array = WEATHERS[weather]
 	sim.weather.force(w[0], w[1], 90.0)
 	sim.add_run("r0", "p0", b, Tuning.DEFAULT_SIZE)
-	print(Builds.describe(b), "  weather ", weather)
+	print(Builds.describe(b), "  weather ", weather, "  push ", b.get("push", push_mode))
 	for i in 60 * 120:
 		for r in sim.racers:
 			var rc: Racer = r
+			drive_push(rc, String(b.get("push", push_mode)))
 			if rc.boosts_left > 0 and rc.boost_t <= 0.0 and not rc.airborne and Course.in_ranges(rc.seg["boosts"], rc.ls):
 				rc.boost(sim)
 		sim.step()
@@ -375,7 +405,10 @@ func vrun(build: Dictionary, weather: String, k: int) -> Dictionary:
 	var detour_ticks := 0
 	var risk_ms := 0.0
 	var loop_len: float = (village.segments["roundabout_loop"]["route"] as Route).length
+	var habit := String(build.get("push", push_mode))
 	for i in 60 * 400:
+		if r.state == "racing":
+			drive_push(r, habit)
 		if r.boosts_left > 0 and r.boost_t <= 0.0 and not r.airborne and Course.in_ranges(r.seg["boosts"], r.ls):
 			r.boost(sim)
 		sim.step()
@@ -447,16 +480,19 @@ func vfmt(m: Dictionary) -> String:
 	return "%6.2f%s" % [float(m["mean"]) / 1000.0, "*" if int(m["fails"]) > 0 else ("~" if int(m["missed"]) > 0 else " ")]
 
 
-## Short form of a build: stars s/j/g/w/st/b, style, routes.
+## Short form of a build: stars s/j/g/w/st/b, routes, and its Push habit when not the sweep's.
 func vdesc(b: Dictionary) -> String:
 	var st: Dictionary = b["stars"]
 	var r: Dictionary = b["routes"]
-	return "spd%d jmp%d grp%d wat%d stb%d bnc%d %-8s %s/%s/%s" % [int(st["speed"]), int(st["jump"]), int(st["grip"]),
-		int(st["water"]), int(st["stability"]), int(st["bounce"]), b["style"], r["ramp"], r["pond"], r["crossing"]]
+	var habit := String(b.get("push", push_mode))
+	return "spd%d jmp%d grp%d wat%d stb%d bnc%d %s/%s/%s%s" % [int(st["speed"]), int(st["jump"]), int(st["grip"]),
+		int(st["water"]), int(st["stability"]), int(st["bounce"]), r["ramp"], r["pond"], r["crossing"],
+		"" if habit == push_mode else " push:" + habit]
 
 
-## Builds one move away: `step` stars from one ability to another, one route flipped, or another style.
-func neighbours(b: Dictionary, step: int, lock_fork: String = "", lock_style := false) -> Array:
+## Builds one move away: `step` stars from one ability to another. The stars choose the routes
+## (contracts §2h), except at lock_fork, whose route stays forced.
+func neighbours(b: Dictionary, step: int, lock_fork: String = "") -> Array:
 	var out: Array = []
 	var mx := int(cfg["starsMaxPerAbility"])
 	for a in Protocol.ABILITIES:
@@ -466,32 +502,24 @@ func neighbours(b: Dictionary, step: int, lock_fork: String = "", lock_style := 
 			var nb: Dictionary = b.duplicate(true)
 			nb["stars"][a] = int(nb["stars"][a]) - step
 			nb["stars"][c] = int(nb["stars"][c]) + step
-			out.append(nb)
-	for f in Protocol.FORK_IDS:
-		if f == lock_fork:
-			continue
-		var nb: Dictionary = b.duplicate(true)
-		var ch: Array = Protocol.FORK_CHOICES[f]
-		nb["routes"][f] = ch[1] if nb["routes"][f] == ch[0] else ch[0]
-		out.append(nb)
-	for style in Protocol.DRIVING_STYLES:
-		if style != b["style"] and not lock_style:
-			var nb: Dictionary = b.duplicate(true)
-			nb["style"] = style
+			var forced: String = b["routes"].get(lock_fork, "")
+			nb["routes"] = Builds.routes_for(nb["stars"])
+			if lock_fork != "":
+				nb["routes"][lock_fork] = forced
 			out.append(nb)
 	return out
 
 
 ## Steepest-descent hill-climb on the expected lap time, at most max_steps moves:
 ## 2-star moves first, 1-star moves once those stop paying.
-func climb(start: Dictionary, weather: String, max_steps: int, lock_fork: String = "", lock_style := false) -> Dictionary:
+func climb(start: Dictionary, weather: String, max_steps: int, lock_fork: String = "") -> Dictionary:
 	var best := start
 	var best_s := vscore(vmeasure(best, weather))
 	var step := 2
 	for i in max_steps:
 		var cand := {}
 		var cand_s := best_s - MIN_GAIN_MS
-		for nb in neighbours(best, step, lock_fork, lock_style):
+		for nb in neighbours(best, step, lock_fork):
 			var sc := vscore(vmeasure(nb, weather))
 			if sc < cand_s:
 				cand = nb
@@ -504,6 +532,29 @@ func climb(start: Dictionary, weather: String, max_steps: int, lock_fork: String
 		best = cand
 		best_s = cand_s
 	return best
+
+
+## Village: the default build and a few random ones driven with each Push habit (quick tuning).
+func _village_push() -> void:
+	village = VillageCourse.new()
+	vcfg = Messages.default_config()
+	vcfg["lapsPerRun"] = 2
+	vcfg["startCountdownMs"] = 0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var pool: Array = [Builds.default_build()]
+	for i in 5:
+		pool.append(Builds.random_build(rng))
+	print("== Village: lap 2 by Push habit (%d seeds; * = a fail) ==" % seeds)
+	for b in pool:
+		print("  %s" % vdesc(b))
+		for habit in PUSH_MODES:
+			var line := "    %-7s" % habit
+			for w in WEATHERS:
+				var hb: Dictionary = b.duplicate(true)
+				hb["push"] = habit
+				line += "  %s %s" % [w, vfmt(vmeasure(hb, w))]
+			print(line)
 
 
 func _village() -> bool:
@@ -541,15 +592,13 @@ func _village() -> bool:
 		var rows: Array = []
 		var fails := 0
 		var reasons := {}
-		var by_style := {}
-		var missed := {}
+		var missed := 0
 		for b in pool:
 			var m := vmeasure(b, w, 1)
 			if int(m["missed"]) > 0:
-				missed[b["style"]] = int(missed.get(b["style"], 0)) + 1
+				missed += 1
 			if int(m["fails"]) > 0:
 				fails += 1
-				by_style[b["style"]] = int(by_style.get(b["style"], 0)) + 1
 				for k in m["reasons"]:
 					reasons[k] = int(reasons.get(k, 0)) + 1
 			else:
@@ -557,7 +606,7 @@ func _village() -> bool:
 		rows.sort_custom(func(a, c): return a[0] < c[0])
 		screen[w] = rows
 		var med: float = rows[rows.size() / 2][0] if not rows.is_empty() else -1.0
-		print("  %-6s fails %3d/%d (%4.1f%%)  median lap %.2f s  by style %s  %s  missed exit by style %s" % [w, fails, n_builds, 100.0 * fails / n_builds, med / 1000.0, by_style, reasons, missed])
+		print("  %-6s fails %3d/%d (%4.1f%%)  median lap %.2f s  %s  missed exits %d" % [w, fails, n_builds, 100.0 * fails / n_builds, med / 1000.0, reasons, missed])
 
 	# Best build per weather: the screen's top 4 re-measured, then a hill-climb from the best 2.
 	var best := {}
@@ -606,22 +655,16 @@ func _village() -> bool:
 					builds += "\n      %-6s %s" % [w, vdesc(held)]
 			print(line + builds)
 
-	# Styles: the best build held to each style (stars and routes re-climbed).
-	print("\n== Styles: best build held to each style, gap to the weather's best (s) ==")
-	for style in Protocol.DRIVING_STYLES:
-		line = "  %-9s" % style
-		var builds := ""
+	# Push: the best build driven with each habit (contracts §2g), gap to the weather's best.
+	print("\n== Push: best build driven never / always / wise, gap to the weather's best (s) ==")
+	for habit in PUSH_MODES:
+		line = "  %-9s" % habit
 		for w in weathers:
-			var held: Dictionary = best[w]
-			if best[w]["style"] != style:
-				held = best[w].duplicate(true)
-				held["style"] = style
-				held = climb(held, w, 6, "", true)
+			var held: Dictionary = best[w].duplicate(true)
+			held["push"] = habit
 			var gap := (vscore(vmeasure(held, w)) - vscore(vmeasure(best[w], w))) / 1000.0
-			line += "  %s %6.2f (%+.2f)" % [w, vscore(vmeasure(held, w)) / 1000.0, gap]
-			if gap > 0.0:
-				builds += "\n      %-6s %s" % [w, vdesc(held)]
-		print(line + builds)
+			line += "  %s %s (%+.2f)" % [w, vfmt(vmeasure(held, w)), gap]
+		print(line)
 
 	# Fork by stars: default-ish build with the fork's ability at 0..10, each choice.
 	print("\n== Fork by stars: default build with <ability> at x stars; clean lap Δ = first choice - second (* = fails) ==")
@@ -654,24 +697,18 @@ func _village() -> bool:
 			line += "  %s %.2f->%.2f (%+.2f)" % [w, t0 / 1000.0, t10 / 1000.0, (t0 - t10) / 1000.0]
 		print(line)
 
-	# How much slower each weather is than calm, per random build (both finished), by style.
-	print("\n== Weather / calm lap ratio over the random builds (median, p90, max), by style ==")
+	# How much slower each weather is than calm, per random build (both finished).
+	print("\n== Weather / calm lap ratio over the random builds (median, p90, max) ==")
 	for w in weathers.slice(1):
-		line = "  %-6s" % w
-		for style in Protocol.DRIVING_STYLES:
-			var ratios: Array = []
-			for b in pool:
-				if b["style"] != style:
-					continue
-				var mc := vmeasure(b, "calm", 1)
-				var mw := vmeasure(b, w, 1)
-				if int(mc["fails"]) == 0 and int(mw["fails"]) == 0:
-					ratios.append(float(mw["mean"]) / float(mc["mean"]))
-			ratios.sort()
-			if ratios.is_empty():
-				continue
-			line += "  %s %.2f / %.2f / %.2f" % [style, ratios[ratios.size() / 2], ratios[int(ratios.size() * 0.9)], ratios[ratios.size() - 1]]
-		print(line)
+		var ratios: Array = []
+		for b in pool:
+			var mc := vmeasure(b, "calm", 1)
+			var mw := vmeasure(b, w, 1)
+			if int(mc["fails"]) == 0 and int(mw["fails"]) == 0:
+				ratios.append(float(mw["mean"]) / float(mc["mean"]))
+		ratios.sort()
+		if not ratios.is_empty():
+			print("  %-6s %.2f / %.2f / %.2f" % [w, ratios[ratios.size() / 2], ratios[int(ratios.size() * 0.9)], ratios[ratios.size() - 1]])
 
 	# Fails of the best builds (cross-table seeds) and of random builds (screen).
 	print("\n== Fails: best builds over the cross-table seeds ==")

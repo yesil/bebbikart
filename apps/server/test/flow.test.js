@@ -442,8 +442,7 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
   // the build and the weather on that lap (contracts §2f).
   const setup = {
     stars: { speed: 4, jump: 4, grip: 4, water: 2, stability: 4, bounce: 2 },
-    routes: { pond: "bridge", ramp: "around", crossing: "sheltered" },
-    style: "balanced",
+    routes: { pond: "bridge", ramp: "around", crossing: "exposed" }, // the stars' (§2h)
   };
   expect(ended2.payload.stretches).toEqual([
     {
@@ -821,7 +820,7 @@ test("a heat: racers who left together see each other's places on their phones, 
   const endedA = await a.phone.wait("run.ended", (p) => p.run.id === runIds[0]);
   const bridge = endedA.payload.stretches.find((st) => st.id === "stone_bridge");
   expect(bridge.other).toMatchObject({ id: "ford", ms: 6000, nickname: "Heat B" });
-  expect(bridge.other.setup).toMatchObject({ style: "balanced", weather: ["rain"] });
+  expect(bridge.other.setup).toEqual({ ...structuredClone(DEFAULT_BUILD), weather: ["rain"] });
   expect(endedA.payload.stretches.find((st) => st.id === "bumpy_road").other).toBeUndefined();
   for (const r of [a, b]) {
     const h = (await r.phone.wait("run.heat", (p) => p.done)).payload;

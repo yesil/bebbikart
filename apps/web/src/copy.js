@@ -252,6 +252,8 @@ const en = {
     unauthorized: "This phone isn't allowed to do that.",
     track_locked: "The track can't change during a race.",
     track_changing: "The big screen is changing track. Try again in a moment!",
+    mode_locked: "The game mode changes between sessions.",
+    in_line: "You're already in the line!",
     generic: "Something went wrong. Try again!",
   },
 };
@@ -523,6 +525,8 @@ const de = {
     unauthorized: "Dieses Handy darf das nicht.",
     track_locked: "Die Strecke kann während eines Rennens nicht wechseln.",
     track_changing: "Der grosse Bildschirm wechselt die Strecke. Gleich nochmal versuchen!",
+    mode_locked: "Der Spielmodus wechselt nur zwischen den Runden.",
+    in_line: "Du stehst schon in der Schlange!",
     generic: "Etwas ist schiefgelaufen. Versuch es nochmal!",
   },
 };
