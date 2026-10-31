@@ -548,3 +548,40 @@ test("a saved build that breaks the star budget can't launch: invalid_build, no 
   game.close();
   s.stop();
 }, 30000);
+
+test("language: the big screen picks it, every phone follows live (config.updated, welcome, state)", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey });
+  await game.start();
+  expect((await game.wait("welcome")).payload.config.language).toBe("en");
+  const phone = client({}, { role: "phone" });
+  await phone.start();
+  await phone.wait("welcome");
+
+  // Allowed mid-session (unlike the track): phones switch right away.
+  game.send("gameToServer", "game.config.set", { language: "de" });
+  const cfg = await phone.wait("config.updated", (c) => c.language === "de");
+  expect(cfg.payload.track).toBe(settings.config.track);
+  await game.wait("config.updated", (c) => c.language === "de");
+
+  // A phone that connects later, or boots over REST, gets it too.
+  const late = client({}, { role: "phone" });
+  await late.start();
+  expect((await late.wait("welcome")).payload.config.language).toBe("de");
+  expect((await (await fetch(`${base}/api/state`)).json()).config.language).toBe("de");
+
+  // Only the contract's languages: anything else is refused, nothing changes.
+  const bad = {
+    v: 1,
+    type: "game.config.set",
+    id: "lang1",
+    ts: new Date().toISOString(),
+    payload: { language: "fr" },
+  };
+  game.ws.send(JSON.stringify(bad));
+  expect((await game.wait("error", (p) => p.refId === "lang1")).payload.code).toBe("bad_message");
+  expect((await (await fetch(`${base}/api/state`)).json()).config.language).toBe("de");
+
+  game.send("gameToServer", "game.config.set", { language: "en" });
+  await phone.wait("config.updated", (c) => c.language === "en");
+  for (const c of [game, phone, late]) c.ws.close();
+});

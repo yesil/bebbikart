@@ -1,6 +1,7 @@
 // The server's state and rules: session, players, builds, runs, leaderboard (game-server.md).
 // Transport-free: REST and WS handlers call these methods, and outgoing messages go through `hub`.
 import {
+  abortTip,
   coachTip,
   DEFAULT_BUILD,
   LOOP_TRACKS,
@@ -30,7 +31,6 @@ function forCoach(run) {
   if (!run || !isLoop(run.track) || run.bestLapMs === undefined) return run;
   return { ...run, elapsedMs: run.bestLapMs, outcome: "finished" };
 }
-const ABORT_TIP = { key: "aborted", text: "That race was stopped. Press Go! to try again." };
 
 /**
  * @param {{ db: ReturnType<import("./db.js").openDb>, settings: object, hub: object, log?: Function }} deps
@@ -428,7 +428,11 @@ export function createGame({ db, settings, hub, log = console.log }) {
     const done = { ...run, status: "done", outcome: "aborted", endedAt: now() };
     saveRun(done);
     hub.toGame("run.abort", { runId: run.id, reason });
-    hub.toPhone(run.playerId, "run.ended", { run: done, isPersonalBest: false, coach: ABORT_TIP });
+    hub.toPhone(run.playerId, "run.ended", {
+      run: done,
+      isPersonalBest: false,
+      coach: abortTip(config.language),
+    });
     pushPlayer(run.playerId);
   }
   /** The game went away: its runs can't finish. */
@@ -437,7 +441,11 @@ export function createGame({ db, settings, hub, log = console.log }) {
       if (r.status === "done") continue;
       const done = { ...r, status: "done", outcome: "aborted", endedAt: now() };
       saveRun(done);
-      hub.toPhone(r.playerId, "run.ended", { run: done, isPersonalBest: false, coach: ABORT_TIP });
+      hub.toPhone(r.playerId, "run.ended", {
+        run: done,
+        isPersonalBest: false,
+        coach: abortTip(config.language),
+      });
       pushPlayer(r.playerId);
       log(`[run] ${r.id} aborted (${reason})`);
     }
@@ -557,7 +565,12 @@ export function createGame({ db, settings, hub, log = console.log }) {
       }
       savePlayer({ ...p, bestRunId: run.id, bestTimeMs: time });
     }
-    const coach = coachTip(forCoach(run), builds.get(run.buildId), forCoach(prevBest));
+    const coach = coachTip(
+      forCoach(run),
+      builds.get(run.buildId),
+      forCoach(prevBest),
+      config.language,
+    );
     const rank = ranks().get(r.playerId);
     hub.toPhone(r.playerId, "run.ended", { run, isPersonalBest, ...(rank ? { rank } : {}), coach });
     pushPlayer(r.playerId);
