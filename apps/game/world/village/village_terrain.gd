@@ -187,6 +187,11 @@ func corridor_target(seg: Dictionary, s: float) -> float:
 		return NAN
 	# The kicker is a wooden structure on the ground: never raise the terrain under it, only
 	# sink it for the landing pit.
+	var ramp: Dictionary = seg["ramp"]
+	if not ramp.is_empty() and s >= float(ramp["kick_a"]) + 2.0 and s <= float(ramp["lip_s"]):
+		# Under the back of the kicker the ground already drops to the pit floor, so nothing
+		# stands proud of the pit right behind the lip.
+		return r.pos_at(s).y - float(ramp["pit_depth"])
 	return r.pos_at(s).y + minf(0.0, Course.surface_offset(seg, s))
 
 

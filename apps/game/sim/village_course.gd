@@ -134,7 +134,8 @@ func _build(hill: float, north: float) -> void:
 	var ridge_l := deg_to_rad(180.0) * RIDGE_R + 16.0
 	p = _draw_ops(_end("cobbles"), _heading("cobbles"), [["A", RIDGE_R, 180.0], ["S", 16.0]],
 		[[0.0, 4.0], [ridge_l * 0.45, 6.5], [ridge_l, 3.4]])
-	_add("ridge", "crossing", "", "", p, 3.2, {"exposure": 1.0})
+	# Mandatory for everyone, so open but not as wild as the optional causeway.
+	_add("ridge", "crossing", "", "", p, 3.8, {"exposure": 0.7})
 	# Alpbach (water): down through a stream, then left back into the village.
 	var turn_in := LEG_SOUTH - LEG_BROOK - 180.0
 	p = _draw_ops(_end("ridge"), _heading("ridge"), [["S", 30.0], ["A", 16.0, turn_in], ["S", 14.0]],
@@ -148,7 +149,7 @@ func _build(hill: float, north: float) -> void:
 	var shelter_pts := _draw_ops(j4, h4, shelter_ops, [[0.0, 0.4]])
 	var xl := _along(shelter_pts, h4)
 	_add("cross_exposed", "crossing", "crossing", "exposed", _draw_ops(j4, h4, [["S", xl]],
-		[[0.0, 0.4], [12.0, 0.4], [22.0, 1.4], [xl - 22.0, 1.4], [xl - 12.0, 0.4], [xl, 0.4]]), 2.6,
+		[[0.0, 0.4], [18.0, 0.4], [28.0, 1.4], [xl - 28.0, 1.4], [xl - 18.0, 0.4], [xl, 0.4]]), 2.6,
 		{"exposure": 1.0, "low_rails": true})
 	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
 	# Square: a chicane past the bakery, then the roundabout round the fountain turns the

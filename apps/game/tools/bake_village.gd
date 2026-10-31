@@ -229,7 +229,8 @@ const DETOURS := ["ramp_around", "pond_bridge", "cross_sheltered"]
 const ROAD_PIECES := [
 	["start", "start", -1, -1, "road_ford", -1.0],
 	["hills1", "hills1", -1, -1, "road_asphalt", -1.0],
-	["ramp_jump_run_up", "ramp_jump", -1, "lip", "road_asphalt", -1.0],
+	# The run-up stops where the kicker starts: no road edge left standing above the pit.
+	["ramp_jump_run_up", "ramp_jump", -1, "kick", "road_asphalt", -1.0],
 	["ramp_jump_landing", "ramp_jump", "land", -1, "road_asphalt", -1.0],
 	["ramp_around", "ramp_around", -1, -1, "road_dirt_detour", -1.0],
 	["hills2", "hills2", -1, -1, "road_asphalt", -1.0],
@@ -280,6 +281,8 @@ func road_hw(seg: Dictionary, s: float) -> float:
 
 func _piece_s(seg: Dictionary, key: String) -> float:
 	match key:
+		"kick":
+			return float(seg["ramp"]["kick_a"]) + 0.5
 		"lip":
 			return float(seg["ramp"]["lip_s"])
 		"land":
@@ -293,9 +296,9 @@ func _piece_s(seg: Dictionary, key: String) -> float:
 		"deck_out":
 			return plan.bridge_s + VillagePlan.BRIDGE_HALF_LENGTH
 		"causeway_in":
-			return 12.0
+			return 18.0
 		"causeway_out":
-			return (seg["route"] as Route).length - 12.0
+			return (seg["route"] as Route).length - 18.0
 		"ring_in":
 			return float(course.roundabout["s0"]) + 1.0
 		"ring_out":
