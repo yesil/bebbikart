@@ -1,9 +1,10 @@
-import { ABILITIES, FORK_CHOICES, starsLeft } from "@bebbikart/shared";
+import { ABILITIES, FORK_CHOICES, starsLeft, TRACK_STRETCHES } from "@bebbikart/shared";
 import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
 import { Avatar, GridCall, isLoop, Paddock, secs, useGridCall } from "./common.js";
+import { TrackMap } from "./track-map.js";
 
 const pick = (b) => ({ stars: { ...b.stars }, routes: { ...b.routes }, style: b.style });
 const same = (a, b) => JSON.stringify(pick(a)) === JSON.stringify(pick(b));
@@ -94,6 +95,7 @@ export function Garage({ ctx }) {
     <${Paddock} s=${s} />
 
     <${WeatherStrip} weather=${s.weather} />
+    <${GarageMap} track=${cfg.track} routes=${build.routes} weather=${s.weather} />
 
     <section class="card">
       <div class="row-head">
@@ -157,6 +159,37 @@ export function Garage({ ctx }) {
       ${blocked ? html`<div class="muted small center">${blocked}</div>` : html`<${GridCall} s=${s} left=${gridLeft} />`}
       <button class="go" disabled=${!!blocked || saving} onClick=${go}>${gridLeft && !blocked ? COPY.grid.join : COPY.garage.go}</button>
     </div>
+  `;
+}
+
+/**
+ * Where each star matters (contracts §2e): the track with each stretch's ability, the route
+ * choices as the two branches (the chosen one bold), and a weather badge on the stretches the
+ * active or coming rain or wind hits hardest. Collapsible, so small phones keep the stars close.
+ */
+function GarageMap({ track, routes, weather }) {
+  const [picked, setPicked] = useState(null);
+  const meta = TRACK_STRETCHES[track]?.find((st) => st.id === picked);
+  const stormy = weather && (weather.rain.phase !== "calm" || weather.wind.phase !== "calm");
+  return html`
+    <details class="card map" open>
+      <summary>${COPY.map.title}</summary>
+      <${TrackMap} track=${track} routes=${routes} icons=${true} weather=${weather}
+        selected=${picked} onPick=${setPicked} />
+      <p class="pick">
+        ${
+          meta
+            ? COPY.map.picked(
+                COPY.stretches[track][meta.id],
+                meta.ability
+                  ? `${COPY.abilities[meta.ability][0]} ${COPY.abilities[meta.ability][1]}`
+                  : null,
+              )
+            : COPY.map.garageHint
+        }
+      </p>
+      ${stormy ? html`<p class="hint center">${COPY.map.weatherHint}</p>` : null}
+    </details>
   `;
 }
 
