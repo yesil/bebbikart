@@ -15,6 +15,10 @@ var fork_shots: Array = []   # [[pos, look_at], ...]
 var fork_idx := 0
 var _look := Vector3.ZERO
 var _chased: Node3D = null   # the target the follow camera last framed
+## world/camera_blockers.gd (village houses, the covered bridge's roof), or null: the follow camera
+## pulls in towards the racer instead of sitting in a house or looking through its wall.
+var blockers = null
+var blocked_s := 0.0         # seconds the chase position was behind or in a blocker (pulled in)
 
 
 func _ready() -> void:
@@ -31,6 +35,8 @@ func cycle_mode() -> void:
 func _process(delta: float) -> void:
 	var want_pos := position
 	var want_look := _look
+	var focus := Vector3.ZERO    # the racer's middle, when the follow camera keeps out of blockers
+	var keep_out := false
 	match mode:
 		Mode.FOLLOW:
 			if target != null and target.visible:
@@ -39,6 +45,13 @@ func _process(delta: float) -> void:
 				var fwd := Vector3(sin(yaw), 0, cos(yaw))
 				want_pos = target.global_position - fwd * 9.0 + Vector3(0, 4.5, 0)
 				want_look = target.global_position + fwd * 6.0 + Vector3(0, 1.0, 0)
+				if blockers != null:
+					focus = target.global_position + Vector3(0, 1.2, 0)
+					keep_out = true
+					var clear: Vector3 = blockers.clip(focus, want_pos)
+					if clear != want_pos:
+						blocked_s += delta
+					want_pos = clear
 				if target != _chased and position.distance_to(want_pos) > SNAP_DIST:
 					position = want_pos
 					_look = want_look
@@ -66,6 +79,9 @@ func _process(delta: float) -> void:
 				want_look = shot[1]
 	var k := 1.0 - exp(-delta * 3.0)
 	position = position.lerp(want_pos, k)
+	if keep_out:
+		# The lagging camera can still cut a corner through a house: keep it on the racer's side.
+		position = blockers.clip(focus, position)
 	_look = _look.lerp(want_look, k)
 	if position.distance_to(_look) > 0.01:
 		look_at(_look, Vector3.UP)

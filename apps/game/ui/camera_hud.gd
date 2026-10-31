@@ -30,6 +30,7 @@ var _tag: PanelContainer
 var _tag_title: Label
 var _tag_name: Label
 var _tag_bar: ProgressBar
+var blockers = null  # world/camera_blockers.gd, or null: the inset pulls in front of houses too
 var _pop: VBoxContainer
 var _pop_name: Label
 var _pop_note: Label
@@ -138,7 +139,10 @@ func _aim(f: Dictionary, delta: float) -> void:
 		_cam.fov = SIDE_FOV
 		dir = (side + _fwd * 0.3 + up * 0.2).normalized()
 		dist = float(f["radius"]) / tan(deg_to_rad(SIDE_FOV * 0.5)) * 1.3
-	_cam.look_at_from_position(look + dir * dist, look, up)
+	var eye := look + dir * dist
+	if blockers != null:
+		eye = blockers.clip(look, eye)  # in a narrow lane the side shot would be inside a house
+	_cam.look_at_from_position(eye, look, up)
 
 
 func _build_inset(root: Control) -> void:

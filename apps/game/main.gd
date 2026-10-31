@@ -41,6 +41,7 @@ const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
 const CameraDirector = preload("res://world/camera_director.gd")
+const CameraBlockers = preload("res://world/camera_blockers.gd")
 const CameraHud = preload("res://ui/camera_hud.gd")
 const RaceHud = preload("res://ui/race_hud.gd")
 const OptionsMenu = preload("res://ui/options_menu.gd")
@@ -307,6 +308,7 @@ func _setup_camera_director() -> bool:
 	director.cycle_s = float(cycle)
 	cam_hud = CameraHud.new()
 	add_child(cam_hud)
+	cam_hud.blockers = camera.blockers
 	var inset := str(args.get("inset", _saved_setting("camera", "inset", "face")))
 	if not cam_hud.set_inset(inset):
 		get_tree().quit(1)
@@ -548,6 +550,23 @@ func _load_village_world() -> bool:
 		get_tree().quit(1)
 		return false
 	terrain.call("set_camera", camera)
+	return _village_blockers(terrain)
+
+
+## The houses and the covered bridge's roof the cameras keep out of (world/camera_blockers.gd), on
+## the baked terrain's ground. Quits with an error if a house has no ground under it.
+func _village_blockers(terrain: Node) -> bool:
+	var data = terrain.get("data")
+	if data == null:
+		push_error("camera blockers: the village terrain has no height data; re-run tools/bake_village.gd")
+		get_tree().quit(1)
+		return false
+	var b := CameraBlockers.new()
+	if not b.add_village(course, func(x: float, z: float) -> float: return float(data.call("get_height", Vector3(x, 0.0, z)))):
+		push_error("camera blockers: %s" % "; ".join(b.errors))
+		get_tree().quit(1)
+		return false
+	camera.blockers = b
 	return true
 
 
@@ -943,6 +962,8 @@ func _quit() -> void:
 	set_physics_process(false)
 	print("mock summary: %.1f s wall, %d sim ticks, finished %d, failed %d, sent %s" % [
 		run_time, sim.tick, net.finished, net.failed, JSON.stringify(net.sent_counts)])
+	if camera.blockers != null:
+		print("camera: pulled in front of a house or roof for %.1f s of %.1f s" % [camera.blocked_s, run_time])
 	if args.has("screenshot") and not shot_taken:
 		shot_taken = true
 		await _screenshot(args["screenshot"])

@@ -107,7 +107,7 @@ Sweep flags:
   - `camera_rig.gd`: follow, wide and fork cameras. Fork shots come from `viewpoints.gd`.
   - `camera_director.gd`: which racer the camera follows, and when it switches (see below).
 - `ui/camera_hud.gd`: the on-camera name, the name pop after a cut, and the picture-in-picture second camera.
-- `tools/camera_check.gd`: headless test of the camera director, exit 1 on failure: `godot --headless --path . --script res://tools/camera_check.gd`.
+- `tools/camera_check.gd`: headless test of the camera director and the camera blockers (no village house box on a road, pulled-in cameras outside every house), exit 1 on failure: `godot --headless --path . --script res://tools/camera_check.gd`.
 - `ui/race_hud.gd`: the big-screen race HUD for groups: a place + name tag over every kart (pushed apart, never overlapping), the race board (top right: place, avatar, lap or section, time; finishers keep their time until the group is home), the standings (top left: everyone by best time, or what the designer is doing), finish and oops banners, problems in red, and the podium when a session ends. Colours come from its palette in join order and are shared with the camera's name tags.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
@@ -200,6 +200,10 @@ landing), never cuts to a racer about to finish, and cuts at once when the follo
 the course. A cut to a racer more than 35 m away jumps there; a closer one swoops. Karts parked
 on the start grid during the countdown count as on the course, so the camera is behind the grid
 while the lights count down (the second row, out of sight, is left out).
+In the village neither the chase camera nor the inset sits in a house or looks through a wall:
+when a house or the covered bridge's roof is between the racer and the camera, the camera pulls
+in towards the racer (`world/camera_blockers.gd`: a box per house of the village plan, standing
+on the terrain). The mock summary says how long the camera was pulled in.
 
 - **By hand:** Tab / Shift+Tab cut to the next / previous racer in start order. A stops the
   switching (the name tag says STAYING) and starts it again.
