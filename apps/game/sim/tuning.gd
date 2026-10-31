@@ -16,6 +16,7 @@ const ACCEL_BASE := 9.0           # m/s^2
 const ACCEL_HIGH_SPEED_PENALTY := 0.05  # per speed star above 3
 const ACCEL_STABILITY_PENALTY := 0.03   # per stability star
 const BRAKE := 14.0
+const RAIN_BRAKE_LOSS := 0.4      # braking in full rain, whatever the tyres (daring plans for 11)
 const BOOST_ACCEL_MULT := 1.8
 
 # Cornering. Corner speed = sqrt(CORNER_ACCEL / |k|) * gripFactor * style * rain
@@ -23,22 +24,30 @@ const CORNER_ACCEL := 17.0
 const GRIP_FACTOR_BASE := 0.7
 const GRIP_FACTOR_PER_STAR := 0.08
 const CORNER_MIN_K := 0.004       # below this curvature a bend is treated as straight
-const STYLE_CORNER := {"careful": 0.9, "balanced": 1.0, "daring": 1.12}
-const STYLE_PLAN_DECEL := {"careful": 6.0, "balanced": 8.5, "daring": 11.0}  # how late it brakes
+const STYLE_CORNER := {"careful": 0.93, "balanced": 1.0, "daring": 1.03}
+const STYLE_PLAN_DECEL := {"careful": 7.0, "balanced": 8.5, "daring": 11.0}  # how late it brakes
 const STYLE_SLIP_MARGIN := {"careful": 1.2, "balanced": 1.15, "daring": 1.11}  # real grip limit vs. its own estimate
 const STYLE_JUDGEMENT_NOISE := {"careful": 0.01, "balanced": 0.025, "daring": 0.045}
 const STYLE_PASS_OFFSET := {"careful": 2.4, "balanced": 2.0, "daring": 1.6}
 const STYLE_MISJUDGE := {"careful": 0.08, "balanced": 0.15, "daring": 0.25}
-const STYLE_WIND_CAUTION := {"careful": 0.3, "balanced": 0.2, "daring": 0.1}
+const STYLE_WIND_CAUTION := {"careful": 0.15, "balanced": 0.1, "daring": 0.05}
 
 # Rain: real grip vs. what the autopilot assumes (it under-reacts, careful less so)
 const RAIN_GRIP_LOSS := 0.22
-const RAIN_PERCEIVED_LOSS := {"careful": 0.28, "balanced": 0.2, "daring": 0.12}
+const WET_GRIP_PER_STAR := 0.12   # grip level cuts the grip rain and mud (segment "grip") take away
+# Safe speed (m/s) a kart drives flat out at in full rain / full open wind: grip / stability raise
+# it. A faster kart is held towards it (rain intensity, exposure x wind strength).
+const RAIN_SAFE_BASE := 15.0
+const RAIN_SAFE_PER_GRIP := 0.9
+const WIND_SAFE_BASE := 15.0
+const WIND_SAFE_PER_STAB := 1.6
+const WIND_SAFE_FULL := 0.8        # exposure x wind strength at which the whole cap applies
+const RAIN_PERCEIVED_LOSS := {"careful": 0.23, "balanced": 0.19, "daring": 0.05}
 
 # Slip
 const SLIP_MARGIN := 1.18         # real grip limit vs. the autopilot's calm estimate
-const SLIP_DRIFT := 2.6           # lateral accel per m/s of excess speed
-const SLIP_SCRUB := 1.6           # speed loss per m/s of excess speed
+const SLIP_DRIFT := 2.0           # lateral accel per m/s of excess speed
+const SLIP_SCRUB := 2.2           # speed loss per m/s of excess speed
 
 # Lateral control
 const LAT_CORR_BASE := 3.0        # max correction accel (m/s^2)
@@ -50,17 +59,25 @@ const OFF_TRACK_MARGIN := 0.9     # soft shoulder before off_track
 const RAIL_TOPPLE_VD := 0.9       # lateral m/s at a low rail that tips the kart over it (off_track)
 
 # Water
-const WATER_BASE := 0.45
-const WATER_PER_STAR := 0.12
+# Speed in water, share of top speed: BASE + SPAN x (level / 5)^CURVE, so 10 stars wade at 0.95
+# (never faster than the dry road) and the stars pay off most at the top end.
+const WATER_BASE := 0.30
+const WATER_SPAN := 0.65
+const WATER_CURVE := 1.7
+const WATER_RAIN_LOSS := 0.14      # fords in full rain, at 0 water stars (none at 10)
 const WATER_ENTRY_DRAG := 0.12    # one-off splash loss, minus 0.025 per water star
 
 # Jumping
 const GRAVITY := 16.0
 const LAUNCH_VY_BASE := 1.0
 const LAUNCH_VY_PER_STAR := 1.45
-const BUMP_LOSS_BASE := 0.08
-const BUMP_LOSS_PER_JUMP := 0.03
-const BOUNCE_KICK := 0.01
+const BUMP_LOSS_BASE := 0.10       # speed lost per bump (cobbles, humps), minus this per bounce level
+const BUMP_LOSS_PER_BOUNCE := 0.018
+const BUMP_HOP_BASE := 1.6         # hop vy off a bump (no drive while in the air)
+const BUMP_HOP_PER_BOUNCE := 0.2
+const BUMP_RATTLE_S := 0.6         # after a bump the kart holds BUMP_RATTLE_MULT of its speed this long,
+const BUMP_RATTLE_PER_BOUNCE := 0.18  # shorter per bounce level
+const BUMP_RATTLE_MULT := 0.75
 const LANDING_RECOVER := 0.3      # s, reduced by bounce
 const BAD_LANDING_RECOVER := 2.2
 const FLIP_WOBBLE := 1.25         # + 0.1 per stability
@@ -74,7 +91,7 @@ const WIND_ACCEL := 6.0          # lateral accel at strength 1, perpendicular, f
 const WIND_RESIST_PER_STAB := 0.15
 const WIND_EXPOSURE_AIR := 0.7
 const WIND_GUST := 0.5           # +-50% gusting on exposed ground
-const WIND_DRAG := 0.5            # top-speed loss at strength 1, fully exposed, 0 stability
+const WIND_DRAG := 0.3            # top-speed loss at strength 1, fully exposed, 0 stability
 
 # Boost
 const BOOST_PERFECT_AMT := 0.35
@@ -101,3 +118,9 @@ const START_HOLD_M := 35.0        # first lap: drive the start slot's line this 
 const EVENT_MIN_LOSS_MS := 60
 const EVENT_IDLE_CLOSE_S := 0.6
 const MAX_EVENTS := 40
+
+# Missed roundabout exit (village): (course chance + boosting + rain) x style. Careful drivers
+# almost never miss; daring ones, boosting in the rain, do.
+const MISS_STYLE := {"careful": 0.1, "balanced": 0.4, "daring": 1.6}
+const MISS_BOOST := 0.08
+const MISS_RAIN := 0.15

@@ -38,6 +38,8 @@ var wobble := 0.0
 var jump_air := false          # airborne from a ramp (vs. a hop)
 var in_water := false
 var slipping := false
+var rain_capped := false       # held under the speed it dares on a wet road (grip)
+var wind_capped := false       # held under the speed it dares in the open wind (stability)
 var gust_phase := 0.0
 var wind_lat := 0.0            # lateral wind accel applied this tick
 var a_long := 0.0
@@ -99,6 +101,7 @@ var pit_requested := false     # finish at the next line crossing
 # loop segment from s = at, after which it rejoins the segment at the same s.
 var detour := {}               # {} or {seg: Dictionary (the segment left), at: float, start_tick}
 var detour_travel := 0.0       # metres driven in detours this lap (keeps the stuck check fed)
+var miss_chance := -1.0        # chance of the last missed-exit roll (tools/sweep.gd prices the risk)
 var course_ref                 # the course, for detour segments
 var laps_max := 0
 
@@ -284,8 +287,14 @@ func step(sim) -> void:
 
 	# ---- autopilot target speed
 	# Loose surfaces (a segment's "grip", e.g. the muddy farm track) cut grip like rain does.
-	var rain_true := (1.0 - Tuning.RAIN_GRIP_LOSS * rain) * float(seg.get("grip", 1.0))
-	var rain_seen := 1.0 - float(Tuning.RAIN_PERCEIVED_LOSS[style]) * rain
+	# Grip stars bite through rain and mud: they shrink how much grip both take away.
+	var bite: float = 1.0 - Tuning.WET_GRIP_PER_STAR * st["grip"]
+	# Wet planks (a segment's "rain_slick") lose more grip in the rain, whatever the tyres.
+	var wet: float = rain * (bite + float(seg.get("rain_slick", 1.0)) - 1.0)
+	var rain_true := (1.0 - Tuning.RAIN_GRIP_LOSS * wet) * (1.0 - (1.0 - float(seg.get("grip", 1.0))) * bite)
+	# The autopilot knows its tyres: its rain estimate shrinks with grip too (wrong by style).
+	# Mud it sees (the stretch's sign); rain it misjudges.
+	var rain_seen := (1.0 - float(Tuning.RAIN_PERCEIVED_LOSS[style]) * wet) * (1.0 - (1.0 - float(seg.get("grip", 1.0))) * bite)
 	var boost_grip := Tuning.BOOST_WEAK_GRIP if weak_grip_t > 0.0 else 1.0
 	plan_t -= 1
 	if plan_t <= 0:
@@ -301,7 +310,25 @@ func step(sim) -> void:
 	var cap := top * (1.0 + boost_amt)
 	tv = minf(tv, cap)
 	if in_water:
-		tv = minf(tv, top * (Tuning.WATER_BASE + Tuning.WATER_PER_STAR * st["water"]))
+		# Rain swells the fords; water stars wade through anyway.
+		var deep: float = Tuning.WATER_RAIN_LOSS * rain * (1.0 - st["water"] / 5.0)
+		var wade: float = Tuning.WATER_BASE + Tuning.WATER_SPAN * pow(st["water"] / 5.0, Tuning.WATER_CURVE)
+		tv = minf(tv, top * (wade - deep))
+	# Flat out only when the kart can hold its speed: grip on a wet road, stability in the open
+	# wind. A fast kart without them is held back towards the safe speed.
+	rain_capped = false
+	wind_capped = false
+	var wet_safe: float = Tuning.RAIN_SAFE_BASE + Tuning.RAIN_SAFE_PER_GRIP * st["grip"]
+	var wet_cap := (top - rain * maxf(0.0, top - wet_safe)) * (1.0 + boost_amt)
+	if tv > wet_cap:
+		tv = wet_cap
+		rain_capped = true
+	var gale := clampf(exposure * weather.wind_strength() / Tuning.WIND_SAFE_FULL, 0.0, 1.0)
+	var wind_safe: float = Tuning.WIND_SAFE_BASE + Tuning.WIND_SAFE_PER_STAB * st["stability"]
+	var wind_cap := (top - gale * maxf(0.0, top - wind_safe)) * (1.0 + boost_amt)
+	if tv > wind_cap:
+		tv = wind_cap
+		wind_capped = true
 	var wind_res: float = 1.0 - Tuning.WIND_RESIST_PER_STAB * st["stability"]
 	var wind_a: float = Tuning.WIND_ACCEL * weather.wind_vec().dot(n) * wind_res
 	if exposure > 0.0:
@@ -326,7 +353,8 @@ func step(sim) -> void:
 		if v < tv:
 			v = minf(tv, v + acc * dt)
 		else:
-			var brk := Tuning.BRAKE * (2.0 if in_water else 1.0)
+			# Brakes bite less on a wet road: a late braker (daring) arrives too fast and slides.
+			var brk := Tuning.BRAKE * (2.0 if in_water else 1.0) * (1.0 - Tuning.RAIN_BRAKE_LOSS * rain)
 			v = maxf(tv, v - brk * dt)
 
 	# ---- lateral
@@ -441,11 +469,16 @@ func step(sim) -> void:
 		else:
 			for b in seg["bumps"]:
 				if prev_ls < float(b) and ls >= float(b):
-					var loss := maxf(0.0, Tuning.BUMP_LOSS_BASE - Tuning.BUMP_LOSS_PER_JUMP * st["jump"])
-					v *= 1.0 - loss + Tuning.BOUNCE_KICK * st["bounce"]
+					# Springy (bounce) karts soak a bump: less speed lost and a smaller hop.
+					v *= 1.0 - maxf(0.0, Tuning.BUMP_LOSS_BASE - Tuning.BUMP_LOSS_PER_BOUNCE * st["bounce"])
 					airborne = true
 					jump_air = false
-					vy = 1.5 + 0.35 * st["bounce"]
+					vy = maxf(0.3, Tuning.BUMP_HOP_BASE - Tuning.BUMP_HOP_PER_BOUNCE * st["bounce"])
+					# ...and rattles on a while after it (a stiff kart more): logged as a bumpy landing.
+					var rattle := Tuning.BUMP_RATTLE_S * maxf(0.0, 1.0 - Tuning.BUMP_RATTLE_PER_BOUNCE * st["bounce"])
+					if rattle > recover_t:
+						recover_t = rattle
+						recover_mult = Tuning.BUMP_RATTLE_MULT
 			y = ground
 
 	_account(sim, dt, k, rain, exposure)
@@ -558,6 +591,10 @@ func _cause(k: float, exposure: float) -> String:
 		return "slip"
 	if weak_grip_t > 0.0:
 		return "boost_weak"
+	if rain_capped:
+		return "slip"
+	if wind_capped:
+		return "wind_push"
 	if bumped_t > 0.0:
 		return "bumped"
 	if recover_t > 0.0 and recover_mult < 0.9:
@@ -626,8 +663,9 @@ func _add_event(e: Dictionary) -> void:
 ## Daring drivers, boosting and rain make it likelier; careful drivers rarely miss.
 func _maybe_miss_exit(sim, rain: float) -> void:
 	var m: Dictionary = seg["miss"]
-	var style_f: float = {"careful": 0.5, "balanced": 1.0, "daring": 1.6}.get(style, 1.0)
-	var chance := float(m["chance"]) * style_f + (0.08 if boost_t > 0.0 else 0.0) + 0.05 * rain
+	var chance := (float(m["chance"]) + (Tuning.MISS_BOOST if boost_t > 0.0 else 0.0) + Tuning.MISS_RAIN * rain) \
+		* float(Tuning.MISS_STYLE[style])
+	miss_chance = chance
 	if rng.randf() >= chance:
 		return
 	var loop_seg: Dictionary = course_ref.segments[m["seg"]]

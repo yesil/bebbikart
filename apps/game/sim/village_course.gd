@@ -118,7 +118,8 @@ func _build(hill: float, north: float) -> void:
 	_add("pond_water", "pond", "pond", "water", _draw_ops(j3, h3, [["S", ford_len]],
 		[[0.0, 0.4], [12.0, 0.4], [20.0, -0.2], [ford_len - 20.0, -0.2], [ford_len - 12.0, 0.4], [ford_len, 0.4]]), 4.0,
 		{"water": [[13.0, ford_len - 13.0]]})
-	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true})
+	# Wooden deck: slick in the rain (the ford doesn't care).
+	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true, "rain_slick": 1.6})
 	# Past the mill and out of the village to the south, onto the alp: each stretch tests one
 	# ability (a sign at its start says which).
 	p = _draw_ops(_end("pond_water"), _heading("pond_water"), [["S", 14.0]], [[0.0, 0.4]])
