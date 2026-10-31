@@ -130,6 +130,14 @@
     {
       "name": "mustache",
       "desc": "smile under a bushy mustache"
+    },
+    {
+      "name": "zigzag",
+      "desc": "nervous or grumpy zigzag line"
+    },
+    {
+      "name": "worried",
+      "desc": "worried or sad downturned mouth"
     }
   ],
   "hairStyles": [
@@ -692,7 +700,7 @@
     "characterExtrasMax": 10,
     "rideExtrasMax": 12,
     "paletteMin": 3,
-    "paletteMax": 8,
+    "paletteMax": 10,
     "personalityMin": 2,
     "personalityMax": 3
   }

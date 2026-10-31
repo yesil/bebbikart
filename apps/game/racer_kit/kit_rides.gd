@@ -81,7 +81,7 @@ static func _kart(main: Color, accent: Color) -> Dictionary:
 	})
 	var b: Node3D = d.body
 	b.add_child(P.mi(KitMesh.blob({"ax": 0.44, "ay": 0.14, "az": 0.72, "n": 3.2, "nose": 0.08}), main, Vector3(0, 0.27, 0)))
-	var bumper := P.mi(KitMesh.capsule(0.08, 0.86), accent, Vector3(0, 0.22, -0.78))
+	var bumper := P.mi(KitMesh.capsule(0.08, 0.86), main.darkened(0.18), Vector3(0, 0.22, -0.78))
 	bumper.rotation.z = PI / 2
 	b.add_child(bumper)
 	b.add_child(P.mi(KitMesh.rounded_box(Vector3(0.44, 0.34, 0.12)), accent, Vector3(0, 0.5, 0.36)))
@@ -105,12 +105,12 @@ static func _car(main: Color, accent: Color) -> Dictionary:
 	})
 	var b: Node3D = d.body
 	b.add_child(P.mi(KitMesh.blob({"ax": 0.5, "ay": 0.17, "az": 0.96, "n": 3.0, "nose": 0.06}), main, Vector3(0, 0.3, 0)))
-	# Side stripe and bumpers in the accent colour.
+	# Side stripe in the accent colour, bumpers a darker shade of the body.
 	for s in [-1, 1]:
 		var stripe := P.mi(KitMesh.rounded_box(Vector3(0.04, 0.07, 1.6)), accent, Vector3(s * 0.49, 0.28, 0))
 		b.add_child(stripe)
 	for z in [-0.96, 0.95]:
-		var bumper := P.mi(KitMesh.capsule(0.06, 0.92), accent, Vector3(0, 0.2, z))
+		var bumper := P.mi(KitMesh.capsule(0.06, 0.92), main.darkened(0.18), Vector3(0, 0.2, z))
 		bumper.rotation.z = PI / 2
 		b.add_child(bumper)
 	# Cabin: glass dome over the seat, roof rim in the main colour.
@@ -174,7 +174,7 @@ static func _animal4(main: Color, accent: Color) -> Dictionary:
 	var hp := {"ax": 0.2, "ay": 0.19, "az": 0.22, "n": 2.0}
 	var head := P.node("RideHead", Vector3(0, 1.02, -0.6))
 	head.add_child(P.mi(KitMesh.blob(hp), main))
-	head.add_child(P.mi(KitMesh.blob({"ax": 0.12, "ay": 0.09, "az": 0.1}), accent, Vector3(0, -0.06, -0.2)))
+	head.add_child(P.mi(KitMesh.blob({"ax": 0.12, "ay": 0.09, "az": 0.1}), main.lightened(0.12), Vector3(0, -0.06, -0.2)))
 	head.add_child(P.mi(KitMesh.sphere(0.03), P.DARK, Vector3(0, -0.02, -0.3)))
 	for s in [-1, 1]:
 		var ear := P.mi(KitMesh.capsule(0.05, 0.16), main, Vector3(s * 0.12, 0.18, 0.02))

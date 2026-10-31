@@ -232,6 +232,11 @@ func _build_mouths(m: Node3D, skin: Color) -> void:
 		var t := i / 8.0
 		wav.append(Vector3((t - 0.5) * w * 1.6, sin(t * TAU * 1.5) * 0.012, 0))
 	_mouths.wavy = _add(m, P.mi(KitMesh.tube(wav, 0.012, 6), P.DARK))
+	# Resting mouths that reuse a mood shape: a nervous zigzag, a worried frown.
+	if mouth_style == "zigzag":
+		_mouths.zigzag = _add(m, _mouths.wavy.duplicate())
+	if mouth_style == "worried":
+		_mouths.worried = _add(m, _mouths.frown.duplicate())
 	var grin := P.node("Grin")
 	var gm := P.mi(KitMesh.sphere(w, true), P.DARK, Vector3(0, 0.012, 0))
 	gm.rotation.x = PI

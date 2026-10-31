@@ -257,8 +257,9 @@ static func extra(e: Dictionary, color: Color, unit: float, mirror := false) -> 
 	var sc: Array = e.scale
 	var m: Node3D = _glasses(color) if e.shape == "glasses" else P.mi(extra_mesh(e.shape), color)
 	m.scale = Vector3(sc[0], sc[1], sc[2]) * unit
-	# Cones sit on their base so horns grow out of the socket instead of through it.
-	if e.shape == "cone":
+	# Cones, capsules and cylinders stand on their base, so horns, antennae, poles and whiskers grow
+	# out of the socket (their tip is scale.y × unit away) instead of through it.
+	if e.shape in ["cone", "capsule", "cylinder"]:
 		m.position.y = 0.5 * sc[1] * unit
 	root.add_child(m)
 	return root

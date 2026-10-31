@@ -45,6 +45,8 @@ export const RACER_KIT = Object.freeze({
     { name: "tongue", desc: "cheeky smile with the tongue sticking out" },
     { name: "buck_teeth", desc: "smile with two big front teeth, bunnies and beavers" },
     { name: "mustache", desc: "smile under a bushy mustache" },
+    { name: "zigzag", desc: "nervous or grumpy zigzag line" },
+    { name: "worried", desc: "worried or sad downturned mouth" },
   ],
   hairStyles: [
     { name: "spiky", desc: "spiky cartoon hair" },
@@ -264,7 +266,7 @@ export const SPEC_LIMITS = Object.freeze({
   characterExtrasMax: 10,
   rideExtrasMax: 12,
   paletteMin: 3,
-  paletteMax: 8,
+  paletteMax: 10,
   personalityMin: 2,
   personalityMax: 3,
 });

@@ -99,17 +99,19 @@ Character extras: scale 1.0 = 0.5 m. The head is about 0.4 m across (×head.size
 Ride extras: scale 1.0 = 1 m. A kart is about 1 m wide and 1.6 m long.
 Shape axes:
   sphere, box: scale is simply the size along x, y, z.
-  capsule, cylinder, cone: the LENGTH runs along y (scale[1]); scale[0] and scale[2] are the thickness. A cone stands on
-  its base at the socket and points up (+y). To aim them: rotationDeg [0,0,90] lays the length along x (sideways,
-  whiskers), [90,0,0] points it forward (+z), [-90,0,0] backwards, [0,0,±20] tilts it a little sideways (ears). So a
-  whisker is a capsule with scale [0.1,0.5,0.1] and rotationDeg [0,0,90] — never scale [0.9,0.1,0.1].
+  capsule, cylinder, cone: the LENGTH runs along y (scale[1]); scale[0] and scale[2] are the thickness. They STAND ON
+  THEIR BASE at the socket point and grow away from it, so their tip is scale[1] × unit away (unit = 0.5 m on the
+  character, 1 m on the ride): something on the tip of a character stick of scale[1] = 0.6 goes at offset y = 0.3.
+  To aim them: rotationDeg [0,0,90] makes them grow towards the racer's right, [0,0,-90] to the left (whiskers on
+  head_side grow outwards with [0,0,-90] and mirror), [90,0,0] forward (+z), [-90,0,0] backwards, [0,0,±20] tilts a
+  little sideways (ears). Never lay a stick by scaling x: a whisker is scale [0.1,0.4,0.1], not [0.9,0.1,0.1].
   Flat shapes (star, heart, lightning, flame, moon, flower, leaf, cloud, diamond, drop, bowtie) are puffy stickers
   facing forward (+z), scale [w,h,thickness]; on a ride_side use rotationDeg [0,90,0] and thickness 0.1.
   torus: a ring lying flat (hole points up); rotationDeg [90,0,0] stands it up facing forward.
   glasses: on head_front, about [0.6,0.6,0.6]. cape: on body_back, about [0.9,1,1], it hangs down and flows back.
 Typical sizes: cat ear = cone on head_side, offset [0,0.05,0], scale [0.3,0.4,0.25], rotationDeg [0,0,-15], mirror;
   horn = cone on head_top [0.15,0.45,0.15]; antenna = capsule on head_top [0.1,0.6,0.1] with a sphere [0.15,0.15,0.15]
-  at offset [0,0.28,0]; nose = sphere on head_front [0.15,0.12,0.12]; ride fin = cone [0.08,0.4,0.3];
+  at offset [0,0.3,0] (the tip); nose = sphere on head_front [0.15,0.12,0.12]; ride fin = cone [0.08,0.4,0.3];
   flag pole = cylinder on ride_top [0.1,0.8,0.1]; headlight = sphere on ride_front [0.2,0.2,0.1].
 Ride colours: "color" paints the ride's main body; "accent" paints bumpers, seat back, trim and stripes — a big part
   of a kart — so pick the accent from the drawing too (or a close shade of the main colour), never a random colour.`;

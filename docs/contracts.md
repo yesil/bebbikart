@@ -234,7 +234,7 @@ data/assets/pkg_xxx/
 
 ```ts
 type Vec3 = [number, number, number];
-type PaletteRef = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7; // index into palette
+type PaletteRef = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9; // index into palette
 // Optional look fields (kit v2). Name lists live in packages/shared/src/racer-kit.js:
 // patterns, finishes, motionStyles, engineSounds, hornSounds.
 interface Pattern { type: string; color: PaletteRef; scale: number } // scale 0.5–2 (bigger = larger motifs)
@@ -245,7 +245,7 @@ interface RacerSpec {
   title: string; // "The Purple Flash", ≤ 24 chars
   tagline?: string; // ≤ 60 chars, a fun one-liner for the reveal screen: "Loves fish, scared of puddles"
   personality: string[]; // 2–3 words, e.g. ["brave","speedy","silly"]
-  palette: string[]; // 3–8 hex colours from the drawing
+  palette: string[]; // 3–10 hex colours from the drawing
   motion?: { style: string; energy: number }; // idle personality: bouncy|smooth|wobbly|jittery|floaty|proud|sneaky; energy 0.5–1.5
   // Always written by the designer for new racers; may be absent on old ones (the game then logs and stays silent).
   sound?: { engine: string; pitch: number; horn: string }; // engine loop, pitch 0.6–1.6 (multiplies the loop pitch), horn one-shot
@@ -282,6 +282,7 @@ interface Extra {
   offset: Vec3;
   scale: Vec3;
   rotationDeg: Vec3; // clamped to small ranges per socket
+  // cone, capsule and cylinder stand on their base at the socket and grow along their local +y
   color: PaletteRef;
   mirror?: boolean; // also place a copy on the other side (ears, horns)
 }

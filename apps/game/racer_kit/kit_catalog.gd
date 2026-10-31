@@ -17,7 +17,7 @@ const IMPLEMENTED := {
 	"bodyShapes": ["bean", "round", "tall", "box", "pear", "star"],
 	"headShapes": ["round", "oval", "square", "wide", "drop"],
 	"eyes": ["dots", "big_round", "sleepy", "googly", "one_eye", "visor", "star", "heart", "lashes", "angry", "wink"],
-	"mouths": ["smile", "grin", "open", "fangs", "beak", "none", "tongue", "buck_teeth", "mustache"],
+	"mouths": ["smile", "grin", "open", "fangs", "beak", "none", "tongue", "buck_teeth", "mustache", "zigzag", "worried"],
 	"hairStyles": ["spiky", "curly", "long", "ponytail", "mohawk", "tuft", "buns", "pigtails", "bob", "very_long", "braid"],
 	"hatTypes": ["cap", "crown", "helmet", "wizard", "beanie", "tophat", "bow", "party"],
 	"rideBases": ["kart", "car", "bike", "animal4", "bird", "board", "rocket", "boat", "blob"],
