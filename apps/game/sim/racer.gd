@@ -431,7 +431,8 @@ func step(sim) -> void:
 		if not ramp.is_empty() and prev_ls < float(ramp["lip_s"]) and ls >= float(ramp["lip_s"]):
 			airborne = true
 			jump_air = true
-			y = ground
+			# Take off from the top of the lip (`ground` is already the pit floor past it).
+			y = sim.course.surface_y(seg, float(ramp["lip_s"]))
 			vy = Tuning.LAUNCH_VY_BASE + Tuning.LAUNCH_VY_PER_STAR * st["jump"]
 		else:
 			for b in seg["bumps"]:

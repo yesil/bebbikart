@@ -51,8 +51,8 @@ const WATER_ENTRY_DRAG := 0.12    # one-off splash loss, minus 0.025 per water s
 
 # Jumping
 const GRAVITY := 16.0
-const LAUNCH_VY_BASE := 3.0
-const LAUNCH_VY_PER_STAR := 1.5
+const LAUNCH_VY_BASE := 1.0
+const LAUNCH_VY_PER_STAR := 1.45
 const BUMP_LOSS_BASE := 0.08
 const BUMP_LOSS_PER_JUMP := 0.03
 const BOUNCE_KICK := 0.01
