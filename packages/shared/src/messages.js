@@ -18,6 +18,9 @@ import {
   SectionIdSchema,
   SessionSchema,
   SplitsSchema,
+  StretchIdSchema,
+  StretchResultSchema,
+  StretchTimeSchema,
   TrackIdSchema,
   WeatherKindSchema,
   WeatherStateSchema,
@@ -64,6 +67,9 @@ const runResult = {
   laps: z.array(ms).optional(), // loop tracks: completed laps, in order
   bestLapMs: ms.optional(), // loop tracks: fastest completed lap
   splits: SplitsSchema, // loop tracks: the best lap's splits
+  // finished: the best lap's stretches (point to point: the run's); failed: the stretches done
+  // on the lap it failed in (the one it failed on not included).
+  stretches: z.array(StretchTimeSchema),
   events: z.array(RunEventSchema),
   boostsUsed: z.number().int().nonnegative(),
   weatherSeen: z.array(WeatherKindSchema),
@@ -104,6 +110,7 @@ export const CHANNELS = {
       lapMs: ms,
       elapsedMs: ms,
       splits: SplitsSchema,
+      stretches: z.array(StretchTimeSchema), // this lap's, in driving order; they add up to lapMs
       isBest: z.boolean(),
     }),
     "game.run.finished": z.object({ ...runResult, trace: GhostTraceSchema }),
@@ -111,6 +118,7 @@ export const CHANNELS = {
       ...runResult,
       reason: FailReasonSchema,
       section: SectionIdSchema,
+      stretch: StretchIdSchema, // where it ended
     }),
     "game.weather": WeatherStateSchema,
     "game.capacity": z.object({ freeSlots: z.number().int().nonnegative() }),
@@ -184,6 +192,9 @@ export const CHANNELS = {
       isPersonalBest: z.boolean(),
       rank: z.number().int().positive().optional(),
       coach: CoachTipSchema,
+      // run.stretches with the player's best and the session's fastest on each (§2d); empty
+      // for an aborted run.
+      stretches: z.array(StretchResultSchema),
     }),
     // The racers who left the start with this one: places so far, sent on each of their results;
     // done once the last of them is home (§7 "Heats").

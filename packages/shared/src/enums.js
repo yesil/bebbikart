@@ -16,6 +16,45 @@ export const SECTION_IDS = /** @type {const} */ (["hills", "pond", "crossing", "
 export const TRACK_IDS = /** @type {const} */ (["countryside", "village"]);
 /** Tracks raced in laps (best lap ranks). */
 export const LOOP_TRACKS = /** @type {const} */ (["village"]);
+/**
+ * Stretches per track, in driving order (both choices of a fork listed). Each stretch tests one
+ * ability (a sign at its start says which); a fork's safe alternative tests none. fork/choice:
+ * the fork piece it is. slick: a wooden deck that loses grip in the rain whatever the tyres.
+ * The sim tags every course segment with one of these (sim/course.gd, sim/village_course.gd);
+ * runs report the time on each (contracts §2d).
+ */
+export const TRACK_STRETCHES = /** @type {const} */ ({
+  countryside: [
+    { id: "bumpy_road", ability: "bounce" },
+    { id: "kicker", ability: "jump", fork: "ramp", choice: "jump" },
+    { id: "knoll_road", ability: null, fork: "ramp", choice: "around" },
+    { id: "hilltop", ability: "speed" },
+    { id: "ford", ability: "water", fork: "pond", choice: "water" },
+    { id: "stone_bridge", ability: null, fork: "pond", choice: "bridge" },
+    { id: "causeway", ability: "stability", fork: "crossing", choice: "exposed" },
+    { id: "hedge_lane", ability: null, fork: "crossing", choice: "sheltered" },
+    { id: "rainbow_bends", ability: "grip" },
+  ],
+  village: [
+    { id: "main_street", ability: "grip" },
+    { id: "kicker", ability: "jump", fork: "ramp", choice: "jump" },
+    { id: "churchyard", ability: null, fork: "ramp", choice: "around" },
+    { id: "church_hill", ability: "grip" },
+    { id: "ford", ability: "water", fork: "pond", choice: "water" },
+    { id: "covered_bridge", ability: null, fork: "pond", choice: "bridge", slick: true },
+    { id: "farm", ability: "grip" },
+    { id: "cobbles", ability: "bounce" },
+    { id: "ridge", ability: "stability" },
+    { id: "alpbach", ability: "water" },
+    { id: "causeway", ability: "stability", fork: "crossing", choice: "exposed" },
+    { id: "arcades", ability: null, fork: "crossing", choice: "sheltered" },
+    { id: "square", ability: "grip" },
+  ],
+});
+/** Every stretch id on any track. */
+export const STRETCH_IDS = /** @type {const} */ ([
+  ...new Set(Object.values(TRACK_STRETCHES).flatMap((list) => list.map((s) => s.id))),
+]);
 export const FORK_IDS = /** @type {const} */ (["pond", "ramp", "crossing"]);
 export const FORK_CHOICES = /** @type {const} */ ({
   pond: ["water", "bridge"],

@@ -51,7 +51,7 @@ test("failed run: tip about the fail", () => {
 
 test("slower than best: biggest loss section", () => {
   const tip = coachTip(RUNS[1], BUILDS[0], RUNS[0], "en");
-  expect(tip).toMatchObject({ key: "loss_water_slow", section: "pond" });
+  expect(tip).toMatchObject({ key: "loss_slip", section: "pond" });
   expect(tip.text).toContain("2.5 s");
 });
 

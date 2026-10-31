@@ -38,12 +38,24 @@ test("game messages round-trip with fixtures", () => {
     runId: run.id,
     elapsedMs: run.elapsedMs,
     splits: run.splits,
+    stretches: run.stretches,
     events: run.events,
     boostsUsed: run.boostsUsed,
     weatherSeen: run.weatherSeen,
     trace: GHOST_TRACE,
   });
   expect(parseMsg("gameToServer", JSON.stringify(finished)).ok).toBe(true);
+  // Every event names its stretch; a stretch that isn't on any track is refused.
+  const noStretch = {
+    ...finished,
+    payload: { ...finished.payload, events: [{ kind: "slip", section: "pond", atMs: 1 }] },
+  };
+  expect(parseMsg("gameToServer", JSON.stringify(noStretch)).ok).toBe(false);
+  const unknown = {
+    ...finished,
+    payload: { ...finished.payload, stretches: [{ id: "moon", ms: 1, lostMs: 0 }] },
+  };
+  expect(parseMsg("gameToServer", JSON.stringify(unknown)).ok).toBe(false);
 
   const welcome = makeMsg("serverToGame", "welcome", {
     session: SESSION_RUNNING,
@@ -69,6 +81,12 @@ test("lap messages for loop tracks", () => {
     lapMs: 31_250,
     elapsedMs: 63_000,
     splits: { hills: 9_000, pond: 8_000, crossing: 6_000, bends: 8_250 },
+    stretches: [
+      { id: "main_street", ms: 9_000, lostMs: 0 },
+      { id: "covered_bridge", ms: 8_000, lostMs: 300 },
+      { id: "farm", ms: 6_000, lostMs: 0 },
+      { id: "square", ms: 8_250, lostMs: 0 },
+    ],
     isBest: true,
   });
   expect(parseMsg("gameToServer", lap).ok).toBe(true);
@@ -91,6 +109,7 @@ test("lap messages for loop tracks", () => {
     laps: [32_000, 31_250, 31_750],
     bestLapMs: 31_250,
     splits: { hills: 9_000 },
+    stretches: [{ id: "main_street", ms: 9_000, lostMs: 0 }],
     events: [],
     boostsUsed: 3,
     weatherSeen: [],

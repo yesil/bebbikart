@@ -82,6 +82,31 @@ Every phone also hears `grid.updated { goInMs, racers: [{ playerId, nickname }] 
 joins the open countdown, so friends still in the garage or on the result screen see "Mia is on the
 grid! Join the race: 2" and can press Go to join that start.
 
+## 2d. Stretches ("see why")
+
+Every track is cut into **stretches** (`TRACK_STRETCHES[track]` in `enums.js`, in driving order), finer
+than the four sections: each tests one ability (a sign at its start says which), each fork piece is a
+stretch of its own (the safe alternative tests none; `slick` marks a wooden deck that loses grip in the
+rain), and connectors belong to a neighbour. Village: `main_street` (grip), `kicker` (jump) or
+`churchyard`, `church_hill` (grip), `ford` (water) or `covered_bridge` (slick), `farm` (grip, muddy),
+`cobbles` (bounce), `ridge` (stability), `alpbach` (water), `causeway` (stability) or `arcades`,
+`square` (grip). Countryside: `bumpy_road` (bounce), `kicker` (jump) or `knoll_road`, `hilltop` (speed),
+`ford` (water) or `stone_bridge`, `causeway` (stability) or `hedge_lane`, `rainbow_bends` (grip).
+
+The sim tags every course segment with its stretch (a segment without one, or with another track's,
+is a broken course: the game refuses to race it). Each lap it records the time on each stretch
+(`StretchTime { id, ms, lostMs }`, in driving order; they add up to the lap within a tick) and the time
+the loss events on it cost (`lostMs`); every `RunEvent` names its `stretch`. `game.run.lap` carries the
+lap's stretches; `game.run.finished` the best lap's (point to point: the run's); `game.run.failed` the
+stretches done on the lap it failed in, plus `stretch` where it ended.
+
+The server keeps them on the run (`stretches`, and `lapStretches` for every completed lap on a loop)
+and sends the phone, in `run.ended`, each of the run's stretches as a `StretchResult`: this run's
+time, the player's own best on that stretch in earlier runs this session (`bestMs`), and the
+session's fastest on it, whoever did it (`fastestMs`, `fastestPlayerId`, `fastestNickname`; this run
+included). Bests come from every completed lap (a point-to-point run: finished runs) on the session's
+track since the session started. The coach (§8) picks its tip from them.
+
 ## 3. Enums
 
 ```ts
@@ -90,6 +115,7 @@ type DrivingStyle = "careful" | "balanced" | "daring";
 type TrackId = "countryside" | "village"; // village is a loop (LOOP_TRACKS), see §2a
 type Language = "en" | "de"; // LANGUAGES, see §2b
 type SectionId = "hills" | "pond" | "crossing" | "bends"; // timed sections, in course order (both tracks)
+type StretchId = (typeof STRETCH_IDS)[number]; // every TRACK_STRETCHES id (§2d), e.g. "farm", "cobbles"
 type ForkId = "pond" | "ramp" | "crossing";
 type ForkChoice = {
   // per fork
@@ -181,6 +207,7 @@ interface Run {
   outcome?: RunOutcome;
   failReason?: FailReason;
   failSection?: SectionId;
+  failStretch?: StretchId; // where a failed run ended (§2d)
   queuedAt: string;
   startedAt?: string;
   endedAt?: string;
@@ -189,6 +216,8 @@ interface Run {
   laps?: number[]; // loop tracks: every completed lap (ms), in order
   bestLapMs?: number; // loop tracks: fastest of laps; this ranks
   splits?: Partial<Record<SectionId, number>>; // ms spent in each section (loop tracks: of the best lap)
+  stretches?: StretchTime[]; // §2d: the best lap's (point to point: the run's); failed: done on its last lap
+  lapStretches?: StretchTime[][]; // loop tracks: every completed lap's
   events?: RunEvent[];
   boostsUsed?: number;
   weatherSeen?: WeatherKind[];
@@ -197,10 +226,25 @@ interface Run {
 interface RunEvent {
   kind: RunEventKind;
   section: SectionId;
+  stretch: StretchId; // §2d; an episode's: where it began
   atMs: number;
   timeLostMs?: number;
   otherPlayerId?: string;
 } // otherPlayerId for bumps
+
+interface StretchTime {
+  id: StretchId; // one of TRACK_STRETCHES[track]
+  ms: number; // time on the stretch
+  lostMs: number; // time the loss events on it cost
+}
+
+interface StretchResult extends StretchTime {
+  ability: Ability | null; // the star it tests (null: a fork's safe alternative)
+  bestMs?: number; // the player's fastest on it in earlier runs this session
+  fastestMs?: number; // the session's fastest on it (this run included)
+  fastestPlayerId?: string;
+  fastestNickname?: string;
+}
 
 interface WeatherState {
   rain: { phase: WeatherPhase; intensity: number }; // 0..1
@@ -415,7 +459,7 @@ interface Envelope<T extends string, P> {
 | `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs?, place?, of? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1; `place` of `of` = position right now in its heat (racers home first, then by distance) |
 | `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
-| `run.ended`                  | `{ run, isPersonalBest, rank?, coach: CoachTip }`                                              | Finish or fail                                        |
+| `run.ended`                  | `{ run, isPersonalBest, rank?, coach: CoachTip, stretches: StretchResult[] }`                  | Finish or fail (stretches §2d; empty when aborted)    |
 | `leaderboard.updated`        | `LeaderboardEntry[]` (top 20)                                                                  |                                                       |
 | `session.updated`            | `Session`                                                                                      |                                                       |
 | `weather.updated`            | `WeatherState`                                                                                 | Every phase change (incl. `warning`)                  |
@@ -517,9 +561,9 @@ interface RunStart {
 | `game.run.grid`     | `{ runId, goInMs }`: the run joined the start countdown (§2c); relayed to its phone as `run.grid` |
 | `game.run.progress` | `{ runId, progress, elapsedMs, section, boostsLeft, lap?, lapMs? }`, ≤ 5 Hz (lap fields on loops) |
 | `game.run.section`  | `{ runId, section, splitMs }`                                                                |
-| `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, isBest }`: loop tracks, each line crossing (`isBest` within this run) |
-| `game.run.finished` | `{ runId, elapsedMs, splits, events, boostsUsed, weatherSeen, trace: GhostTrace, laps?, bestLapMs? }` |
-| `game.run.failed`   | `{ runId, reason: FailReason, section, elapsedMs, splits, events, boostsUsed, weatherSeen, laps?, bestLapMs? }` |
+| `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, stretches, isBest }`: loop tracks, each line crossing (`isBest` within this run; `stretches` this lap's, §2d) |
+| `game.run.finished` | `{ runId, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, trace: GhostTrace, laps?, bestLapMs? }` |
+| `game.run.failed`   | `{ runId, reason: FailReason, section, stretch, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, laps?, bestLapMs? }` |
 | `game.weather`      | `WeatherState` (on every phase change)                                                       |
 | `game.capacity`     | `{ freeSlots }` (if the game ever wants fewer than `maxConcurrentRuns`)                      |
 | `game.config.set`   | `{ track?, lapsPerRun?, sessionMinutes?, language? }`: game manager options (see below)       |

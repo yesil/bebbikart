@@ -163,10 +163,150 @@ const SESSION_STATUSES = [
 	"ended"
 ]
 const SIM_TICK_HZ = 60
+const STRETCH_IDS = [
+	"bumpy_road",
+	"kicker",
+	"knoll_road",
+	"hilltop",
+	"ford",
+	"stone_bridge",
+	"causeway",
+	"hedge_lane",
+	"rainbow_bends",
+	"main_street",
+	"churchyard",
+	"church_hill",
+	"covered_bridge",
+	"farm",
+	"cobbles",
+	"ridge",
+	"alpbach",
+	"arcades",
+	"square"
+]
 const TRACK_IDS = [
 	"countryside",
 	"village"
 ]
+const TRACK_STRETCHES = {
+	"countryside": [
+		{
+			"id": "bumpy_road",
+			"ability": "bounce"
+		},
+		{
+			"id": "kicker",
+			"ability": "jump",
+			"fork": "ramp",
+			"choice": "jump"
+		},
+		{
+			"id": "knoll_road",
+			"ability": null,
+			"fork": "ramp",
+			"choice": "around"
+		},
+		{
+			"id": "hilltop",
+			"ability": "speed"
+		},
+		{
+			"id": "ford",
+			"ability": "water",
+			"fork": "pond",
+			"choice": "water"
+		},
+		{
+			"id": "stone_bridge",
+			"ability": null,
+			"fork": "pond",
+			"choice": "bridge"
+		},
+		{
+			"id": "causeway",
+			"ability": "stability",
+			"fork": "crossing",
+			"choice": "exposed"
+		},
+		{
+			"id": "hedge_lane",
+			"ability": null,
+			"fork": "crossing",
+			"choice": "sheltered"
+		},
+		{
+			"id": "rainbow_bends",
+			"ability": "grip"
+		}
+	],
+	"village": [
+		{
+			"id": "main_street",
+			"ability": "grip"
+		},
+		{
+			"id": "kicker",
+			"ability": "jump",
+			"fork": "ramp",
+			"choice": "jump"
+		},
+		{
+			"id": "churchyard",
+			"ability": null,
+			"fork": "ramp",
+			"choice": "around"
+		},
+		{
+			"id": "church_hill",
+			"ability": "grip"
+		},
+		{
+			"id": "ford",
+			"ability": "water",
+			"fork": "pond",
+			"choice": "water"
+		},
+		{
+			"id": "covered_bridge",
+			"ability": null,
+			"fork": "pond",
+			"choice": "bridge",
+			"slick": true
+		},
+		{
+			"id": "farm",
+			"ability": "grip"
+		},
+		{
+			"id": "cobbles",
+			"ability": "bounce"
+		},
+		{
+			"id": "ridge",
+			"ability": "stability"
+		},
+		{
+			"id": "alpbach",
+			"ability": "water"
+		},
+		{
+			"id": "causeway",
+			"ability": "stability",
+			"fork": "crossing",
+			"choice": "exposed"
+		},
+		{
+			"id": "arcades",
+			"ability": null,
+			"fork": "crossing",
+			"choice": "sheltered"
+		},
+		{
+			"id": "square",
+			"ability": "grip"
+		}
+	]
+}
 const WEATHER_KINDS = [
 	"rain",
 	"wind"

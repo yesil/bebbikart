@@ -17,6 +17,7 @@ import {
   RUN_STATUSES,
   SECTION_IDS,
   SESSION_STATUSES,
+  STRETCH_IDS,
   TRACK_IDS,
   WEATHER_KINDS,
   WEATHER_PHASES,
@@ -31,6 +32,7 @@ export const SectionIdSchema = z.enum(SECTION_IDS);
 export const ForkIdSchema = z.enum(FORK_IDS);
 export const FailReasonSchema = z.enum(FAIL_REASONS);
 export const TrackIdSchema = z.enum(TRACK_IDS);
+export const StretchIdSchema = z.enum(STRETCH_IDS);
 export const WeatherKindSchema = z.enum(WEATHER_KINDS);
 export const PlayerStatusSchema = z.enum(PLAYER_STATUSES);
 export const JobStatusSchema = z.enum(JOB_STATUSES);
@@ -39,6 +41,18 @@ export const RenderKeySchema = z.enum(RENDER_KEYS);
 
 /** Partial<Record<SectionId, ms>> */
 export const SplitsSchema = z.partialRecord(SectionIdSchema, ms);
+
+/** Time on one stretch of one lap (contracts §2d), in driving order. lostMs: time-loss events. */
+export const StretchTimeSchema = z.object({ id: StretchIdSchema, ms, lostMs: ms });
+
+/** A stretch on the phone's result (run.ended): this run, the player's best, the session's fastest. */
+export const StretchResultSchema = StretchTimeSchema.extend({
+  ability: AbilitySchema.nullable(), // the star it tests; null on a fork's safe alternative
+  bestMs: ms.optional(), // the player's fastest on it in earlier runs this session
+  fastestMs: ms.optional(), // the session's fastest on it (any racer, this run included)
+  fastestPlayerId: z.string().optional(),
+  fastestNickname: z.string().optional(),
+});
 
 export const SessionSchema = z.object({
   id: z.string(),
@@ -66,6 +80,7 @@ export const PlayerSchema = z.object({
 export const RunEventSchema = z.object({
   kind: z.enum(RUN_EVENT_KINDS),
   section: SectionIdSchema,
+  stretch: StretchIdSchema,
   atMs: ms,
   timeLostMs: z.number().int().optional(),
   otherPlayerId: z.string().optional(), // for bumps
@@ -79,6 +94,7 @@ export const RunSchema = z.object({
   outcome: z.enum(RUN_OUTCOMES).optional(),
   failReason: FailReasonSchema.optional(),
   failSection: SectionIdSchema.optional(),
+  failStretch: StretchIdSchema.optional(), // where a failed run ended
   queuedAt: iso,
   startedAt: iso.optional(),
   endedAt: iso.optional(),
@@ -87,6 +103,10 @@ export const RunSchema = z.object({
   laps: z.array(ms).optional(), // loop tracks: every completed lap, in order
   bestLapMs: ms.optional(), // loop tracks: fastest of `laps` (what ranks)
   splits: SplitsSchema.optional(), // loop tracks: the best lap's splits
+  // The best lap's stretches (a finished point-to-point run: the whole run); a failed run: the
+  // stretches it completed on its last lap.
+  stretches: z.array(StretchTimeSchema).optional(),
+  lapStretches: z.array(z.array(StretchTimeSchema)).optional(), // loop tracks: every completed lap
   events: z.array(RunEventSchema).optional(),
   boostsUsed: z.number().int().nonnegative().optional(),
   weatherSeen: z.array(WeatherKindSchema).optional(),
@@ -196,6 +216,7 @@ export const CoachTipSchema = z.object({
   key: z.string(),
   text: z.string().max(70),
   section: SectionIdSchema.optional(),
+  stretch: StretchIdSchema.optional(),
   ability: AbilitySchema.optional(),
   route: z.object({ fork: ForkIdSchema, choice: z.string() }).optional(),
 });

@@ -220,6 +220,8 @@ const splits = (hills, pond, crossing, bends) =>
   Object.fromEntries(
     Object.entries({ hills, pond, crossing, bends }).filter(([, v]) => v !== undefined),
   );
+/** Countryside stretches (contracts §2d): [id, ms, lostMs] in driving order. */
+const stretches = (...rows) => rows.map(([id, ms, lostMs = 0]) => ({ id, ms, lostMs }));
 
 export const RUNS = [
   {
@@ -232,10 +234,19 @@ export const RUNS = [
     startedAt: at(200_200),
     endedAt: at(232_400),
     elapsedMs: 32_200,
+    track: "countryside",
     splits: splits(7_900, 9_400, 7_300, 7_600),
+    stretches: stretches(
+      ["bumpy_road", 4_400],
+      ["knoll_road", 2_300],
+      ["hilltop", 1_200],
+      ["stone_bridge", 9_400, 1_200],
+      ["hedge_lane", 7_300],
+      ["rainbow_bends", 7_600],
+    ),
     events: [
-      { kind: "boost_perfect", section: "hills", atMs: 3_100 },
-      { kind: "water_slow", section: "pond", atMs: 11_000, timeLostMs: 1_200 },
+      { kind: "boost_perfect", section: "hills", stretch: "bumpy_road", atMs: 3_100 },
+      { kind: "slip", section: "pond", stretch: "stone_bridge", atMs: 11_000, timeLostMs: 1_200 },
     ],
     boostsUsed: 2,
     weatherSeen: [],
@@ -250,12 +261,22 @@ export const RUNS = [
     startedAt: at(300_150),
     endedAt: at(334_850),
     elapsedMs: 34_700,
+    track: "countryside",
     splits: splits(7_800, 11_900, 7_400, 7_600),
+    stretches: stretches(
+      ["bumpy_road", 4_300],
+      ["knoll_road", 2_300],
+      ["hilltop", 1_200],
+      ["stone_bridge", 11_900, 2_500],
+      ["hedge_lane", 7_400],
+      ["rainbow_bends", 7_600],
+    ),
     events: [
-      { kind: "water_slow", section: "pond", atMs: 10_500, timeLostMs: 2_100 },
+      { kind: "slip", section: "pond", stretch: "stone_bridge", atMs: 10_500, timeLostMs: 2_100 },
       {
         kind: "bumped",
         section: "pond",
+        stretch: "stone_bridge",
         atMs: 12_000,
         timeLostMs: 400,
         otherPlayerId: PLAYERS[1].id,
@@ -272,11 +293,22 @@ export const RUNS = [
     outcome: "failed",
     failReason: "off_track",
     failSection: "bends",
+    failStretch: "rainbow_bends",
     queuedAt: at(310_000),
     startedAt: at(310_100),
     endedAt: at(336_000),
+    track: "countryside",
     splits: splits(6_900, 8_100, 6_800),
-    events: [{ kind: "slip", section: "bends", atMs: 24_500, timeLostMs: 900 }],
+    stretches: stretches(
+      ["bumpy_road", 3_900],
+      ["knoll_road", 2_000],
+      ["hilltop", 1_000],
+      ["stone_bridge", 8_100],
+      ["hedge_lane", 6_800],
+    ),
+    events: [
+      { kind: "slip", section: "bends", stretch: "rainbow_bends", atMs: 24_500, timeLostMs: 900 },
+    ],
     boostsUsed: 1,
     weatherSeen: ["rain"],
   },
@@ -290,8 +322,17 @@ export const RUNS = [
     startedAt: at(320_100),
     endedAt: at(349_900),
     elapsedMs: 29_800,
+    track: "countryside",
     splits: splits(7_600, 6_900, 7_500, 7_800),
-    events: [{ kind: "boost_perfect", section: "pond", atMs: 9_200 }],
+    stretches: stretches(
+      ["bumpy_road", 4_200],
+      ["knoll_road", 2_200],
+      ["hilltop", 1_200],
+      ["ford", 6_900],
+      ["hedge_lane", 7_500],
+      ["rainbow_bends", 7_800],
+    ),
+    events: [{ kind: "boost_perfect", section: "pond", stretch: "ford", atMs: 9_200 }],
     boostsUsed: 3,
     weatherSeen: [],
   },
