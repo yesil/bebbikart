@@ -95,6 +95,11 @@ var best_lap := -1             # index into laps
 var best_splits := {}
 var best_trace: Array = []
 var pit_requested := false     # finish at the next line crossing
+# Missed exits: a segment with "miss" ({at, seg, chance}) may send the racer round an extra
+# loop segment from s = at, after which it rejoins the segment at the same s.
+var detour := {}               # {} or {seg: Dictionary (the segment left), at: float, start_tick}
+var detour_travel := 0.0       # metres driven in detours this lap (keeps the stuck check fed)
+var course_ref                 # the course, for detour segments
 var laps_max := 0
 
 
@@ -118,6 +123,7 @@ func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, c
 		offsets[i] = total_len
 		total_len += (sg["route"] as Route).length
 	seg = segs[0]
+	course_ref = course
 	looping = course.get("loop") == true
 	if looping:
 		if not cfg.has("lapsPerRun"):
@@ -133,6 +139,9 @@ func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, c
 
 
 func gs() -> float:
+	# In a detour the racer is held where it left the path until it rejoins.
+	if not detour.is_empty():
+		return offsets[seg_idx] + float(detour["at"])
 	return offsets[seg_idx] + ls
 
 
@@ -179,7 +188,8 @@ func _plan(corner_f: float, decel: float) -> Array:
 	var s0 := ls
 	var x := 0.0
 	while x <= horizon:
-		var r: Route = segs[i]["route"]
+		# In a detour, look ahead round the detour itself.
+		var r: Route = route() if i == seg_idx and not detour.is_empty() else segs[i]["route"]
 		var s := s0 + x
 		while s > r.length and i < segs.size() - 1:
 			s0 -= r.length
@@ -298,6 +308,8 @@ func step(sim) -> void:
 		tv *= 1.0 - float(Tuning.STYLE_WIND_CAUTION[style]) * minf(1.0, absf(wind_a) / Tuning.WIND_ACCEL)
 	if recover_t > 0.0:
 		tv *= recover_mult
+	if not detour.is_empty():
+		tv *= 0.85  # gone round again by mistake: the racer slows while finding the exit
 	if follow_v >= 0.0:
 		tv = minf(tv, follow_v + 0.2)
 
@@ -361,7 +373,12 @@ func step(sim) -> void:
 	var prev_ls := ls
 	ls += v * dt
 	var was_water := in_water
+	if detour.is_empty() and seg.has("miss") and prev_ls < float(seg["miss"]["at"]) and ls >= float(seg["miss"]["at"]):
+		_maybe_miss_exit(sim, rain)
 	while ls > route().length:
+		if not detour.is_empty():
+			_end_detour(sim)
+			continue
 		if seg_idx >= segs.size() - 1:
 			if not looping or _lap_done(sim):
 				ls = route().length
@@ -375,6 +392,7 @@ func step(sim) -> void:
 			seg_id = seg["id"]
 			section = seg["section"]
 			stuck_best = 0.0
+			detour_travel = 0.0
 			continue
 		ls -= route().length
 		prev_ls = -1.0
@@ -421,7 +439,7 @@ func step(sim) -> void:
 	_account(sim, dt, k, rain, exposure)
 
 	# ---- fails
-	var g := gs()
+	var g := gs() + detour_travel + (ls if not detour.is_empty() else 0.0)
 	if g > stuck_best + 1.0:
 		stuck_best = g
 		stuck_t = 0.0
@@ -584,6 +602,33 @@ func _add_event(e: Dictionary) -> void:
 
 
 # ---------------------------------------------------------------- splits / end
+
+## At a segment's "miss" point: maybe carry on round the loop segment instead of exiting.
+## Daring drivers, boosting and rain make it likelier; careful drivers rarely miss.
+func _maybe_miss_exit(sim, rain: float) -> void:
+	var m: Dictionary = seg["miss"]
+	var style_f: float = {"careful": 0.5, "balanced": 1.0, "daring": 1.6}.get(style, 1.0)
+	var chance := float(m["chance"]) * style_f + (0.08 if boost_t > 0.0 else 0.0) + 0.05 * rain
+	if rng.randf() >= chance:
+		return
+	var loop_seg: Dictionary = course_ref.segments[m["seg"]]
+	detour = {"seg": seg, "at": float(m["at"]), "start_tick": ticks}
+	ls -= float(m["at"])
+	seg = loop_seg
+	seg_id = seg["id"]
+
+
+func _end_detour(sim) -> void:
+	var loop_len := route().length
+	ls -= loop_len
+	detour_travel += loop_len
+	var lost := int(round((ticks - int(detour["start_tick"])) * 1000.0 / Tuning.HZ))
+	_add_event({"kind": "missed_exit", "section": section, "atMs": elapsed_ms(), "timeLostMs": lost})
+	seg = detour["seg"]
+	seg_id = seg["id"]
+	ls += float(detour["at"])
+	detour = {}
+
 
 func _close_split(sim) -> void:
 	var ms := elapsed_ms() - int(round(section_start_tick * 1000.0 / Tuning.HZ))

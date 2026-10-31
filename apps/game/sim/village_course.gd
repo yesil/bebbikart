@@ -29,8 +29,12 @@ const LEG_SOUTH := 262.0           # along the south edge (crossing fork)
 ## anticlockwise, so the right turn north is a right-hand entry, ROUNDABOUT_TURN degrees of
 ## left-hand circulation round the island, and a right-hand exit.
 const ROUNDABOUT_R := 14.0         # racing line radius round the island
-const ROUNDABOUT_LANE_R := 10.5    # entry and exit curves
+const ROUNDABOUT_LANE_R := 12.5    # entry and exit curves
 const ROUNDABOUT_TURN := 120.0
+## Racers sometimes miss the exit and go round once more (sim/racer.gd "miss"): base chance per
+## pass, scaled by driving style, boosting and rain there.
+const MISS_EXIT_CHANCE := 0.07
+const MISS_BEFORE_EXIT := 3.0      # metres before the exit where the racer commits or not
 
 var segments := {}
 var ordered_ids: Array[String] = []
@@ -142,6 +146,19 @@ func _build(hill: float, north: float) -> void:
 	var br: Route = b["route"]
 	var mid := br.world_at((rs0 + rs1) * 0.5, ROUNDABOUT_R)
 	roundabout = {"centre": Vector2(mid.x, mid.z), "radius": ROUNDABOUT_R, "s0": rs0, "s1": rs1}
+	# One full extra circle, from just before the exit back to the same point. Not part of any
+	# path: a racer that misses the exit drives it and rejoins "bends" where it left.
+	var at := rs1 - MISS_BEFORE_EXIT
+	var from := br.pos_at(at)
+	var circle := _draw_ops(from, br.heading_at(at), [["A", ROUNDABOUT_R, -360.0]], [[0.0, from.y]])
+	var lr := Route.new()
+	lr.build(circle["pts"])
+	segments["roundabout_loop"] = {
+		"id": "roundabout_loop", "section": "bends", "fork": "", "choice": "", "route": lr,
+		"half_width": 3.5, "edge": Tuning.OFF_TRACK_MARGIN, "rails": false, "exposure": 0.4,
+		"water": [], "boosts": [], "bumps": [], "ramp": {}, "end_heading": br.heading_at(at),
+	}
+	b["miss"] = {"at": at, "seg": "roundabout_loop", "chance": MISS_EXIT_CHANCE}
 	b["boosts"] = [[blen - clampf(north, 4.0, 12.0), blen - 1.0]]
 
 
