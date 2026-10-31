@@ -64,7 +64,7 @@ function schemaText(L = SPEC_LIMITS) {
     "hat": { "type": <hat type>, "color": <palette index> } (optional),
     "arms": { "color": <palette index> },
     "outfit": [ { "type": <outfit>, "color": <palette index>, "pattern": <pattern> (optional) } ] max 2, e.g. a top + a skirt (optional),
-    "legs": { "color": <palette index>, "shoes": <shoe style>, "shoeColor": <palette index> } (optional, visible legs and shoes),
+    "legs": { "color": <palette index>, "shoes": <shoe style>, "shoeColor": <palette index>, "socks": <palette index> (optional, knee socks) } (optional, visible legs and shoes; color = skin or tights),
     "extras": [<extra>] max ${L.characterExtrasMax}, character sockets only
   },
   "ride": {
@@ -142,13 +142,20 @@ STEP 2: DESCRIBE each drawing that passed:
   hair, hats, clothes, accessories, markings, spots and stripes, wheels (how many, how big), wings, tails, flames,
   windows, flags, numbers, decorations, things held in the hands. Give where it is, its colour as a hex code, its
   size relative to the whole drawing, and the exact count when there are several (3 horns, 5 buttons);
-- the colours: every crayon/marker colour used, as vivid toy-like hex codes (skip paper, table and pencil grey unless
-  the drawing really uses them), where each is used and roughly how much of the drawing it covers;
+- the colours: every crayon/marker colour used, as vivid toy-like hex codes, where each is used and roughly how much of
+  the drawing it covers. Parts left uncoloured keep their natural reading: white paper inside an outline = white
+  (a white skirt, white socks), grey pencil shading = grey or silver;
+- written labels: children often write colour or part names next to the drawing with arrows, in any language
+  ("Gold", "orange", "weiß", "Gelb", "schwarze Räder" = black wheels, "Licht" = light, "Glas" = glass). Read every
+  label, translate it, and say which part it points at and which colour it asks for: the child's words are
+  instructions and override guesses;
 - the colouring style (outline only, scribbled fill, solid, stripes of colour, rainbow…);
 - proportions and exaggerations (a huge head, tiny legs, an enormous wheel) — exaggerations are what the child cared
   about most;
 - the mood and personality the drawing gives off (pose, expression, energy), and the story you imagine;
-- the 2–4 things that make THIS drawing unmistakable, so the child will shout "that's mine!".
+- the 2–4 things that make THIS drawing unmistakable, so the child will shout "that's mine!";
+- "detail": "sketch" when it is just a few lines or a rough outline with little to copy, "detailed" when the child drew
+  and/or coloured real details (clothes, hair style, patterns, accessories, labelled colours).
 Rate each feature's importance: 3 = defining (must appear), 2 = clearly drawn, 1 = small detail.
 
 Reply with ONE JSON object and nothing else:
@@ -164,8 +171,9 @@ Reply with ONE JSON object and nothing else:
   "what": string, "meant": string,
   "features": [ { "name": string, "where": string, "color": "#rrggbb", "size": string, "count": number, "importance": 1|2|3 } ],
   "colors": [ { "hex": "#rrggbb", "name": string, "usedFor": string, "share": "most"|"lots"|"some"|"a little" } ],
+  "labels": [ { "text": string as written, "meaning": string in English, "pointsAt": string } ],
   "colouringStyle": string, "proportions": string, "mood": string, "story": string,
-  "unmistakable": [string]
+  "unmistakable": [string], "detail": "sketch" | "detailed"
 }`;
 
 export function buildLookMessages({
@@ -201,19 +209,26 @@ export function buildLookMessages({
 // --- 2 · design ------------------------------------------------------------------------------
 
 const DESIGN_RULES = `HOW TO DESIGN A GREAT RACER
+0. LOYALTY TO THE DRAWING comes before everything else. The racer must look like what the child drew.
+   - A "detailed" drawing: reproduce its details as closely as the kit allows and add NOTHING the child did not draw:
+     no imaginary extras, flags, stars, lightning, spikes, capes or touches. Its colours are the drawn and labelled
+     colours. What the child did not colour keeps its natural reading (white stays white, pencil grey stays grey or
+     silver).
+   - A "sketch" (just a few lines): keep every line you can, and you may enhance it: a cheerful palette that suits
+     it and 1–3 finishing touches that fit its story.
+   - Written labels are the child's instructions: "schwarze Räder" means black wheels, "Gold" on a part means gold.
 1. Faithful first. Every feature with importance 3 MUST appear, and every importance 2 feature should, with the right
    colour and the right count (three horns = three cones, not two; five buttons = five spheres). Use the closest kit
    part, then extras to add what the parts can't show. Map each feature in "featureMap".
-2. The child's colours. Build the palette from the drawing's real colours, made bright and toy-like (up to ${SPEC_LIMITS.paletteMax}).
-   A drawing done only in pencil or black pen has no colours to copy: then choose a cheerful palette that suits the
-   character (never a grey racer), and keep the drawn markings (stripes, checks) as patterns.
+2. The child's colours. Build the palette from the drawing's real and labelled colours, made bright and toy-like (up
+   to ${SPEC_LIMITS.paletteMax}). Only a bare line sketch with no colours and no labels gets a palette you choose.
    Keep the drawing's main colour as the main colour of the matching part: a red kart is red, a purple cat is purple.
    Recreate markings with patterns: stripes, spots, stars, hearts, zigzags, checks. When the child coloured a part in
    with visible crayon/marker strokes, use the "crayon" pattern in a lighter or darker shade of that colour so the toy
    keeps the hand-made look. A rainbow or multicolour part = several extras in different palette colours.
 3. Use real kit parts before extras: a closed car, van or bus is ride.base "car" (its glass cabin is built in), clothes
-   are "outfit" (a top + a skirt, a dress, overalls…), visible legs, boots and shoes are "legs", buns and pigtails are
-   hair styles. NEVER build cabins, windows, roofs or big blocks out of extras over the seat: they hide the driver.
+   are "outfit" (a top + a skirt, a ruffled skirt, a dress, overalls…), visible legs, socks, boots and shoes are
+   "legs", buns, pigtails, very long hair and braids are hair styles, a bow in the hair is hat "bow". NEVER build cabins, windows, roofs or big blocks out of extras over the seat: they hide the driver.
    The driver must always be visible.
 4. Exaggerate what the child exaggerated: a huge head = head.size 1.4+, tiny wheels = wheels.size 0.6, a long body =
    stretched scale. Bold, chunky toy proportions beat timid ones.
@@ -224,11 +239,11 @@ const DESIGN_RULES = `HOW TO DESIGN A GREAT RACER
    horse → hooves, dragon → flap, boat → splash, slime → squelch, rocket shoe → rocket), sound.horn from the character
    or vehicle (a cat says meow, a dog woof, a horse neigh, a cow moo, a monster roar; otherwise honk/beep/toot/squeak/
    bell/boing to suit the personality), pitch higher for small cute racers, lower for big heavy ones.
-7. Imagination: add 1–3 delightful finishing touches that fit the drawing's story and never contradict it (a cat's
-   kart gets a fish-shaped flag, a sea monster's boat gets a bubbling exhaust, a princess gets a sparkle finish).
-   Say which touches are yours in "featureMap" (feature "touch: …").
-8. Unique: avoid the bland defaults (bean body, round head, big_round eyes, smile, toy wheels, glossy) unless the
-   drawing really shows them. Two different drawings must never give two similar-looking racers.
+7. Imagination only for sketches (rule 0): there, add 1–3 finishing touches that fit the drawing's story (a cat's
+   kart gets a fish-shaped flag). Say which touches are yours in "featureMap" (feature "touch: …"). A detailed
+   drawing gets no touches: its personality comes from the face, motion, title, tagline and sound.
+8. Unique: the drawing makes it unique. Pick parts from what is drawn, not the bland defaults (bean body, round head,
+   big_round eyes, smile, toy wheels) unless the drawing really shows them.
 9. Readable from the race camera: fewer, bigger, well-placed extras beat many tiny ones. Use "mirror": true for pairs.
    The character and the ride should contrast so the rider stands out.
 10. ${KIDS_RULES}
@@ -288,8 +303,10 @@ export function critiqueSystemPrompt() {
 drawings (image 1 = CHARACTER, image 2 = VEHICLE) into a 3D toy racer spec, built from a fixed toy kit. When images 3
 and 4 are given, they are renders of the racer that spec builds: compare what you SEE there with the drawings (parts
 that float, hide the driver, are too small to notice, wrong colours), then use the spec to name the fields to change.
-Be demanding: would the child instantly recognise their own drawing? Is the racer colourful,
-full of personality and different from every other racer?
+Be demanding: would the child instantly recognise their own drawing? LOYALTY comes first: a "detailed" drawing must
+be reproduced as closely as the kit allows, and anything on the racer that the child did not draw (extra spikes,
+lightning, stars, flags, capes, invented colours) is a "must" fix: remove it. Only a "sketch" may be enhanced.
+The child's written labels (colour and part names, in any language) are instructions: check them one by one.
 
 Check, one by one:
 - likeness: is every defining feature of each drawing there, with the right count, colour, size and place? What's
@@ -301,15 +318,15 @@ Check, one by one:
 - personality: do face, motion, title, tagline and sound fit the drawing's mood? Is it bland?
 - proportions and readability: exaggerations kept? Extras big enough to see, placed sensibly (ears on the head side,
   horns on top), not floating or buried?
-- fun: a little imaginative touch that fits the story?
+- additions: list everything on the racer that is not in the drawing; for a detailed drawing each one is a "must" removal.
 A side-view drawing shows one side only: two drawn wheels on a car mean four wheels, keep count 4.
-A pencil-only drawing must still give a colourful racer, never a grey one.
+Uncoloured parts keep their natural reading (white stays white, pencil grey stays grey); do not ask to recolour them.
 Flag any extra that hides the driver (boxes or blocks over the seat, fake cabins): suggest ride.base "car" or
 removing it. Only suggest fixes the kit can do (catalog below). Be concrete: name the spec field and the new value.
 
 Reply with ONE JSON object and nothing else:
 {
-  "scores": { "likeness": 1-10, "colour": 1-10, "personality": 1-10, "readability": 1-10, "fun": 1-10 },
+  "scores": { "likeness": 1-10, "colour": 1-10, "personality": 1-10, "readability": 1-10, "loyalty": 1-10 },
   "issues": [ { "severity": "must"|"should"|"could", "problem": string, "fix": string } ],
   "verdict": one sentence
 }
@@ -374,7 +391,7 @@ export function buildRefineMessages({ observations, design, critique, previousEr
     JSON.stringify(design),
     "The art director looked at the real drawings and reviewed your design:",
     JSON.stringify(critique, null, 1),
-    'Improve the design: apply every "must" and "should" fix, and the "could" fixes that make the racer better. Keep what already works. Never move a main colour away from the drawing: the main colour of the ride stays the main drawn colour of the vehicle (add stripes with patterns or extras instead), and the character keeps its own. Reply with the complete JSON again (featureMap, spec, notes).',
+    'Improve the design: apply every "must" and "should" fix, and the "could" fixes that make the racer better. Keep what already works, and add nothing the child did not draw unless the drawing is a sketch. Never move a main colour away from the drawing: the main colour of the ride stays the main drawn colour of the vehicle (add stripes with patterns or extras instead), and the character keeps its own. Reply with the complete JSON again (featureMap, spec, notes).',
   ];
   if (previousErrors?.length) ask.push(retryText(previousErrors));
   return [
@@ -417,7 +434,6 @@ export const EXAMPLES = [
         { feature: "enormous wheels", how: "monster wheels size 1.6" },
         { feature: "lightning bolt on the side", how: "mirrored yellow lightning on ride_side" },
         { feature: "number 3", how: "ride.number 3 in yellow" },
-        { feature: "touch: striped tail flag", how: "orange flag on ride_top" },
       ],
       spec: {
         specVersion: 1,
@@ -457,8 +473,6 @@ export const EXAMPLES = [
           wheels: { count: 4, style: "monster", color: 1, size: 1.6 },
           extras: [
             ex("lightning", "ride_side", 4, [0, 0.05, 0.1], [0.45, 0.45, 0.1], [0, 90, 0], true),
-            ex("cylinder", "ride_top", 1, [0, 0.3, -0.3], [0.1, 0.7, 0.1]),
-            ex("box", "ride_top", 0, [0, 0.4, -0.38], [0.1, 0.18, 0.25]),
           ],
           drawingSticker: false,
         },

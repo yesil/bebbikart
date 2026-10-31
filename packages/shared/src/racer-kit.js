@@ -56,6 +56,11 @@ export const RACER_KIT = Object.freeze({
     { name: "buns", desc: "two round space buns on top" },
     { name: "pigtails", desc: "two pigtails sticking out at the sides" },
     { name: "bob", desc: "short rounded bob cut with a fringe" },
+    {
+      name: "very_long",
+      desc: "very long hair falling down the back to the seat, with locks framing the face",
+    },
+    { name: "braid", desc: "one thick braid down the back to the seat" },
   ],
   hatTypes: [
     { name: "cap", desc: "baseball cap" },
@@ -142,6 +147,7 @@ export const RACER_KIT = Object.freeze({
     { name: "jacket", desc: "jacket or hoodie with a collar" },
     { name: "dress", desc: "dress, from the chest flaring out to the knees" },
     { name: "skirt", desc: "short flared skirt" },
+    { name: "ruffle_skirt", desc: "frilly two-tier ruffled skirt or tutu" },
     { name: "shorts", desc: "shorts or trousers" },
     { name: "overalls", desc: "dungarees with a bib" },
   ],

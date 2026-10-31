@@ -141,6 +141,8 @@ static func validate(raw: Dictionary) -> Dictionary:
 		c.legs = {"color": _ref(lg.get("color"), n, "character.legs.color", e),
 			"shoes": _part(lg.get("shoes"), "shoeStyles", "character.legs.shoes", e),
 			"shoeColor": _ref(lg.get("shoeColor"), n, "character.legs.shoeColor", e)}
+		if lg.get("socks") != null:
+			c.legs.socks = _ref(lg.socks, n, "character.legs.socks", e)
 	c.extras = _extras(rc.get("extras"), "characterExtrasMax", "character", n, e)
 	out.character = c
 

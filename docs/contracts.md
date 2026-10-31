@@ -256,8 +256,8 @@ interface RacerSpec {
     hair?: { style: string; color: PaletteRef };
     hat?: { type: string; color: PaletteRef };
     arms: { color: PaletteRef };
-    outfit?: { type: string; color: PaletteRef; pattern?: Pattern }[]; // ≤ 2: tshirt | jacket | dress | skirt | shorts | overalls
-    legs?: { color: PaletteRef; shoes: string; shoeColor: PaletteRef }; // shoes: sneakers | boots | none
+    outfit?: { type: string; color: PaletteRef; pattern?: Pattern }[]; // ≤ 2: tshirt | jacket | dress | skirt | ruffle_skirt | shorts | overalls
+    legs?: { color: PaletteRef; shoes: string; shoeColor: PaletteRef; socks?: PaletteRef }; // shoes: sneakers | boots | none; socks = knee socks
     extras: Extra[]; // ≤ 10
   };
   ride: {

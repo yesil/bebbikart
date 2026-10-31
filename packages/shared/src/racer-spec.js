@@ -149,6 +149,7 @@ function specSchema(mode, fixes) {
           color: paletteRef,
           shoes: part(partNames(kit.shoeStyles)),
           shoeColor: paletteRef,
+          socks: paletteRef.optional(),
         })
         .optional(),
       extras: capped(extra(CHARACTER_SOCKETS), L.characterExtrasMax, "character.extras"),
@@ -258,6 +259,7 @@ function* paletteRefs(spec) {
     ]),
     at(c.legs, "color", ["character", "legs"]),
     at(c.legs, "shoeColor", ["character", "legs"]),
+    at(c.legs, "socks", ["character", "legs"]),
     ...c.extras.map((e, i) => at(e, "color", ["character", "extras", i])),
     at(r, "color", ["ride"]),
     at(r, "accent", ["ride"]),

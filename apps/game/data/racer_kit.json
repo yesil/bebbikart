@@ -168,6 +168,14 @@
     {
       "name": "bob",
       "desc": "short rounded bob cut with a fringe"
+    },
+    {
+      "name": "very_long",
+      "desc": "very long hair falling down the back to the seat, with locks framing the face"
+    },
+    {
+      "name": "braid",
+      "desc": "one thick braid down the back to the seat"
     }
   ],
   "hatTypes": [
@@ -364,6 +372,10 @@
     {
       "name": "skirt",
       "desc": "short flared skirt"
+    },
+    {
+      "name": "ruffle_skirt",
+      "desc": "frilly two-tier ruffled skirt or tutu"
     },
     {
       "name": "shorts",

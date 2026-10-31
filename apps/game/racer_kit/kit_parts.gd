@@ -89,6 +89,14 @@ static func outfit(type: String, color: Color, p: Dictionary, bscale: Vector3, c
 			root.add_child(band.call(ay * 0.05, cy + ay * 0.55, ax * 1.5, ax * 1.0))
 		"skirt":
 			root.add_child(band.call(ay * 0.12, cy - ay * 0.05, ax * 1.45, ax * 1.04))
+		"ruffle_skirt":
+			# Two flared tiers with a puffy frill at each hem.
+			root.add_child(band.call(ay * 0.3, cy - ay * 0.05, ax * 1.35, ax * 1.04))
+			root.add_child(band.call(ay * 0.0, ay * 0.32, ax * 1.65, ax * 1.3))
+			for hem in [[ay * 0.3, ax * 1.33], [ay * 0.0, ax * 1.63]]:
+				var frill := mi(KitMesh.torus(hem[1] - 0.025, hem[1] + 0.02), color.lightened(0.12), Vector3(0, hem[0], 0))
+				frill.scale = Vector3(1, 1.6, zr)
+				root.add_child(frill)
 		"shorts":
 			root.add_child(band.call(ay * 0.05, cy - ay * 0.1, ax * 1.08, ax * 1.05))
 		"overalls":
@@ -101,7 +109,8 @@ static func outfit(type: String, color: Color, p: Dictionary, bscale: Vector3, c
 
 
 ## Two legs from the hips with shoes. sitting: legs reach forward (-Z); otherwise straight down.
-static func legs(color: Color, shoes: String, shoe_color: Color, p: Dictionary, bscale: Vector3, length: float, sitting: bool) -> Node3D:
+## socks: Color for knee socks over the lower half of each leg, or null.
+static func legs(color: Color, shoes: String, shoe_color: Color, p: Dictionary, bscale: Vector3, length: float, sitting: bool, socks: Variant = null) -> Node3D:
 	var root := node("Legs")
 	for s in [-1, 1]:
 		var hip := Vector3(s * p.ax * bscale.x * 0.45, p.ay * bscale.y * 0.25, 0)
@@ -109,6 +118,8 @@ static func legs(color: Color, shoes: String, shoe_color: Color, p: Dictionary, 
 		var leg := node("Leg", hip)
 		aim_y(leg, -dir)
 		leg.add_child(mi(KitMesh.capsule(0.045, length + 0.06), color, Vector3(0, -length / 2, 0)))
+		if socks != null:
+			leg.add_child(mi(KitMesh.capsule(0.05, length * 0.55), socks, Vector3(0, -length * 0.75, 0)))
 		var foot := node("Foot", Vector3(0, -length, 0))
 		foot.basis = leg.basis.inverse()  # shoes stay level with the ground
 		match shoes:
@@ -150,7 +161,9 @@ static func surface(p: Dictionary, yaw: float, pitch: float, lift := 0.0) -> Vec
 	return KitMesh.blob_point(p, d) + KitMesh.blob_normal(p, d) * lift
 
 
-static func hair(style: String, color: Color, p: Dictionary) -> Node3D:
+## reach: distance (head-local units) from the head centre down to the seat, for hair that
+## falls to the seat ("very_long", "braid").
+static func hair(style: String, color: Color, p: Dictionary, reach := 1.5) -> Node3D:
 	var root := node("Hair")
 	var ax: float = p.ax
 	var ay: float = p.ay
@@ -183,6 +196,33 @@ static func hair(style: String, color: Color, p: Dictionary) -> Node3D:
 			var fringe := mi(KitMesh.capsule(0.05, ax * 1.7), color, surface(p, 0, 0.62, 0.01))
 			fringe.rotation.z = PI / 2
 			root.add_child(fringe)
+		"very_long", "braid":
+			# Cap over the whole crown, tilted back so the face stays clear.
+			var cap4 := mi(dome(ax * 1.1, ay * 1.08, az * 1.1), color, Vector3(0, -ay * 0.02, az * 0.06))
+			cap4.rotation.x = 0.22
+			root.add_child(cap4)
+			var fr2 := mi(KitMesh.capsule(0.045, ax * 1.5), color, surface(p, 0, 0.9, 0.012))
+			fr2.rotation.z = PI / 2
+			root.add_child(fr2)
+			if style == "very_long":
+				# A curtain of hair down the back to the seat, a little wider at the bottom.
+				var drop := reach + ay * 0.2
+				var curtain := mi(KitMesh.cylinder(ax * 1.05, ax * 1.35, drop, 20), color, Vector3(0, -drop * 0.5 + ay * 0.1, az * 0.45))
+				curtain.scale = Vector3(1, 1, 0.45)
+				root.add_child(curtain)
+				# Two long locks framing the face.
+				for s in [-1, 1]:
+					var lock := mi(KitMesh.capsule(0.055, drop * 0.75), color, Vector3(s * ax * 0.95, -drop * 0.35, az * 0.1))
+					root.add_child(lock)
+			else:
+				# One thick braid down the back to the seat, with a tie at the end.
+				var n := maxi(4, int(reach / 0.11))
+				for i in n:
+					var t := float(i) / float(n - 1)
+					var bead := mi(KitMesh.sphere(0.075 - t * 0.025), color, Vector3(sin(i * 1.3) * 0.015, -ay * 0.3 - t * reach, az * 0.95 + 0.02))
+					bead.scale = Vector3(1, 1.25, 0.9)
+					root.add_child(bead)
+				root.add_child(mi(KitMesh.sphere(0.035), GOLD, Vector3(0, -ay * 0.3 - reach - 0.07, az * 0.95 + 0.02)))
 		"ponytail":
 			var cap2 := mi(dome(ax * 1.07, ay * 0.7, az * 1.07), color, Vector3(0, ay * 0.3, 0))
 			cap2.rotation.x = 0.35

@@ -213,7 +213,8 @@ static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: 
 		const LEG := 0.24
 		if d.stand:
 			ch.position.y += LEG  # stand on the deck
-		ch.add_child(P.legs(cols[c.legs.color], c.legs.shoes, cols[c.legs.shoeColor], bp, bscale, LEG, not d.stand))
+		var socks = cols[c.legs.socks] if c.legs.has("socks") else null
+		ch.add_child(P.legs(cols[c.legs.color], c.legs.shoes, cols[c.legs.shoeColor], bp, bscale, LEG, not d.stand, socks))
 	var center: float = b.center * bscale.y
 
 	# Head
@@ -233,7 +234,9 @@ static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: 
 	face.setup(hp, c.face, cols, skin)
 	head.add_child(face)
 	if c.has("hair"):
-		head.add_child(P.hair(c.hair.style, cols[c.hair.color], hp))
+		# Head centre to the seat, in head-local units (long hair falls to the seat).
+		var reach: float = (float(b.top) * bscale.y + float(hp.ay) * hs * 0.85) / hs
+		head.add_child(P.hair(c.hair.style, cols[c.hair.color], hp, reach))
 	if c.has("hat"):
 		var hat_acc := cols[(int(c.hat.color) + 1) % cols.size()]
 		head.add_child(P.hat(c.hat.type, cols[c.hat.color], hat_acc, hp))
