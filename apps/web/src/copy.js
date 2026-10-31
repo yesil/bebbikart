@@ -122,7 +122,9 @@ const en = {
     pitting: "Pitting in at the line…",
     queued: "Lining up at the start…",
     boost: "BOOST!",
-    watch: "Watch the big screen!",
+    showMe: "📺 Show me on the big screen",
+    showMeAsked: "📺 Coming up on the big screen…",
+    onScreen: "📺 You're on the big screen!",
   },
   result: {
     oops: "Oops!",
@@ -307,7 +309,9 @@ const de = {
     pitting: "Boxenstopp an der Ziellinie…",
     queued: "Aufstellen am Start…",
     boost: "BOOST!",
-    watch: "Schau auf den grossen Bildschirm!",
+    showMe: "📺 Zeig mich auf dem grossen Bildschirm",
+    showMeAsked: "📺 Gleich bist du auf dem grossen Bildschirm…",
+    onScreen: "📺 Du bist auf dem grossen Bildschirm!",
   },
   result: {
     oops: "Hoppla!",
