@@ -36,6 +36,10 @@ static func build(raw: Dictionary, drawing: Texture2D = null) -> ToyRacer:
 	racer.spec = spec
 	racer.set_meta("spec", spec)
 	racer.bounciness = _bounciness(spec.personality)
+	if spec.has("motion"):
+		racer.motion_style = spec.motion.style
+		racer.motion_energy = float(spec.motion.energy)
+		racer.bounciness *= float(spec.motion.energy)
 
 	var rig := P.node("Rig")
 	racer.add_child(rig)
@@ -49,6 +53,10 @@ static func build(raw: Dictionary, drawing: Texture2D = null) -> ToyRacer:
 	ride.scale = Vector3(rs[0], rs[1], rs[2])
 	ride.add_child(d.body)
 	model.add_child(ride)
+	if r.has("finish"):
+		KitMaterial.look(d.body, {}, Color.WHITE, r.finish)
+	if r.has("pattern"):
+		KitMaterial.look(d.body, r.pattern, cols[r.pattern.color], "", cols[r.color])
 	_ride_parts(ride, r, d, cols, drawing)
 
 	var refs := _character(spec.character, d, ride.scale, cols)
@@ -134,6 +142,8 @@ static func _ride_parts(ride: Node3D, r: Dictionary, d: Dictionary, cols: Array[
 		var t := R.tail(tail.style, cols[tail.color])
 		t.position = d.tail
 		ride.add_child(t)
+	if r.has("number"):
+		_number(ride, d, r, cols)
 	if r.drawingSticker:
 		var tex := drawing if drawing else R.placeholder_drawing(cols[r.accent], cols[r.color])
 		for side in [-1, 1]:
@@ -159,6 +169,27 @@ static func _def(base_default, fallback: Dictionary, r: Dictionary):
 	return out
 
 
+## Racing number on both sides of the ride (next to the drawing sticker when there is one).
+static func _number(ride: Node3D, d: Dictionary, r: Dictionary, cols: Array[Color]) -> void:
+	var size: float = float(d.sticker.size)
+	var sp: Vector3 = d.sticker.pos
+	var z := sp.z - (size * 0.75 if r.drawingSticker else 0.0)
+	for side in [-1, 1]:
+		var plate := P.node("Number", Vector3(absf(sp.x) * side + side * 0.02, sp.y, z))
+		plate.rotation.y = side * PI / 2
+		var disc := P.mi(KitMesh.cylinder(size * 0.42, size * 0.42, 0.02, 24), P.WHITE)
+		disc.rotation.x = PI / 2
+		plate.add_child(disc)
+		var tm := TextMesh.new()
+		tm.text = str(int(r.number.value))
+		tm.font_size = 64
+		tm.pixel_size = size * 0.009
+		tm.depth = 0.02
+		var label := P.mi(tm, cols[r.number.color], Vector3(0, -size * 0.03, 0.02))
+		plate.add_child(label)
+		ride.add_child(plate)
+
+
 # --- character ---
 
 static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: Array[Color]) -> Dictionary:
@@ -171,6 +202,8 @@ static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: 
 	body_node.scale = bscale
 	body_node.add_child(b.node)
 	ch.add_child(body_node)
+	if c.body.has("pattern"):
+		KitMaterial.look(b.node, c.body.pattern, cols[c.body.pattern.color], "")
 	var center: float = b.center * bscale.y
 
 	# Head
@@ -182,7 +215,10 @@ static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: 
 	head.scale = Vector3.ONE * hs
 	head_pivot.add_child(head)
 	var skin := cols[c.head.color]
-	head.add_child(P.head_mesh(c.head.shape, skin))
+	var head_mesh := P.head_mesh(c.head.shape, skin)
+	head.add_child(head_mesh)
+	if c.head.has("pattern"):
+		KitMaterial.look(head_mesh, c.head.pattern, cols[c.head.pattern.color], "")
 	var face := RacerFace.new()
 	face.setup(hp, c.face, cols, skin)
 	head.add_child(face)
@@ -233,6 +269,8 @@ static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: 
 		sockets[k][0].add_child(m)
 		where[k] = m
 	_extras(null, c.extras, where, cols, CHAR_UNIT, false)
+	if c.body.has("finish"):
+		KitMaterial.look(ch, {}, Color.WHITE, c.body.finish)
 	return {"character": ch, "head_pivot": head_pivot, "arm_l": arms[0], "arm_r": arms[1], "face": face}
 
 

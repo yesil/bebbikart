@@ -222,38 +222,48 @@ data/assets/pkg_xxx/
 
 ```ts
 type Vec3 = [number, number, number];
-type PaletteRef = 0 | 1 | 2 | 3 | 4; // index into palette
+type PaletteRef = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7; // index into palette
+// Optional look fields (kit v2). Name lists live in packages/shared/src/racer-kit.js:
+// patterns, finishes, motionStyles, engineSounds, hornSounds.
+interface Pattern { type: string; color: PaletteRef; scale: number } // scale 0.5–2 (bigger = larger motifs)
 type Mood = "happy" | "excited" | "determined" | "dizzy" | "sad" | "cheering"; // face presets, used by game + renders
 
 interface RacerSpec {
   specVersion: 1;
   title: string; // "The Purple Flash", ≤ 24 chars
+  tagline?: string; // ≤ 60 chars, a fun one-liner for the reveal screen: "Loves fish, scared of puddles"
   personality: string[]; // 2–3 words, e.g. ["brave","speedy","silly"]
-  palette: string[]; // 3–5 hex colours from the drawing
+  palette: string[]; // 3–8 hex colours from the drawing
+  motion?: { style: string; energy: number }; // idle personality: bouncy|smooth|wobbly|jittery|floaty|proud|sneaky; energy 0.5–1.5
+  // Always written by the designer for new racers; may be absent on old ones (the game then logs and stays silent).
+  sound?: { engine: string; pitch: number; horn: string }; // engine loop, pitch 0.6–1.6 (multiplies the loop pitch), horn one-shot
   character: {
-    body: { shape: string; color: PaletteRef; scale: Vec3 }; // shape from kit catalog; scale 0.6–1.4
-    head: { shape: string; color: PaletteRef; size: number }; // size 0.6–1.5
+    body: { shape: string; color: PaletteRef; scale: Vec3; pattern?: Pattern; finish?: string }; // shape from kit catalog; scale 0.6–1.4; finish covers the whole character
+    head: { shape: string; color: PaletteRef; size: number; pattern?: Pattern }; // size 0.6–1.5
     face: { eyes: string; eyeColor: string; mouth: string; brows: boolean; cheeks?: PaletteRef };
     hair?: { style: string; color: PaletteRef };
     hat?: { type: string; color: PaletteRef };
     arms: { color: PaletteRef };
-    extras: Extra[]; // ≤ 6
+    extras: Extra[]; // ≤ 10
   };
   ride: {
     base: "kart" | "bike" | "animal4" | "bird" | "board" | "rocket" | "boat" | "blob";
     color: PaletteRef;
     accent: PaletteRef;
     scale: Vec3;
+    pattern?: Pattern; // painted on the parts in the ride's main colour
+    finish?: string; // matte | glossy | metallic | sparkle | glow
+    number?: { value: number; color: PaletteRef }; // racing number 0–99 on both sides
     wheels?: { count: 2 | 3 | 4; style: string; color: PaletteRef; size: number };
     legs?: { style: string; color: PaletteRef };
     wings?: { style: string; color: PaletteRef; size: number };
     tail?: { style: string; color: PaletteRef };
-    extras: Extra[]; // ≤ 8
+    extras: Extra[]; // ≤ 12
     drawingSticker: boolean; // put the kid's drawing on the side
   };
 }
 interface Extra {
-  shape: "sphere" | "capsule" | "box" | "cone" | "cylinder" | "torus" | "star" | "heart";
+  shape: string; // kit extraShapes: sphere capsule box cone cylinder torus star heart lightning flame moon flower leaf cloud diamond drop bowtie glasses cape
   socket: string; // from kit catalog, e.g. "head_top", "body_front", "ride_back"
   offset: Vec3;
   scale: Vec3;

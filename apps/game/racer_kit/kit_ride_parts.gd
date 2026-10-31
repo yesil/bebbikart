@@ -214,7 +214,32 @@ static func extra_mesh(shape: String) -> Mesh:
 		"torus": return KitMesh.torus(0.3, 0.5)
 		"star": return KitMesh.puffy(KitMesh.star_outline(5, 0.5, 0.23), 0.3, "extra_star")
 		"heart": return KitMesh.puffy(KitMesh.heart_outline(0.5), 0.3, "extra_heart")
+		"flower", "leaf", "cloud", "diamond", "drop":
+			return KitMesh.puffy(KitMesh.shape_outline(shape), 0.3, "extra_" + shape)
+		"lightning", "moon", "bowtie", "flame":
+			return KitMesh.slab(KitMesh.shape_outline(shape), 0.22, "extra_" + shape)
+		"cape":
+			# Hangs down from the socket, flows backwards (+Z) and wraps around the body.
+			var bend := func(v: Vector3) -> Vector3:
+				return Vector3(v.x, v.y, v.z + 0.35 * pow(-v.y, 1.4) - 0.3 * v.x * v.x)
+			return KitMesh.slab(KitMesh.shape_outline("cape"), 0.05, "extra_cape", bend)
 	return KitMesh.sphere(0.5)
+
+
+## Round glasses about 1 unit wide, facing forward (-Z).
+static func _glasses(color: Color) -> Node3D:
+	var g := P.node("Glasses")
+	for side in [-1, 1]:
+		var ring := P.mi(KitMesh.torus(0.15, 0.22), color, Vector3(side * 0.26, 0, 0))
+		ring.rotation.x = PI / 2
+		g.add_child(ring)
+		var lens := P.mi(KitMesh.cylinder(0.16, 0.16, 0.02, 20), Color(0.85, 0.95, 1.0), Vector3(side * 0.26, 0, 0.01), 0.15)
+		lens.rotation.x = PI / 2
+		g.add_child(lens)
+	var bridge := P.mi(KitMesh.capsule(0.03, 0.16), color)
+	bridge.rotation.z = PI / 2
+	g.add_child(bridge)
+	return g
 
 
 ## Extra on a socket. e is a normalised Extra (spec frame); unit converts spec units to metres.
@@ -230,7 +255,7 @@ static func extra(e: Dictionary, color: Color, unit: float, mirror := false) -> 
 	root.position = pos
 	root.rotation = rot
 	var sc: Array = e.scale
-	var m := P.mi(extra_mesh(e.shape), color)
+	var m: Node3D = _glasses(color) if e.shape == "glasses" else P.mi(extra_mesh(e.shape), color)
 	m.scale = Vector3(sc[0], sc[1], sc[2]) * unit
 	# Cones sit on their base so horns grow out of the socket instead of through it.
 	if e.shape == "cone":

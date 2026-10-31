@@ -175,7 +175,13 @@ func _build_eye(a: Node3D, col: Color, skin: Color) -> void:
 			shine.rotation.z = PI / 2
 			a.add_child(shine)
 		_:
+			if eye_style == "wink" and a.position.x > 0.0:
+				# The winking eye: a closed happy arc.
+				a.add_child(P.mi(KitMesh.tube(_arc(0.04, 0.03, true), 0.013, 6, "face_wink"), P.DARK))
+				return
 			var r := 0.075 if eye_style == "one_eye" else 0.05
+			if eye_style in ["star", "heart", "lashes"]:
+				r = 0.056
 			if eye_style == "googly":
 				r = 0.058
 			var white := P.mi(KitMesh.sphere(r), P.WHITE)
@@ -183,13 +189,32 @@ func _build_eye(a: Node3D, col: Color, skin: Color) -> void:
 			a.add_child(white)
 			var pr := r * (0.4 if eye_style == "googly" else 0.58)
 			var pupil := P.node("Pupil", Vector3(0, -r * 0.08, r * 0.38))
-			var pm := P.mi(KitMesh.sphere(pr), col)
-			pm.scale = Vector3(1, 1.1, 0.5)
+			var pm: MeshInstance3D
+			if eye_style == "star":
+				pm = P.mi(KitMesh.puffy(KitMesh.star_outline(5, pr * 1.35, pr * 0.62), pr * 0.5, "eye_star%.3f" % pr), col)
+			elif eye_style == "heart":
+				pm = P.mi(KitMesh.puffy(KitMesh.heart_outline(pr * 1.25), pr * 0.5, "eye_heart%.3f" % pr), col)
+			else:
+				pm = P.mi(KitMesh.sphere(pr), col)
+				pm.scale = Vector3(1, 1.1, 0.5)
 			pupil.add_child(pm)
 			pupil.add_child(P.mi(KitMesh.sphere(pr * 0.32), P.WHITE, Vector3(pr * 0.35, pr * 0.4, pr * 0.4)))
 			a.add_child(pupil)
 			if eye_style == "googly":
 				_pupils.append(pupil)
+			if eye_style == "lashes":
+				var side := signf(a.position.x) if a.position.x != 0.0 else 1.0
+				for i in 3:
+					var ang := (0.35 + 0.3 * i) * side
+					var lash := P.mi(KitMesh.capsule(0.007, 0.04), P.DARK, Vector3(sin(ang) * r * 1.05, cos(ang) * r * 1.1, 0.0))
+					lash.rotation.z = -ang
+					a.add_child(lash)
+			if eye_style == "angry":
+				var side2 := signf(a.position.x) if a.position.x != 0.0 else 1.0
+				var brow_lid := P.mi(KitMesh.sphere(r * 1.08, true), skin.darkened(0.12), Vector3(0, r * 0.25, 0.004))
+				brow_lid.scale = Vector3(1, 0.7, 0.55)
+				brow_lid.rotation.z = 0.45 * side2
+				a.add_child(brow_lid)
 			if eye_style == "sleepy":
 				var lid := P.mi(KitMesh.sphere(r * 1.08, true), skin.darkened(0.08), Vector3(0, r * 0.05, 0.004))
 				lid.scale = Vector3(1, 0.9, 0.55)
@@ -230,6 +255,27 @@ func _build_mouths(m: Node3D, skin: Color) -> void:
 		var f := P.mi(KitMesh.cylinder(0.012, 0.0, 0.035, 8), P.WHITE, Vector3(s * w * 0.45, -w * 0.32, 0.008))
 		fangs.add_child(f)
 	_mouths.fangs = _add(m, fangs)
+	var tongue := P.node("Tongue")
+	tongue.add_child(P.mi(KitMesh.tube(_arc(w, w * 0.45, false), 0.014, 6, "m_smile%.3f" % w), P.DARK))
+	var tm := P.mi(KitMesh.sphere(w * 0.32), Color("#ff6f91"), Vector3(w * 0.25, -w * 0.5, 0.01))
+	tm.scale = Vector3(1, 1.3, 0.5)
+	tongue.add_child(tm)
+	_mouths.tongue = _add(m, tongue)
+	var buck := P.node("BuckTeeth")
+	buck.add_child(P.mi(KitMesh.tube(_arc(w, w * 0.35, false), 0.014, 6, "m_buck%.3f" % w), P.DARK))
+	for sx in [-1, 1]:
+		buck.add_child(P.mi(KitMesh.rounded_box(Vector3(w * 0.32, w * 0.42, 0.012)), P.WHITE, Vector3(sx * w * 0.17, -w * 0.5, 0.01)))
+	_mouths.buck_teeth = _add(m, buck)
+	if mouth_style == "mustache":
+		_mouths.mustache = _add(m, P.mi(KitMesh.tube(_arc(w * 0.8, w * 0.35, false), 0.014, 6, "m_must%.3f" % w), P.DARK))
+		# The mustache itself stays on in every mood.
+		var ms := P.node("Mustache", Vector3(0, w * 0.55, 0.01))
+		for sx in [-1, 1]:
+			var lobe := P.mi(KitMesh.sphere(w * 0.42), P.DARK.lightened(0.1), Vector3(sx * w * 0.42, 0, 0))
+			lobe.scale = Vector3(1.25, 0.6, 0.45)
+			lobe.rotation.z = sx * 0.3
+			ms.add_child(lobe)
+		m.add_child(ms)
 	if mouth_style == "beak":
 		var beak := P.mi(KitMesh.cylinder(0.0, 0.05, 0.11, 10), P.GOLD, Vector3(0, 0.03, 0.04))
 		beak.rotation.x = PI / 2

@@ -85,9 +85,28 @@ function specSchema(mode, fixes) {
   };
 
   const kit = RACER_KIT;
+  const pattern = z
+    .object({
+      type: part(partNames(kit.patterns)),
+      color: paletteRef,
+      scale: range(L.patternScale),
+    })
+    .optional();
+  const finish = part(partNames(kit.finishes)).optional();
   return z.object({
     specVersion: z.literal(1),
     title: text(L.titleMax),
+    tagline: text(L.taglineMax).optional(),
+    motion: z
+      .object({ style: part(partNames(kit.motionStyles)), energy: range(L.motionEnergy) })
+      .optional(),
+    sound: z
+      .object({
+        engine: part(partNames(kit.engineSounds)),
+        pitch: range(L.soundPitch),
+        horn: part(partNames(kit.hornSounds)),
+      })
+      .optional(),
     personality: repair
       ? z.array(z.string()).transform((a) => a.slice(0, L.personalityMax))
       : z.array(z.string().min(1)).min(L.personalityMin).max(L.personalityMax),
@@ -102,11 +121,14 @@ function specSchema(mode, fixes) {
         shape: part(partNames(kit.bodyShapes)),
         color: paletteRef,
         scale: vec3(L.bodyScale),
+        pattern,
+        finish,
       }),
       head: z.object({
         shape: part(partNames(kit.headShapes)),
         color: paletteRef,
         size: range(L.headSize),
+        pattern,
       }),
       face: z.object({
         eyes: part(partNames(kit.eyes)),
@@ -125,6 +147,16 @@ function specSchema(mode, fixes) {
       color: paletteRef,
       accent: paletteRef,
       scale: vec3(L.rideScale),
+      pattern,
+      finish,
+      number: z
+        .object({
+          value: repair
+            ? z.number().transform((v) => Math.round(Math.min(99, Math.max(0, v))))
+            : z.number().int().min(L.rideNumber[0]).max(L.rideNumber[1]),
+          color: paletteRef,
+        })
+        .optional(),
       wheels: z
         .object({
           count: z.union([z.literal(2), z.literal(3), z.literal(4)]),
@@ -202,7 +234,9 @@ function* paletteRefs(spec) {
   const r = spec.ride;
   const refs = [
     at(c.body, "color", ["character", "body"]),
+    at(c.body.pattern, "color", ["character", "body", "pattern"]),
     at(c.head, "color", ["character", "head"]),
+    at(c.head.pattern, "color", ["character", "head", "pattern"]),
     at(c.face, "cheeks", ["character", "face"]),
     at(c.hair, "color", ["character", "hair"]),
     at(c.hat, "color", ["character", "hat"]),
@@ -210,6 +244,8 @@ function* paletteRefs(spec) {
     ...c.extras.map((e, i) => at(e, "color", ["character", "extras", i])),
     at(r, "color", ["ride"]),
     at(r, "accent", ["ride"]),
+    at(r.pattern, "color", ["ride", "pattern"]),
+    at(r.number, "color", ["ride", "number"]),
     at(r.wheels, "color", ["ride", "wheels"]),
     at(r.legs, "color", ["ride", "legs"]),
     at(r.wings, "color", ["ride", "wings"]),

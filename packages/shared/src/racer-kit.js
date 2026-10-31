@@ -6,7 +6,7 @@
 /** @typedef {{ name: string, desc: string, on: "character" | "ride", maxOffset: number }} KitSocket */
 
 export const RACER_KIT = Object.freeze({
-  kitVersion: 1,
+  kitVersion: 2,
   bodyShapes: [
     { name: "bean", desc: "soft jelly-bean body, the default" },
     { name: "round", desc: "chubby ball body" },
@@ -29,6 +29,11 @@ export const RACER_KIT = Object.freeze({
     { name: "googly", desc: "wobbly googly eyes" },
     { name: "one_eye", desc: "a single big eye in the middle" },
     { name: "visor", desc: "robot visor strip" },
+    { name: "star", desc: "sparkly star-shaped pupils, starstruck" },
+    { name: "heart", desc: "heart-shaped pupils, in love" },
+    { name: "lashes", desc: "big round eyes with long eyelashes" },
+    { name: "angry", desc: "big round eyes with grumpy slanted lids, a bit tough" },
+    { name: "wink", desc: "one eye open, one winking" },
   ],
   mouths: [
     { name: "smile", desc: "simple smile" },
@@ -37,6 +42,9 @@ export const RACER_KIT = Object.freeze({
     { name: "fangs", desc: "smile with two little fangs" },
     { name: "beak", desc: "bird beak" },
     { name: "none", desc: "no mouth drawn" },
+    { name: "tongue", desc: "cheeky smile with the tongue sticking out" },
+    { name: "buck_teeth", desc: "smile with two big front teeth, bunnies and beavers" },
+    { name: "mustache", desc: "smile under a bushy mustache" },
   ],
   hairStyles: [
     { name: "spiky", desc: "spiky cartoon hair" },
@@ -90,7 +98,92 @@ export const RACER_KIT = Object.freeze({
     { name: "flame", desc: "rocket flame" },
     { name: "feathers", desc: "fan of tail feathers" },
   ],
-  extraShapes: ["sphere", "capsule", "box", "cone", "cylinder", "torus", "star", "heart"],
+  extraShapes: [
+    "sphere",
+    "capsule",
+    "box",
+    "cone",
+    "cylinder",
+    "torus",
+    "star",
+    "heart",
+    "lightning",
+    "flame",
+    "moon",
+    "flower",
+    "leaf",
+    "cloud",
+    "diamond",
+    "drop",
+    "bowtie",
+    "glasses",
+    "cape",
+  ],
+  // Flat shapes (star … bowtie) are puffy stickers facing +z; scale z for thickness.
+  extraShapeNotes: {
+    lightning: "zig-zag lightning bolt",
+    flame: "flame tongue",
+    moon: "crescent moon",
+    flower: "five-petal flower",
+    leaf: "leaf",
+    cloud: "puffy cloud",
+    diamond: "gem / diamond / kite",
+    drop: "water drop or tear",
+    bowtie: "bow tie or ribbon bow",
+    glasses: "round glasses, put on head_front",
+    cape: "flowing cape, put on body_back",
+  },
+  patterns: [
+    { name: "stripes", desc: "bands around the part: tigers, zebras, bees, racing stripes" },
+    { name: "spots", desc: "round spots: leopards, ladybirds, dinos, cows" },
+    { name: "stars", desc: "little stars all over" },
+    { name: "hearts", desc: "little hearts all over" },
+    { name: "zigzag", desc: "zig-zag bands" },
+    { name: "checks", desc: "chequered flag squares" },
+    { name: "crayon", desc: "wavy crayon scribble strokes like the child's colouring-in" },
+    { name: "swirl", desc: "spiral swirls: snails, candy, magic" },
+  ],
+  finishes: [
+    { name: "matte", desc: "soft chalky, like clay or felt" },
+    { name: "glossy", desc: "shiny plastic toy, the default" },
+    { name: "metallic", desc: "shiny metal: robots, rockets, knights" },
+    { name: "sparkle", desc: "glittery: magic, unicorns, fairies, space" },
+    { name: "glow", desc: "glows softly: ghosts, aliens, lava, fireflies" },
+  ],
+  engineSounds: [
+    { name: "putter", desc: "little old kart putt-putt" },
+    { name: "vroom", desc: "sporty kart or motorbike" },
+    { name: "electric", desc: "electric hum and whine: robots, futuristic" },
+    { name: "rocket", desc: "jet whoosh: rockets, planes, rocket shoes" },
+    { name: "hooves", desc: "galloping hooves: horses, unicorns" },
+    { name: "paws", desc: "pattering paws or feet: dogs, dinos, creatures" },
+    { name: "flap", desc: "wing beats: birds, dragons" },
+    { name: "splash", desc: "paddling and splashing: boats, bathtubs" },
+    { name: "magic", desc: "sparkly shimmer: magic carpets, fairy things" },
+    { name: "squelch", desc: "slimy squelch: blobs and slimes" },
+  ],
+  hornSounds: [
+    { name: "honk", desc: "classic car honk" },
+    { name: "beep", desc: "little beep-beep" },
+    { name: "toot", desc: "train or boat toot" },
+    { name: "squeak", desc: "squeaky toy" },
+    { name: "bell", desc: "bicycle bell" },
+    { name: "roar", desc: "friendly monster or dino roar" },
+    { name: "meow", desc: "cat" },
+    { name: "woof", desc: "dog" },
+    { name: "neigh", desc: "horse" },
+    { name: "moo", desc: "cow" },
+    { name: "boing", desc: "cartoon spring" },
+  ],
+  motionStyles: [
+    { name: "bouncy", desc: "hops and springs about, cheerful" },
+    { name: "smooth", desc: "glides calmly and cool" },
+    { name: "wobbly", desc: "jelly wobble, clumsy and silly" },
+    { name: "jittery", desc: "quick nervous twitches, hyper" },
+    { name: "floaty", desc: "drifts up and down, dreamy, ghosts, birds" },
+    { name: "proud", desc: "head held high, slow swagger, royals and heroes" },
+    { name: "sneaky", desc: "crouched low, peeking around, tricksters" },
+  ],
   sockets: [
     { name: "head_top", desc: "top of the head: horns, antennae", on: "character", maxOffset: 0.3 },
     { name: "head_side", desc: "side of the head: ears", on: "character", maxOffset: 0.2 },
@@ -116,6 +209,9 @@ export const partNames = (parts) => parts.map((p) => p.name);
 
 export const CHARACTER_SOCKETS = RACER_KIT.sockets.filter((s) => s.on === "character");
 export const RIDE_SOCKETS = RACER_KIT.sockets.filter((s) => s.on === "ride");
+export const FLAT_EXTRA_SHAPES = Object.freeze([
+  "star", "heart", "lightning", "flame", "moon", "flower", "leaf", "cloud", "diamond", "drop", "bowtie",
+]);
 
 /** Number ranges the RacerSpec clamps to. */
 export const SPEC_LIMITS = Object.freeze({
@@ -127,10 +223,15 @@ export const SPEC_LIMITS = Object.freeze({
   wingSize: [0.5, 2.0],
   extraScale: [0.1, 2.0],
   extraRotationDeg: [-180, 180],
-  characterExtrasMax: 6,
-  rideExtrasMax: 8,
+  patternScale: [0.5, 2.0],
+  motionEnergy: [0.5, 1.5],
+  soundPitch: [0.6, 1.6],
+  rideNumber: [0, 99],
+  taglineMax: 60,
+  characterExtrasMax: 10,
+  rideExtrasMax: 12,
   paletteMin: 3,
-  paletteMax: 5,
+  paletteMax: 8,
   personalityMin: 2,
   personalityMax: 3,
 });

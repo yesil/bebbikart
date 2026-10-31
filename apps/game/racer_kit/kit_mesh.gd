@@ -270,6 +270,113 @@ static func ellipse_outline(w: float, h: float, segments: int = 16) -> PackedVec
 	return out
 
 
+# --- Slab: any (also concave) outline extruded along Z with flat caps. ---
+# Lightning bolts, crescents, bow ties, capes. bend (optional) moves each vertex after building.
+
+static func slab(outline: PackedVector2Array, thickness: float, key: String = "", bend: Callable = Callable()) -> Mesh:
+	if key != "":
+		return cached("slab:" + key, func() -> Mesh: return _make_slab(outline, thickness, bend))
+	return _make_slab(outline, thickness, bend)
+
+
+static func _make_slab(outline: PackedVector2Array, thickness: float, bend: Callable) -> ArrayMesh:
+	var tris := Geometry2D.triangulate_polygon(outline)
+	if tris.is_empty():
+		push_error("KitMesh.slab: outline can't be triangulated (%d points)" % outline.size())
+		return ArrayMesh.new()
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var h := thickness * 0.5
+	var put := func(v: Vector3) -> void:
+		st.add_vertex(bend.call(v) if bend.is_valid() else v)
+	for z in [h, -h]:
+		var verts: Array[Vector3] = []
+		for p in outline:
+			verts.append(Vector3(p.x, p.y, z))
+		for i in range(0, tris.size(), 3):
+			var a := verts[tris[i]]
+			var b := verts[tris[i + 1]]
+			var c := verts[tris[i + 2]]
+			# Clockwise seen from outside (+Z for the front cap, -Z for the back).
+			if (b - a).cross(c - a).z * signf(z) > 0.0:
+				put.call(a); put.call(c); put.call(b)
+			else:
+				put.call(a); put.call(b); put.call(c)
+	var n := outline.size()
+	var ccw := 0.0
+	for i in n:
+		ccw += outline[i].cross(outline[(i + 1) % n])
+	for i in n:
+		var p0 := outline[i]
+		var p1 := outline[(i + 1) % n]
+		var a := Vector3(p0.x, p0.y, h)
+		var b := Vector3(p1.x, p1.y, h)
+		var c := Vector3(p1.x, p1.y, -h)
+		var d := Vector3(p0.x, p0.y, -h)
+		if ccw > 0.0:
+			put.call(a); put.call(c); put.call(b)
+			put.call(a); put.call(d); put.call(c)
+		else:
+			put.call(a); put.call(b); put.call(c)
+			put.call(a); put.call(c); put.call(d)
+	st.generate_normals()
+	return st.commit()
+
+
+## Outline shapes for the flat extras, about 1 unit across (centred on the origin).
+static func shape_outline(shape: String) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	match shape:
+		"lightning":
+			for p in [[0.12, 0.5], [-0.28, 0.02], [-0.02, 0.02], [-0.16, -0.5], [0.3, 0.06], [0.04, 0.06], [0.26, 0.5]]:
+				out.append(Vector2(p[0], p[1]))
+		"flame":
+			for i in 40:
+				var t := TAU * float(i) / 40.0
+				var r := 0.3 * (1.0 + 0.25 * sin(t * 3.0 + 1.0))
+				var y := -sin(t) * r * 0.9
+				var x := cos(t) * r
+				if y > 0.0:  # stretch the top into a flickering tip
+					y *= 1.0 + 1.6 * (1.0 - absf(x) / 0.38)
+					x *= 1.0 - y * 0.7
+				out.append(Vector2(x, y - 0.12))
+		"moon":
+			# Outer circle (r 0.5) minus a circle (r 0.42) shifted right: they meet at ±57°.
+			for i in 25:
+				var a := deg_to_rad(lerpf(57.0, 303.0, float(i) / 24.0))
+				out.append(Vector2(cos(a), sin(a)) * 0.5)
+			for i in range(1, 24):
+				var a := deg_to_rad(lerpf(273.0, 87.0, float(i) / 24.0))
+				out.append(Vector2(0.25 + cos(a) * 0.42, sin(a) * 0.42))
+		"flower":
+			for i in 60:
+				var t := TAU * float(i) / 60.0
+				out.append(Vector2(cos(t), sin(t)) * (0.24 + 0.26 * absf(cos(t * 2.5))))
+		"leaf":
+			for i in 32:
+				var t := TAU * float(i) / 32.0
+				out.append(Vector2(sin(t) * 0.24 * (1.0 - 0.3 * cos(t)), cos(t) * 0.5))
+		"cloud":
+			for i in 48:
+				var t := TAU * float(i) / 48.0
+				var r := 0.36 + 0.09 * absf(sin(t * 3.0))
+				out.append(Vector2(cos(t) * r * 1.3, sin(t) * r * 0.8))
+		"diamond":
+			for p in [[0.0, 0.5], [0.34, 0.12], [0.0, -0.5], [-0.34, 0.12]]:
+				out.append(Vector2(p[0], p[1]))
+		"drop":
+			for i in 40:
+				var t := TAU * float(i) / 40.0
+				out.append(Vector2(0.42 * sin(t) * sin(t * 0.5), 0.5 * cos(t)))
+		"bowtie":
+			for p in [[-0.5, 0.3], [-0.08, 0.06], [0.08, 0.06], [0.5, 0.3], [0.5, -0.3], [0.08, -0.06], [-0.08, -0.06], [-0.5, -0.3]]:
+				out.append(Vector2(p[0], p[1]))
+		"cape":
+			for p in [[-0.22, 0.0], [0.22, 0.0], [0.5, -1.0], [-0.5, -1.0]]:
+				out.append(Vector2(p[0], p[1]))
+	return out
+
+
 # --- Godot primitives, cached ---
 
 static func sphere(r: float, hemisphere: bool = false) -> Mesh:

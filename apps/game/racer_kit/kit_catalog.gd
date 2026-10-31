@@ -16,8 +16,8 @@ const MOODS := ["happy", "excited", "determined", "dizzy", "sad", "cheering"]
 const IMPLEMENTED := {
 	"bodyShapes": ["bean", "round", "tall", "box", "pear", "star"],
 	"headShapes": ["round", "oval", "square", "wide", "drop"],
-	"eyes": ["dots", "big_round", "sleepy", "googly", "one_eye", "visor"],
-	"mouths": ["smile", "grin", "open", "fangs", "beak", "none"],
+	"eyes": ["dots", "big_round", "sleepy", "googly", "one_eye", "visor", "star", "heart", "lashes", "angry", "wink"],
+	"mouths": ["smile", "grin", "open", "fangs", "beak", "none", "tongue", "buck_teeth", "mustache"],
 	"hairStyles": ["spiky", "curly", "long", "ponytail", "mohawk", "tuft"],
 	"hatTypes": ["cap", "crown", "helmet", "wizard", "beanie", "tophat", "bow", "party"],
 	"rideBases": ["kart", "bike", "animal4", "bird", "board", "rocket", "boat", "blob"],
@@ -25,7 +25,14 @@ const IMPLEMENTED := {
 	"legStyles": ["hooves", "paws", "claws", "stumpy"],
 	"wingStyles": ["feather", "bat", "fairy", "plane"],
 	"tailStyles": ["fluffy", "dino", "flame", "feathers"],
-	"extraShapes": ["sphere", "capsule", "box", "cone", "cylinder", "torus", "star", "heart"],
+	"extraShapes": ["sphere", "capsule", "box", "cone", "cylinder", "torus", "star", "heart",
+		"lightning", "flame", "moon", "flower", "leaf", "cloud", "diamond", "drop", "bowtie", "glasses", "cape"],
+	"patterns": ["stripes", "spots", "stars", "hearts", "zigzag", "checks", "crayon", "swirl"],
+	"finishes": ["matte", "glossy", "metallic", "sparkle", "glow"],
+	# Sounds are data for the audio side; the kit builds nothing for them.
+	"engineSounds": ["putter", "vroom", "electric", "rocket", "hooves", "paws", "flap", "splash", "magic", "squelch"],
+	"hornSounds": ["honk", "beep", "toot", "squeak", "bell", "roar", "meow", "woof", "neigh", "moo", "boing"],
+	"motionStyles": ["bouncy", "smooth", "wobbly", "jittery", "floaty", "proud", "sneaky"],
 	"sockets": ["head_top", "head_side", "head_front", "body_front", "body_back", "hand",
 		"ride_front", "ride_back", "ride_side", "ride_top", "ride_bottom"],
 }

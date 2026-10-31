@@ -12,6 +12,9 @@ signal mood_changed(mood: String)
 
 var spec: Dictionary = {}
 var bounciness := 1.0
+## RacerSpec motion.style ("" = none) and energy: the racer's idle character.
+var motion_style := ""
+var motion_energy := 1.0
 
 # Driven state
 var speed := 0.0
@@ -229,18 +232,53 @@ func _process(delta: float) -> void:
 		_squash -= dt
 		var s := sin(clampf(_squash / 0.35, 0.0, 1.0) * PI) * 0.22 * _squash_k * bounciness
 		sq = Vector3(1.0 + s, 1.0 - s, 1.0 + s)
-	xf.basis = Basis.from_euler(Vector3(pitch, yaw, -_lean_s * 0.22)).scaled(sq)
-	xf.origin = Vector3(0, bounce + idle + hop, 0)
+	var mo := _motion(moving)
+	xf.basis = Basis.from_euler(Vector3(pitch, yaw, -_lean_s * 0.22 + mo.roll)).scaled(sq)
+	xf.origin = Vector3(mo.x, bounce + idle + hop + mo.y, 0)
 	rig.transform = xf
 	if character:
 		character.rotation.z = -_lean_s * 0.18
 		character.rotation.x = -0.12 * moving if not boost else -0.22
+	if character:
+		character.rotation.x += mo.char_pitch
 	if head_pivot:
-		head_pivot.rotation.z = _lean_s * 0.12 + sin(_t * 1.7) * 0.03
-		head_pivot.rotation.y = sin(_t * 0.9) * 0.08 * (1.0 - moving)
+		head_pivot.rotation.z = _lean_s * 0.12 + sin(_t * 1.7) * 0.03 + mo.head_roll
+		head_pivot.rotation.y = sin(_t * 0.9) * 0.08 * (1.0 - moving) + mo.head_yaw
+		head_pivot.rotation.x = mo.head_pitch
 	_animate_arms(dt)
 	if _sad_t > 0.0:
 		_sad_t -= dt
+
+
+## Idle personality from motion.style, scaled by energy and faded a bit at speed.
+func _motion(moving: float) -> Dictionary:
+	var m := {"x": 0.0, "y": 0.0, "roll": 0.0, "char_pitch": 0.0, "head_roll": 0.0, "head_yaw": 0.0, "head_pitch": 0.0}
+	var k := motion_energy * (1.0 - 0.5 * moving)
+	match motion_style:
+		"bouncy":
+			m.y = absf(sin(_t * 4.5)) * 0.045 * k
+			m.head_roll = sin(_t * 4.5) * 0.06 * k
+		"smooth":
+			m.y = sin(_t * 1.2) * 0.01 * k
+			m.head_yaw = sin(_t * 0.6) * 0.1 * k
+		"wobbly":
+			m.roll = sin(_t * 5.0) * 0.07 * k
+			m.head_roll = sin(_t * 5.0 + 1.2) * 0.14 * k
+		"jittery":
+			m.x = (sin(_t * 37.0) * 0.5 + sin(_t * 23.0) * 0.5) * 0.008 * k
+			m.head_yaw = sin(_t * 11.0) * sin(_t * 2.3) * 0.25 * k
+		"floaty":
+			m.y = (sin(_t * 1.6) * 0.5 + 0.5) * 0.08 * k
+			m.roll = sin(_t * 0.8) * 0.04 * k
+		"proud":
+			m.head_pitch = -0.16 * k
+			m.char_pitch = -0.06 * k
+			m.head_yaw = sin(_t * 0.5) * 0.12 * k
+		"sneaky":
+			m.char_pitch = 0.16 * k
+			m.y = -0.02 * k
+			m.head_yaw = sin(_t * 0.7) * sin(_t * 0.31) * 0.4 * k
+	return m
 
 
 func _animate_arms(dt: float) -> void:

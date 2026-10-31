@@ -4,7 +4,8 @@ extends RefCounted
 ## validate() repairs nothing and fills in nothing: every unknown part name, out-of-range
 ## number, invalid colour or palette reference, missing required field or over-long list is
 ## reported as an error, and a spec with errors must not be built. Only the fields contracts §5
-## marks optional (cheeks, hair, hat, wheels/legs/wings/tail, extra.mirror) may be absent.
+## marks optional (tagline, motion, sound, sound, cheeks, hair, hat, patterns, finishes, ride number,
+## wheels/legs/wings/tail, extra.mirror) may be absent.
 ## Spec frame: +y up, +z forward, +x = the racer's LEFT (see to_godot()).
 
 
@@ -50,6 +51,21 @@ static func validate(raw: Dictionary) -> Dictionary:
 		e.append("title longer than %d chars" % tmax)
 	out.title = title
 
+	if raw.get("tagline") != null:
+		var tag := str(raw.tagline).strip_edges()
+		if tag == "" or tag.length() > int(KitCatalog.limit("taglineMax")):
+			e.append("tagline: empty or longer than %d chars" % int(KitCatalog.limit("taglineMax")))
+		out.tagline = tag
+	if raw.get("motion") != null:
+		var mo := _dict(raw.motion, "motion", e)
+		out.motion = {"style": _part(mo.get("style"), "motionStyles", "motion.style", e),
+			"energy": _num(mo.get("energy"), "motionEnergy", "motion.energy", e)}
+	if raw.get("sound") != null:
+		var so := _dict(raw.sound, "sound", e)
+		out.sound = {"engine": _part(so.get("engine"), "engineSounds", "sound.engine", e),
+			"pitch": _num(so.get("pitch"), "soundPitch", "sound.pitch", e),
+			"horn": _part(so.get("horn"), "hornSounds", "sound.horn", e)}
+
 	var pers := []
 	for p in _arr(raw.get("personality"), "personality", e):
 		pers.append(str(p).to_lower())
@@ -76,12 +92,15 @@ static func validate(raw: Dictionary) -> Dictionary:
 		"color": _ref(body.get("color"), n, "character.body.color", e),
 		"scale": _vec3(body.get("scale"), "bodyScale", "character.body.scale", e),
 	}
+	_look(body, c.body, n, "character.body", e)
 	var head := _dict(rc.get("head"), "character.head", e)
 	c.head = {
 		"shape": _part(head.get("shape"), "headShapes", "character.head.shape", e),
 		"color": _ref(head.get("color"), n, "character.head.color", e),
 		"size": _num(head.get("size"), "headSize", "character.head.size", e),
 	}
+	if head.get("pattern") != null:
+		c.head.pattern = _pattern(head.pattern, n, "character.head.pattern", e)
 	var face := _dict(rc.get("face"), "character.face", e)
 	var eye_color := str(face.get("eyeColor", ""))
 	if not Color.html_is_valid(eye_color):
@@ -113,6 +132,15 @@ static func validate(raw: Dictionary) -> Dictionary:
 	r.color = _ref(rr.get("color"), n, "ride.color", e)
 	r.accent = _ref(rr.get("accent"), n, "ride.accent", e)
 	r.scale = _vec3(rr.get("scale"), "rideScale", "ride.scale", e)
+	_look(rr, r, n, "ride", e)
+	if rr.get("number") != null:
+		var num := _dict(rr.number, "ride.number", e)
+		var v = num.get("value")
+		var rng: Array = KitCatalog.limit("rideNumber")
+		if typeof(v) not in [TYPE_INT, TYPE_FLOAT] or float(v) != floorf(float(v)) or v < rng[0] or v > rng[1]:
+			e.append("ride.number.value: %s, need a whole number %d-%d" % [str(v), rng[0], rng[1]])
+		r.number = {"value": int(v) if typeof(v) in [TYPE_INT, TYPE_FLOAT] else 0,
+			"color": _ref(num.get("color"), n, "ride.number.color", e)}
 	if rr.get("wheels") != null:
 		var wh := _dict(rr.wheels, "ride.wheels", e)
 		var cnt = wh.get("count")
@@ -151,6 +179,21 @@ static func palette_colors(spec: Dictionary) -> Array[Color]:
 
 
 # --- helpers ---
+
+## Copies the optional pattern and finish of src into dst.
+static func _look(src: Dictionary, dst: Dictionary, n: int, field: String, e: PackedStringArray) -> void:
+	if src.get("pattern") != null:
+		dst.pattern = _pattern(src.pattern, n, field + ".pattern", e)
+	if src.get("finish") != null:
+		dst.finish = _part(src.finish, "finishes", field + ".finish", e)
+
+
+static func _pattern(v: Variant, n: int, field: String, e: PackedStringArray) -> Dictionary:
+	var p := _dict(v, field, e)
+	return {"type": _part(p.get("type"), "patterns", field + ".type", e),
+		"color": _ref(p.get("color"), n, field + ".color", e),
+		"scale": _num(p.get("scale"), "patternScale", field + ".scale", e)}
+
 
 static func _arr(v: Variant, field: String, e: PackedStringArray) -> Array:
 	if typeof(v) != TYPE_ARRAY:
