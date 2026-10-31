@@ -1,4 +1,4 @@
-// The DeepSeek prompts for the four design passes (asset-pipeline.md §1 step 2):
+// The Claude prompts for the four design passes (asset-pipeline.md §1 step 2):
 //   1 look     (vision)  check both photos and describe every feature of the drawings
 //   2 design   (text)    turn the description into a RacerSpec
 //   3 critique (vision)  compare the spec with the drawings, list concrete fixes

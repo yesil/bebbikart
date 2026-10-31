@@ -239,3 +239,31 @@ describe("runDesignJob (mock)", () => {
     }
   });
 });
+
+describe("claude client", () => {
+  test("turns pass messages into a system prompt and base64 image blocks", async () => {
+    const { toClaudeMessages } = await import("../src/claude.js");
+    const { system, turns } = toClaudeMessages(
+      buildLookMessages({
+        characterDataUrl: "data:image/jpeg;base64,AAAA",
+        vehicleDataUrl: "data:image/png;base64,BBBB",
+      }),
+    );
+    expect(system).toContain("not_a_drawing");
+    expect(turns).toHaveLength(1);
+    const images = turns[0].content.filter((p) => p.type === "image");
+    expect(images.map((i) => i.source.media_type)).toEqual(["image/jpeg", "image/png"]);
+    expect(images[1].source.data).toBe("BBBB");
+  });
+
+  test("a missing ANTHROPIC_API_KEY fails loudly", async () => {
+    const { createClaudeClient } = await import("../src/claude.js");
+    const saved = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      expect(() => createClaudeClient()).toThrow("ANTHROPIC_API_KEY is not set");
+    } finally {
+      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+    }
+  });
+});

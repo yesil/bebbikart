@@ -1,4 +1,4 @@
-// --mock mode: a stand-in for DeepSeek that returns hand-written replies for the sample drawings.
+// --mock mode: a stand-in for Claude that returns hand-written replies for the sample drawings.
 // Replies go through the same parse → check → clamp path as real ones, so the Racer Viewer gets
 // realistic input without an API key. pair05 deliberately contains typical model mistakes
 // (wrong part spellings, out-of-range numbers) to show the repair step.

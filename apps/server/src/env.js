@@ -72,8 +72,8 @@ export function loadSettings(env = process.env) {
     webDist: resolve(env.BK_WEB_DIST ?? join(REPO_ROOT, "apps/web/dist")),
     // Dev convenience: start a session at boot so phones can race straight away.
     autoStart: (env.BK_AUTOSTART ?? "1") !== "0",
-    hasDeepSeekKey: !!env.DEEPSEEK_API_KEY,
-    // One DeepSeek call can take up to 90 s, plus one retry for an invalid reply.
+    hasAnthropicKey: !!env.ANTHROPIC_API_KEY,
+    // Four Claude passes (look, design, critique, refine) plus retries for invalid replies.
     jobTimeoutMs: Number(env.BK_JOB_TIMEOUT_MS ?? 300_000),
   };
 }

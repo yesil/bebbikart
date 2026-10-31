@@ -1,9 +1,9 @@
-// runDesignJob: photos → four DeepSeek passes → validated RacerSpec file (asset-pipeline.md §1, §5).
+// runDesignJob: photos → four Claude passes → validated RacerSpec file (asset-pipeline.md §1, §5).
 //   look (vision: check + describe) → design (spec) → critique (vision: compare with the drawings) → refine (final spec)
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { clampRacerSpec, JOB_STAGES } from "@bebbikart/shared";
-import { createDeepSeekClient } from "./deepseek.js";
+import { createClaudeClient } from "./claude.js";
 import { normaliseDrawing, UnsupportedFileError } from "./normalise.js";
 import {
   buildCritiqueMessages,
@@ -24,29 +24,23 @@ export const STAGES = JOB_STAGES;
 const REQUIRED_NEW = ["tagline", "motion", "sound"];
 
 /**
- * Thinking effort per pass. Measured on deepseek-flash (2026-10-31, 4 racers at a time):
- *   look      high/max 12–37 s
- *   design    off 7–20 s · low 55–80 s, timed out at 150 s on a real drawing · high 50–145 s
- *   critique  off ~10 s · low/high 40–120 s
- *   refine    off ~10 s · low 10–60 s
- * Thinking on the text passes gave no clear gain once the look pass had described the drawings in
- * detail, so only the look pass thinks: ~45–60 s per racer.
- * Override with DEEPSEEK_EFFORT="look,design,critique,refine", e.g. "max,low,off,off".
+ * Claude effort per pass (adaptive thinking; ilyas asked for Sonnet 5.5 at high effort).
+ * Override with CLAUDE_PASS_EFFORT="look,design,critique,refine", each low|medium|high|xhigh|max.
  */
-export const DESIGN_EFFORT = effortFromEnv(process.env.DEEPSEEK_EFFORT) ?? {
+export const DESIGN_EFFORT = effortFromEnv(process.env.CLAUDE_PASS_EFFORT) ?? {
   look: "high",
-  design: "off",
-  critique: "off",
-  refine: "off",
+  design: "high",
+  critique: "high",
+  refine: "high",
 };
 
 function effortFromEnv(v) {
   if (!v) return null;
   const parts = v.split(",").map((s) => s.trim());
-  const ok = ["off", "low", "high", "max"];
+  const ok = ["low", "medium", "high", "xhigh", "max"];
   if (parts.length !== 4 || parts.some((p) => !ok.includes(p)))
     throw new Error(
-      `DEEPSEEK_EFFORT must be 4 of ${ok.join("|")} for look,design,critique,refine; got "${v}"`,
+      `CLAUDE_PASS_EFFORT must be 4 of ${ok.join("|")} for look,design,critique,refine; got "${v}"`,
     );
   const [look, design, critique, refine] = parts;
   return { look, design, critique, refine };
@@ -63,7 +57,7 @@ class StageFailed extends Error {}
  *           skipCheck?: boolean, reroll?: boolean, name?: string }} input
  * @param {(s: string) => void} [onStatus] called with each of STAGES, then "ready" or "rejected"
  * @param {{ client?: DesignClient, log?: (msg: string) => void, renderer?: { name: string, render: Function } | null }} [deps]
- *   client defaults to DeepSeek from env. renderer builds the first design in Godot so the critique
+ *   client defaults to Claude from env (ANTHROPIC_API_KEY). renderer builds the first design in Godot so the critique
  *   sees the real racer; it defaults to the Godot renderer, except with an injected client (tests,
  *   --mock), where the default is none. A failing render fails the job.
  */
@@ -87,7 +81,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
   let client = deps.client;
   if (!client) {
     try {
-      client = createDeepSeekClient();
+      client = createClaudeClient();
     } catch (err) {
       return { status: "failed", error: err.message };
     }
@@ -119,7 +113,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
         content = await client.complete(messages(errors), opts, { ...ctx, stage, attempt });
       } catch (err) {
         // No fallbacks: a failed call fails the job, loudly, with the reason.
-        throw new StageFailed(`DeepSeek ${stage} call failed: ${err.message}`);
+        throw new StageFailed(`Claude ${stage} call failed: ${err.message}`);
       }
       const reply = parseReply(content);
       const v = reply.ok ? validate(reply.value) : { ok: false, errors: [reply.error] };
@@ -132,7 +126,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       log(`${stage} attempt ${attempt}: ${errors.slice(0, 3).join("; ")}`);
     }
     throw new StageFailed(
-      `DeepSeek ${stage} reply was invalid ${ATTEMPTS} times: ${(errors ?? []).slice(0, 3).join("; ")}`,
+      `Claude ${stage} reply was invalid ${ATTEMPTS} times: ${(errors ?? []).slice(0, 3).join("; ")}`,
     );
   }
 
@@ -148,7 +142,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
           approved: !!input.skipCheck,
           previousErrors: errors,
         }),
-      { vision: true, effort: DESIGN_EFFORT.look, temperature: 0.3 },
+      { vision: true, effort: DESIGN_EFFORT.look },
       (v) => validateLook(v, !!input.skipCheck),
     );
     if (look.rejected) return reject(look.rejected.reason, look.rejected.image, look.rejected.seen);
@@ -160,7 +154,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       "design",
       (errors) =>
         buildDesignMessages({ observations, reroll: input.reroll, previousErrors: errors }),
-      { effort: DESIGN_EFFORT.design, temperature: input.reroll ? 1.1 : 0.9 },
+      { effort: DESIGN_EFFORT.design },
       validateDesign,
     );
 
@@ -187,7 +181,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
           design: { featureMap: design.featureMap, spec: design.spec, notes: design.notes },
           renders,
         }),
-      { vision: true, effort: DESIGN_EFFORT.critique, temperature: 0.4 },
+      { vision: true, effort: DESIGN_EFFORT.critique },
       validateCritique,
     );
 
@@ -202,7 +196,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
           critique,
           previousErrors: errors,
         }),
-      { effort: DESIGN_EFFORT.refine, temperature: 0.7 },
+      { effort: DESIGN_EFFORT.refine },
       validateDesign,
     );
 

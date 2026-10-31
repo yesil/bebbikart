@@ -1,4 +1,4 @@
-export { createDeepSeekClient, DEEPSEEK_DEFAULTS, DeepSeekError } from "./deepseek.js";
+export { CLAUDE_DEFAULTS, ClaudeError, createClaudeClient } from "./claude.js";
 export { parseReply, runDesignJob, STAGES, writeSpec } from "./design.js";
 export { createMockClient, MOCK_DESIGNS, SAMPLE_RUNS } from "./mock.js";
 export { extractPalette, normaliseDrawing, UnsupportedFileError } from "./normalise.js";

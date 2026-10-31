@@ -1,4 +1,4 @@
-// End-to-end over real HTTP + WebSockets: phone creates a racer, uploads drawings (a fake design client stands in for DeepSeek),
+// End-to-end over real HTTP + WebSockets: phone creates a racer, uploads drawings (a fake design client stands in for Claude),
 // the game gets the roster, the phone presses Go, the game races and reports, the phone gets the result.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
@@ -207,7 +207,7 @@ test("bad hello is refused, admin needs the PIN", async () => {
   expect((await ok.json()).length).toBeGreaterThanOrEqual(1);
 });
 
-test("a DeepSeek failure fails the job loudly: no sample design, phone sees the error", async () => {
+test("a design API failure fails the job loudly: no sample design, phone sees the error", async () => {
   settings.designClient.complete = async () => {
     throw new Error("HTTP 401: invalid api key");
   };

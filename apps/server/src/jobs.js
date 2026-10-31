@@ -13,7 +13,7 @@ const now = () => new Date().toISOString();
 export function createJobs({ game, settings, log = console.log, logError = console.error }) {
   const queue = [];
   let active = 0;
-  // DeepSeek from env. Tests inject a client; there is no mock or fallback at runtime.
+  // Claude from env (ANTHROPIC_API_KEY). Tests inject a client; there is no mock or fallback at runtime.
   const client = settings.designClient;
   const uploadsDir = join(settings.dataDir, "uploads");
   const assetsDir = join(settings.dataDir, "assets");

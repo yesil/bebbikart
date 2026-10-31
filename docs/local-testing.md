@@ -57,14 +57,14 @@ curl -X POST -H 'x-admin-pin: 1234' -H 'content-type: application/json' -d '{}' 
 
 Or set `"track": "village"` in `bebbikart.config.json` at the repo root before starting. On the village the phone shows "Lap 2 of 3", the lap timer, each lap's time vs your best lap, and a **Pit in** button (finish at the next line). The best lap ranks. `bun run fake-game` races laps too.
 
-## DeepSeek key (required, no fallbacks)
+## Claude API key (required, no fallbacks)
 
-The server designs every racer from the kid's drawings with DeepSeek. It reads `DEEPSEEK_API_KEY` from the environment or from the first of these `.env` files that sets it: `apps/server/.env`, `.env` (repo root), `packages/asset-pipeline/.env`. The start-up banner says which file it used.
+The server designs every racer from the kid's drawings with Claude (`claude-sonnet-5-5`, high effort). It reads `ANTHROPIC_API_KEY` from the environment or from the first of these `.env` files that sets it: `apps/server/.env`, `.env` (repo root), `packages/asset-pipeline/.env`. The start-up banner says which file it used.
 
 There is no mock or sample-design fallback:
 - No key → the server refuses to start and says where to put it.
-- DeepSeek fails (network, bad key, timeout, invalid reply twice) → the job fails, the server logs `[job] … FAILED: <reason>`, and the phone shows the reason in a red box with a retry.
-- DeepSeek says a photo isn't a usable drawing → the phone asks to retake that photo.
+- Claude fails (network, bad key, timeout, refusal, invalid reply three times) → the job fails, the server logs `[job] … FAILED: <reason>`, and the phone shows the reason in a red box with a retry.
+- Claude says a photo isn't a usable drawing → the phone asks to retake that photo.
 - In the game, a racer without a spec, a drawing that doesn't download, or a render/upload that fails shows as an `ERROR …` line in the overlay and in the Godot log.
 
 The garage has a **New drawings** button to redo a racer's photos without resetting anything.

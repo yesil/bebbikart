@@ -7,12 +7,12 @@
 
 Kids' drawings will be **very raw**: a few lines, scribbled colour, maybe a face. We don't copy the lines. We capture the **spirit and the colours** and turn them into a **living 3D toy racer** that drives, jumps, gets dizzy, celebrates and waves, with facial expressions and an **avatar** on the kid's phone.
 
-**How:** DeepSeek looks at the drawings and **writes a design**, not a picture: a small JSON `RacerSpec` that says which toy parts to use, their colours, sizes and positions, the face, and up to a dozen extra shapes for the unique details. The Godot game **builds the racer in 3D** from that spec and animates it. Four AI passes per racer (look, design, critique, refine), no image generation, cost in cents for the whole event.
+**How:** Claude looks at the drawings and **writes a design**, not a picture: a small JSON `RacerSpec` that says which toy parts to use, their colours, sizes and positions, the face, and up to a dozen extra shapes for the unique details. The Godot game **builds the racer in 3D** from that spec and animates it. Four AI passes per racer (look, design, critique, refine), no image generation, cost in cents for the whole event.
 
 Why this beats generating images:
 - **Real 3D**, so every pose and expression is just animation: unlimited, smooth, always the same character.
 - **One house style for free:** every racer is assembled from the same toy-part kit, so they all belong in the toy world.
-- **Cheap, and worth the wait:** four DeepSeek passes (~1 min), no image model, no background removal. A single fast call (~5 s) gave flat, samey racers, so we trade time for likeness and personality.
+- **Cheap, and worth the wait:** four Claude passes, no image model, no background removal. A single fast call (~5 s) gave flat, samey racers, so we trade time for likeness and personality.
 - **Editable:** a spec is small JSON, so a facilitator (or the kid, later) can tweak a colour or swap a hat.
 
 ## 1. Pipeline
@@ -23,13 +23,13 @@ photos ─► 1 Normalise ─► 2 Look ─► 3 Design ─► 4 Critique ─►
 ```
 
 1. **Normalise** (`sharp`): EXIF rotate, strip metadata, longest side ≤ 1536 px. Also save a cropped copy of the drawing for the "drawn by me" view and the optional **drawing sticker** on the ride (§4).
-2. **Four DeepSeek passes** (`deepseek-flash`; thinking only in the look pass, see `DESIGN_EFFORT` in `src/design.js` for measured timings; prompts in `src/prompt.js`; `onStatus` reports each stage, `JOB_STAGES` in shared):
+2. **Four Claude passes** (`claude-sonnet-5-5`, adaptive thinking at high effort, `src/claude.js`; `ANTHROPIC_API_KEY`; prompts in `src/prompt.js`; `onStatus` reports each stage, `JOB_STAGES` in shared):
    - `looking` (vision, thinking): checks both photos (real photo, real person, empty page, unreadable → `rejected` with a friendly retake message) and describes every feature of each drawing with colours, counts, proportions, mood and what makes it unmistakable. The designer never sees the pictures, so this description is its only input.
    - `designing` (text): turns the description into a `RacerSpec` plus a `featureMap` (which spec fields show which feature). The prompt holds the kit catalog, the schema, a geometry guide (sockets, axes, typical sizes) and design rules: faithful first, the child's colours and markings as patterns, exaggerations kept, visible personality (face, motion, tagline, sound), 1–3 imaginative touches, no bland defaults.
    - `critiquing` (vision): looks at the drawings again next to the spec and lists concrete fixes (must / should / could) with scores.
    - `refining` (text): applies the fixes and writes the final spec. `_meta/<name>.json` keeps the description, first design, critique and timings for tuning.
    Each pass retries once with the validation errors; a second failure, or a failed call, fails the job with the reason (no default racer). New racers must have `tagline`, `motion` and `sound`.
-   `deepseek-v4-pro` was tried for the text passes: no better designs and 2–4× slower. Env overrides: `DEEPSEEK_VISION_MODEL`, `DEEPSEEK_DESIGN_MODEL`, `DEEPSEEK_TIMEOUT_MS` (per call, default 150 s).
+   DeepSeek (`deepseek-flash`) was used until 2026-10-31 and replaced by Claude at ilyas's request. Env: `CLAUDE_DESIGN_MODEL`, `CLAUDE_EFFORT`, `CLAUDE_PASS_EFFORT`, `BK_GODOT_BIN` (the critique renders the first design in Godot).
 3. **Validate & clamp** with the zod schema: unknown part names → nearest valid part, numbers clamped to ranges, extras capped. If it's badly broken, retry once with the validation errors added to the prompt. Still broken → the job fails with the reason.
 4. **Build:** the server stores the spec (`player.updated`, `roster.updated`). The game assembles the racer immediately. The player is `ready` as soon as the spec is valid.
 5. **Avatars:** right after building, the game renders the racer offscreen (a `SubViewport`) as `hero.png` (full racer, 3/4 view) and `avatar_happy/excited/sad.png` (head and shoulders, 512 px), and uploads them to the server (contracts §6). The phone shows those. If the game isn't running, the phone shows a placeholder in the racer's colours until it is.
@@ -80,7 +80,7 @@ export function runDesignJob(
 
 ## Privacy
 
-Drawing photos go to DeepSeek only, downscaled, with metadata stripped, never with the kid's name. **Confirm the company is OK with that.** Everything on the Mac is deleted on session reset.
+Drawing photos go to Anthropic (Claude API) only, downscaled, with metadata stripped, never with the kid's name. **Confirm the company is OK with that.** Everything on the Mac is deleted on session reset.
 
 ## Task list
 
