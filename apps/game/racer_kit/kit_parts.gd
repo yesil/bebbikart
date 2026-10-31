@@ -205,11 +205,17 @@ static func hair(style: String, color: Color, p: Dictionary, reach := 1.5) -> No
 			fr2.rotation.z = PI / 2
 			root.add_child(fr2)
 			if style == "very_long":
-				# A curtain of hair down the back to the seat, a little wider at the bottom.
+				# Long locks fanned around the back of the head, falling to the seat and spreading a
+				# little at the ends, so the hair reads as hair from every side (not a board).
 				var drop := reach + ay * 0.2
-				var curtain := mi(KitMesh.cylinder(ax * 1.05, ax * 1.35, drop, 20), color, Vector3(0, -drop * 0.5 + ay * 0.1, az * 0.45))
-				curtain.scale = Vector3(1, 1, 0.45)
-				root.add_child(curtain)
+				for i in 9:
+					var a := lerpf(-1.45, 1.45, i / 8.0)
+					var top := Vector3(sin(a) * ax * 0.92, ay * 0.1, cos(a) * az * 0.78)
+					var lock := node("Lock", top)
+					lock.rotation = Vector3(-0.06 - 0.04 * cos(a), 0, -sin(a) * 0.14 + (0.03 if i % 2 else -0.03))
+					var len := drop * (0.92 + 0.08 * cos(a * 3.0))
+					lock.add_child(mi(KitMesh.capsule(0.075 - 0.012 * absf(sin(a)), len), color.darkened(0.06 * (i % 2)), Vector3(0, -len * 0.5, 0)))
+					root.add_child(lock)
 				# Two long locks framing the face.
 				for s in [-1, 1]:
 					var lock := mi(KitMesh.capsule(0.055, drop * 0.75), color, Vector3(s * ax * 0.95, -drop * 0.35, az * 0.1))
