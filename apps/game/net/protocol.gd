@@ -230,7 +230,8 @@ const MSG_PHONE_TO_SERVER = [
 	"hello",
 	"phone.go",
 	"phone.boost",
-	"phone.stop"
+	"phone.stop",
+	"phone.watch"
 ]
 const MSG_ADMIN_TO_SERVER = [
 	"hello"
@@ -247,7 +248,8 @@ const MSG_GAME_TO_SERVER = [
 	"game.capacity",
 	"game.config.set",
 	"game.session.start",
-	"game.session.end"
+	"game.session.end",
+	"game.camera"
 ]
 const MSG_SERVER_TO_PHONE = [
 	"leaderboard.updated",
@@ -263,7 +265,8 @@ const MSG_SERVER_TO_PHONE = [
 	"run.progress",
 	"run.lap",
 	"run.section",
-	"run.ended"
+	"run.ended",
+	"camera.updated"
 ]
 const MSG_SERVER_TO_ADMIN = [
 	"leaderboard.updated",
@@ -285,5 +288,6 @@ const MSG_SERVER_TO_GAME = [
 	"run.start",
 	"run.boost",
 	"run.stop",
+	"run.watch",
 	"run.abort"
 ]

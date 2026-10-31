@@ -71,6 +71,8 @@ export const CHANNELS = {
     "phone.boost": z.object({ runId: z.string() }),
     // Loop tracks: "Pit in" ends the run when the racer next crosses the line.
     "phone.stop": z.object({ runId: z.string() }),
+    // "Show me on the big screen": the game's camera cuts to this racer soon.
+    "phone.watch": z.object({ runId: z.string() }),
   },
   adminToServer: {
     hello,
@@ -116,6 +118,8 @@ export const CHANNELS = {
       .strict(),
     "game.session.start": empty, // ended → a new session with a fresh leaderboard
     "game.session.end": empty,
+    // The run the big-screen camera follows now, on every cut; no runId when nobody races.
+    "game.camera": z.object({ runId: z.string().optional() }),
   },
   serverToPhone: {
     ...phoneBroadcasts,
@@ -159,6 +163,11 @@ export const CHANNELS = {
       rank: z.number().int().positive().optional(),
       coach: CoachTipSchema,
     }),
+    // Who the big-screen camera follows now (relayed game.camera); empty when nobody.
+    "camera.updated": z.object({
+      playerId: z.string().optional(),
+      runId: z.string().optional(),
+    }),
   },
   // Not spelled out in contracts.md: the console gets the phone broadcasts plus the full
   // player list, so it can show every racer live.
@@ -185,6 +194,7 @@ export const CHANNELS = {
     "run.start": RunStartSchema,
     "run.boost": z.object({ runId: z.string() }),
     "run.stop": z.object({ runId: z.string() }), // loop tracks: finish at the next line crossing
+    "run.watch": z.object({ runId: z.string() }), // a phone asked for the big screen
     "run.abort": z.object({ runId: z.string(), reason: z.string() }),
   },
 };
