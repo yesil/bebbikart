@@ -341,7 +341,8 @@ func _result(line: String) -> void:
 func _process(delta: float) -> void:
 	run_time += delta
 	var racing: Array = sim.racers.duplicate()
-	racing.sort_custom(func(a, b): return a.progress() > b.progress())
+	# On a loop, laps first, then position in the lap.
+	racing.sort_custom(func(a, b): return a.lap + a.progress() > b.lap + b.progress())
 	if follow_run == "" or not views.has(follow_run):
 		follow_run = racing[0].run_id if not racing.is_empty() else ""
 	camera.target = views.get(follow_run)
@@ -363,7 +364,7 @@ func _update_overlay(racing: Array) -> void:
 	var w := sim.weather
 	var lines: PackedStringArray = []
 	var mode := "MOCK" if assets == null else "SERVER %s · %d racers" % [net.status, assets.entries.size()]
-	lines.append("BebbiKart · %s · t %5.1f s · tick %d" % [mode, sim.tick / 60.0, sim.tick])
+	lines.append("BebbiKart · %s · %s · t %5.1f s · tick %d" % [mode, track, sim.tick / 60.0, sim.tick])
 	lines.append("rain %-8s %.2f   wind %-8s %.2f → %d°%s" % [w.phase("rain"), w.rain_intensity(), w.phase("wind"),
 		w.wind_strength(), int(w.wind["dir_deg"]), "  (forced)" if w.forced else ""])
 	lines.append("racing %d · queued %d · done %d · failed %d" % [sim.racers.size(), sim.queue.size(), net.finished, net.failed])
@@ -371,8 +372,12 @@ func _update_overlay(racing: Array) -> void:
 	for i in mini(10, racing.size()):
 		var r: Racer = racing[i]
 		var mark := "▶" if r.run_id == follow_run else " "
-		lines.append("%s%-6s %-8s %5.1f s  %3d%%  %4.1f m/s  ⚡%d%s" % [mark, _nick_of(r.run_id), r.section,
-			r.elapsed_ms() / 1000.0, int(r.progress() * 100), r.v, r.boosts_left, "  BOOST" if r.boost_t > 0 else ""])
+		var timing := "%5.1f s" % (r.elapsed_ms() / 1000.0)
+		if r.looping:
+			timing = "L%d %5.1f s%s" % [r.lap + 1, r.lap_ms() / 1000.0,
+				"  best %5.2f" % (r.best_lap_ms() / 1000.0) if r.best_lap >= 0 else ""]
+		lines.append("%s%-6s %-8s %s  %3d%%  %4.1f m/s  ⚡%d%s%s" % [mark, _nick_of(r.run_id), r.section, timing,
+			int(r.progress() * 100), r.v, r.boosts_left, "  BOOST" if r.boost_t > 0 else "", "  PIT" if r.pit_requested else ""])
 	if not results.is_empty():
 		lines.append("")
 		lines.append("recent:")
