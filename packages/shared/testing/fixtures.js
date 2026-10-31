@@ -372,6 +372,14 @@ export const JOBS = PLAYERS.map((p, i) => ({
   updatedAt: at(55_000 + i * 10_000),
 }));
 
+/** A leaderboard / stretch-result setup (contracts §2f): the build raced and the run's weather. */
+const setupOf = (b, run) => ({
+  stars: { ...b.stars },
+  routes: { ...b.routes },
+  style: b.style,
+  weather: [...run.weatherSeen],
+});
+
 export const LEADERBOARD = [
   {
     rank: 1,
@@ -381,6 +389,7 @@ export const LEADERBOARD = [
     avatarUrl: MANIFESTS[2].renders.avatar_happy,
     bestTimeMs: RUNS[3].elapsedMs,
     setAt: RUNS[3].endedAt,
+    setup: setupOf(BUILDS[2], RUNS[3]),
   },
   {
     rank: 2,
@@ -390,6 +399,7 @@ export const LEADERBOARD = [
     avatarUrl: MANIFESTS[0].renders.avatar_happy,
     bestTimeMs: RUNS[0].elapsedMs,
     setAt: RUNS[0].endedAt,
+    setup: setupOf(BUILDS[0], RUNS[0]),
   },
 ];
 

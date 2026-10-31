@@ -110,6 +110,7 @@ var laps_max := 0
 # counts to the stretch the racer is on when it starts, so they add up to the lap exactly.
 var stretch_log: Array = []
 var best_stretches: Array = [] # the best lap's (payload form)
+var lap_weather := {}          # weather seen on this lap (game.run.lap weatherSeen)
 
 
 ## `course` is sim/course.gd or sim/village_course.gd (same segment interface; a loop track has `loop`).
@@ -276,8 +277,10 @@ func step(sim) -> void:
 	var rain: float = weather.rain_intensity()
 	if rain > 0.05:
 		weather_seen["rain"] = true
+		lap_weather["rain"] = true
 	if weather.wind_strength() > 0.05:
 		weather_seen["wind"] = true
+		lap_weather["wind"] = true
 
 	var r := route()
 	var k := r.curv_at(ls)
@@ -781,7 +784,7 @@ func _lap_done(sim) -> bool:
 		best_trace = trace.duplicate()
 		best_stretches = stretches
 	sim.emit("game.run.lap", {"runId": run_id, "lap": lap, "lapMs": ms, "elapsedMs": elapsed_ms(),
-		"splits": splits.duplicate(), "stretches": stretches, "isBest": is_best})
+		"splits": splits.duplicate(), "stretches": stretches, "weatherSeen": lap_weather.keys(), "isBest": is_best})
 	if pit_requested or (laps_max > 0 and lap >= laps_max):
 		return true
 	lap_start_tick = ticks
@@ -789,6 +792,7 @@ func _lap_done(sim) -> bool:
 	splits = {}
 	trace = []
 	stretch_log = []
+	lap_weather = {}
 	return false
 
 

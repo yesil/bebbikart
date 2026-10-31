@@ -87,6 +87,7 @@ test("lap messages for loop tracks", () => {
       { id: "farm", ms: 6_000, lostMs: 0 },
       { id: "square", ms: 8_250, lostMs: 0 },
     ],
+    weatherSeen: ["rain"],
     isBest: true,
   });
   expect(parseMsg("gameToServer", lap).ok).toBe(true);

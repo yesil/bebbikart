@@ -117,6 +117,18 @@ generated from the Godot sim (`bun run maps:export`, `tools/export_track_maps.gd
 maps:check` and `village_laps.gd` fail when a map no longer matches its course, and a bun test checks
 each map's stretches against `TRACK_STRETCHES`. Never edit the JSON by hand.
 
+## 2f. Setups ("peek at a faster racer")
+
+Kids learn by looking at what works. A **Setup** is what a time was set with: the build raced
+(`stars`, `routes`, `style`) and the `weather` on that lap (`WeatherKind[]`: rain or wind active at
+any time on the lap; `game.run.lap` carries each lap's `weatherSeen`, the server keeps them as
+`Run.lapWeather`; a point-to-point run uses the run's `weatherSeen`, and loop runs recorded before
+laps carried weather use the run's). `LeaderboardEntry.setup` is the setup of the player's best
+(the best lap's). In `run.ended`, each `StretchResult` with a session fastest carries
+`fastestSetup`, and a fork piece also carries `other`: the session's fastest through the same fork
+the other way (`{ id, ms, playerId, nickname, setup }`), so the phone can say "Mia takes the ford".
+The phone shows setups; it never copies one into the player's build.
+
 ## 3. Enums
 
 ```ts
@@ -421,6 +433,14 @@ interface LeaderboardEntry {
   avatarUrl: string;
   bestTimeMs: number;
   setAt: string;
+  setup: Setup; // what the best was set with (§2f)
+}
+
+interface Setup {
+  stars: Record<Ability, number>;
+  routes: ForkChoice;
+  style: DrivingStyle;
+  weather: WeatherKind[]; // active on that lap (§2f)
 }
 ```
 
@@ -573,7 +593,7 @@ interface RunStart {
 | `game.run.grid`     | `{ runId, goInMs }`: the run joined the start countdown (§2c); relayed to its phone as `run.grid` |
 | `game.run.progress` | `{ runId, progress, elapsedMs, section, boostsLeft, lap?, lapMs? }`, ≤ 5 Hz (lap fields on loops) |
 | `game.run.section`  | `{ runId, section, splitMs }`                                                                |
-| `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, stretches, isBest }`: loop tracks, each line crossing (`isBest` within this run; `stretches` this lap's, §2d) |
+| `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, stretches, weatherSeen, isBest }`: loop tracks, each line crossing (`isBest` within this run; `stretches` this lap's, §2d) |
 | `game.run.finished` | `{ runId, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, trace: GhostTrace, laps?, bestLapMs? }` |
 | `game.run.failed`   | `{ runId, reason: FailReason, section, stretch, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, laps?, bestLapMs? }` |
 | `game.weather`      | `WeatherState` (on every phase change)                                                       |

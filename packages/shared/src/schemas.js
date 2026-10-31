@@ -1,6 +1,6 @@
 // Data model and REST shapes (contracts.md §4–6).
 import { z } from "zod";
-import { BuildSchema } from "./build.js";
+import { BuildInputSchema, BuildSchema } from "./build.js";
 import {
   ABILITIES,
   DRAWING_KINDS,
@@ -45,6 +45,14 @@ export const SplitsSchema = z.partialRecord(SectionIdSchema, ms);
 /** Time on one stretch of one lap (contracts §2d), in driving order. lostMs: time-loss events. */
 export const StretchTimeSchema = z.object({ id: StretchIdSchema, ms, lostMs: ms });
 
+/**
+ * The setup a time was set with (contracts §2f): the build raced and the weather on that lap
+ * (loop tracks: the lap's own weatherSeen; point to point: the run's).
+ */
+export const SetupSchema = BuildInputSchema.extend({
+  weather: z.array(z.enum(WEATHER_KINDS)),
+});
+
 /** A stretch on the phone's result (run.ended): this run, the player's best, the session's fastest. */
 export const StretchResultSchema = StretchTimeSchema.extend({
   ability: AbilitySchema.nullable(), // the star it tests; null on a fork's safe alternative
@@ -52,6 +60,17 @@ export const StretchResultSchema = StretchTimeSchema.extend({
   fastestMs: ms.optional(), // the session's fastest on it (any racer, this run included)
   fastestPlayerId: z.string().optional(),
   fastestNickname: z.string().optional(),
+  fastestSetup: SetupSchema.optional(), // with fastestMs: the setup of that run (§2f)
+  // A fork piece: the session's fastest through the same fork on the other route (§2f).
+  other: z
+    .object({
+      id: StretchIdSchema,
+      ms,
+      playerId: z.string(),
+      nickname: z.string(),
+      setup: SetupSchema,
+    })
+    .optional(),
 });
 
 export const SessionSchema = z.object({
@@ -108,6 +127,7 @@ export const RunSchema = z.object({
   // stretches it completed on its last lap.
   stretches: z.array(StretchTimeSchema).optional(),
   lapStretches: z.array(z.array(StretchTimeSchema)).optional(), // loop tracks: every completed lap
+  lapWeather: z.array(z.array(WeatherKindSchema)).optional(), // loop tracks: each lap's weatherSeen
   events: z.array(RunEventSchema).optional(),
   boostsUsed: z.number().int().nonnegative().optional(),
   weatherSeen: z.array(WeatherKindSchema).optional(),
@@ -170,6 +190,7 @@ export const LeaderboardEntrySchema = z.object({
   avatarUrl: z.string(),
   bestTimeMs: ms,
   setAt: iso,
+  setup: SetupSchema, // what that best was set with (§2f)
 });
 
 /** One racer in the paddock, for the phones (paddock.updated): who else is here and how they are doing. */

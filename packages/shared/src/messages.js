@@ -111,6 +111,7 @@ export const CHANNELS = {
       elapsedMs: ms,
       splits: SplitsSchema,
       stretches: z.array(StretchTimeSchema), // this lap's, in driving order; they add up to lapMs
+      weatherSeen: z.array(WeatherKindSchema), // rain/wind active at any time on this lap
       isBest: z.boolean(),
     }),
     "game.run.finished": z.object({ ...runResult, trace: GhostTraceSchema }),
