@@ -374,7 +374,7 @@ export function buildRefineMessages({ observations, design, critique, previousEr
     JSON.stringify(design),
     "The art director looked at the real drawings and reviewed your design:",
     JSON.stringify(critique, null, 1),
-    'Improve the design: apply every "must" and "should" fix, and the "could" fixes that make the racer better. Keep what already works. Never move a main colour away from the drawing: the ride's main colour stays the vehicle's main drawn colour (add stripes with patterns or extras instead), and the character keeps its own. Reply with the complete JSON again (featureMap, spec, notes).',
+    'Improve the design: apply every "must" and "should" fix, and the "could" fixes that make the racer better. Keep what already works. Never move a main colour away from the drawing: the main colour of the ride stays the main drawn colour of the vehicle (add stripes with patterns or extras instead), and the character keeps its own. Reply with the complete JSON again (featureMap, spec, notes).',
   ];
   if (previousErrors?.length) ask.push(retryText(previousErrors));
   return [
