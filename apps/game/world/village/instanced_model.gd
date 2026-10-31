@@ -23,6 +23,9 @@ func _ready() -> void:
 		root.free()
 		push_error("instanced_model %s: no mesh in %s" % [name, model])
 		return
+	# Many models scale or turn their mesh on an inner node (e.g. Z-up exports at 100x):
+	# carry that into every copy, or the mesh comes out tiny or lying down.
+	var inner := _model_transform(mi)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = mi.mesh
@@ -33,7 +36,7 @@ func _ready() -> void:
 		var k := i * 12
 		var t := transforms
 		mm.set_instance_transform(i, Transform3D(Vector3(t[k], t[k + 1], t[k + 2]), Vector3(t[k + 3], t[k + 4], t[k + 5]),
-			Vector3(t[k + 6], t[k + 7], t[k + 8]), Vector3(t[k + 9], t[k + 10], t[k + 11])))
+			Vector3(t[k + 6], t[k + 7], t[k + 8]), Vector3(t[k + 9], t[k + 10], t[k + 11])) * inner)
 	multimesh = mm
 	material_override = override
 
@@ -44,6 +47,16 @@ static func pack(xfs: Array) -> PackedFloat32Array:
 		out.append_array([x.basis.x.x, x.basis.x.y, x.basis.x.z, x.basis.y.x, x.basis.y.y, x.basis.y.z,
 			x.basis.z.x, x.basis.z.y, x.basis.z.z, x.origin.x, x.origin.y, x.origin.z])
 	return out
+
+
+## Transform of a mesh node relative to its model's root.
+static func _model_transform(n: Node3D) -> Transform3D:
+	var xf := Transform3D()
+	var cur: Node = n
+	while cur != null and cur.get_parent() != null and cur is Node3D:
+		xf = (cur as Node3D).transform * xf
+		cur = cur.get_parent()
+	return xf
 
 
 static func _first_mesh(n: Node) -> MeshInstance3D:

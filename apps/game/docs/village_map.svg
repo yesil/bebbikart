@@ -147,7 +147,9 @@
 <polygon points="766.5,545.7 775.9,511.0 749.8,504.0 740.5,538.7" fill="#6b3f22" stroke="#3a2a1c" stroke-width="1.5"/>
 <text x="758.2" y="524.8" font-size="13" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">Bauernhof</text>
 <polygon points="786.5,678.3 784.4,618.3 751.5,619.5 753.6,679.4" fill="#d9c7a0" stroke="#3a2a1c" stroke-width="1.5"/>
-<text x="769.0" y="648.9" font-size="13" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">Käserei &amp; Schoggifabrik</text>
+<text x="769.0" y="648.9" font-size="13" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">Käserei</text>
+<polygon points="553.9,137.4 612.1,122.9 604.1,90.9 545.9,105.4" fill="#d9c7a0" stroke="#3a2a1c" stroke-width="1.5"/>
+<text x="579.0" y="114.2" font-size="13" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">Schoggifabrik</text>
 <polygon points="726.2,745.5 760.9,735.7 753.6,709.8 718.9,719.5" fill="#8e3b2f" stroke="#3a2a1c" stroke-width="1.5"/>
 <text x="739.9" y="727.6" font-size="13" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">Heustall</text>
 <polygon points="108.1,314.3 109.2,287.3 85.3,286.3 84.1,313.3" fill="#6b3f22" stroke="#3a2a1c" stroke-width="1.5"/>

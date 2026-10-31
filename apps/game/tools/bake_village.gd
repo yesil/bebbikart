@@ -224,22 +224,20 @@ func _bake_terrain() -> void:
 
 const ROAD_STEP := 6.0
 const TAPER := 10.0
-const DETOURS := ["ramp_around", "pond_bridge", "cross_sheltered"]
 ## Route pieces: [container name, segment id, s0 or -1 (start), s1 or -1 (end), material, deck thickness]
 const ROAD_PIECES := [
 	["start", "start", -1, -1, "road_ford", -1.0],
 	["hills1", "hills1", -1, -1, "road_asphalt", -1.0],
 	# The run-up stops where the kicker starts: no road edge left standing above the pit.
-	["ramp_jump_run_up", "ramp_jump", -1, "kick", "road_asphalt", -1.0],
-	["ramp_jump_landing", "ramp_jump", "land", -1, "road_asphalt", -1.0],
-	["ramp_around", "ramp_around", -1, -1, "road_dirt_detour", -1.0],
+	["ramp_jump_run_up", "ramp_jump", "jin", "kick", "road_asphalt", -1.0],
+	["ramp_jump_landing", "ramp_jump", "land", "jout", "road_asphalt", -1.0],
+	["ramp_around", "ramp_around", "jin", "jout", "road_dirt_detour", -1.0],
 	["hills2", "hills2", -1, -1, "road_asphalt", -1.0],
-	["pond_water_in", "pond_water", -1, "water_in", "road_asphalt", -1.0],
-	["pond_ford", "pond_water", "water_in", "water_out", "road_ford", -1.0],
-	["pond_water_out", "pond_water", "water_out", -1, "road_asphalt", -1.0],
-	["pond_bridge_in", "pond_bridge", -1, "deck_in", "road_asphalt_detour", -1.0],
+	# The fork's shared stretches reach past the water's edge, so the ford runs junction to junction.
+	["pond_ford", "pond_water", "jin", "jout", "road_ford", -1.0],
+	["pond_bridge_in", "pond_bridge", "jin", "deck_in", "road_asphalt", -1.0],
 	["pond_bridge_deck", "pond_bridge", "deck_in", "deck_out", "road_planks", 0.45],
-	["pond_bridge_out", "pond_bridge", "deck_out", -1, "road_asphalt_detour", -1.0],
+	["pond_bridge_out", "pond_bridge", "deck_out", "jout", "road_asphalt", -1.0],
 	["mill", "mill", -1, -1, "road_asphalt", -1.0],
 	["farm", "farm", -1, -1, "road_dirt_detour", -1.0],
 	["cobbles", "cobbles", -1, -1, "road_ford", -1.0],
@@ -247,14 +245,107 @@ const ROAD_PIECES := [
 	["alpbach_in", "alpbach", -1, "water_in", "road_asphalt", -1.0],
 	["alpbach_ford", "alpbach", "water_in", "water_out", "road_ford", -1.0],
 	["alpbach_out", "alpbach", "water_out", -1, "road_asphalt", -1.0],
-	["cross_exposed_in", "cross_exposed", -1, "causeway_in", "road_planks", -1.0],
+	["cross_exposed_in", "cross_exposed", "jin", "causeway_in", "road_planks", -1.0],
 	["cross_exposed", "cross_exposed", "causeway_in", "causeway_out", "road_planks", 0.35],
-	["cross_exposed_out", "cross_exposed", "causeway_out", -1, "road_planks", -1.0],
-	["cross_sheltered", "cross_sheltered", -1, -1, "road_ford", -1.0],
+	["cross_exposed_out", "cross_exposed", "causeway_out", "jout", "road_planks", -1.0],
+	["cross_sheltered", "cross_sheltered", "jin", "jout", "road_ford", -1.0],
 	# The roundabout's circulating stretch is the ring itself (_roundabout), one surface.
 	["bends_in", "bends", -1, "ring_in", "road_asphalt", -1.0],
 	["bends_out", "bends", "ring_out", -1, "road_asphalt", -1.0],
 ]
+
+
+## Fork junctions: [direct branch, detour branch, material of the shared surface]. Near each
+## split and merge the two branches overlap; that stretch is ONE road (_junction_pieces) whose
+## edges follow the union of both branches, and each branch's own road starts only where it
+## has left the other ("jin") and ends where it meets it again ("jout"). No coplanar overlap.
+const FORKS := [
+	["ramp_jump", "ramp_around", "road_asphalt"],
+	["pond_water", "pond_bridge", "road_asphalt"],
+	["cross_exposed", "cross_sheltered", "road_planks"],
+]
+const JUNCTION_STEP := 1.0
+var _junction := {}   # fork direct id -> [split length, merge length] along both branches
+
+
+## Metres from a fork's split (or merge) until the two branches no longer overlap.
+func _junction_lengths() -> void:
+	for f in FORKS:
+		var a: Dictionary = course.segments[f[0]]
+		var b: Dictionary = course.segments[f[1]]
+		var ra: Route = a["route"]
+		var rb: Route = b["route"]
+		var need: float = float(a["half_width"]) + float(b["half_width"]) + 0.6
+		var lens := []
+		for from_end in [false, true]:
+			var s := 0.0
+			while s < minf(ra.length, rb.length) * 0.5:
+				var pa := ra.pos_at(ra.length - s if from_end else s)
+				var pb := rb.pos_at(rb.length - s if from_end else s)
+				if Vector2(pa.x - pb.x, pa.z - pb.z).length() >= need:
+					break
+				s += 0.5
+			lens.append(s)
+		print("bake: fork %s junctions %.1f m / %.1f m" % [f[0], lens[0], lens[1]])
+		_junction[f[0]] = lens
+		_junction[f[1]] = lens
+
+
+## The shared stretches at each fork's split and merge, as single roads covering both branches.
+func _junction_pieces(mgr: Node) -> void:
+	for f in FORKS:
+		var a: Dictionary = course.segments[f[0]]
+		var b: Dictionary = course.segments[f[1]]
+		var ra: Route = a["route"]
+		var rb: Route = b["route"]
+		var lens: Array = _junction[f[0]]
+		for end in [0, 1]:
+			var length: float = lens[end]
+			var pts: Array = []
+			var n := maxi(2, int(ceil(length / JUNCTION_STEP)))
+			for i in n + 1:
+				var t := length * i / n
+				var sa := t if end == 0 else ra.length - length + t
+				var sb := t if end == 0 else rb.length - length + t
+				var ca := ra.pos_at(sa)
+				var nrm := ra.normal_at(sa)
+				var off := (rb.pos_at(sb) - ca).dot(nrm)
+				var lo := minf(-road_hw(a, sa), off - road_hw(b, sb))
+				var hi := maxf(road_hw(a, sa), off + road_hw(b, sb))
+				var dir := (ra.pos_at(minf(sa + 0.5, ra.length)) - ra.pos_at(maxf(sa - 0.5, 0.0))).normalized()
+				pts.append([ca + nrm * (lo + hi) * 0.5, dir, hi - lo, 0.45])
+			_container(mgr, "%s_%s" % [f[0], "split" if end == 0 else "merge"], f[2], -1.0, pts)
+
+
+## One Road Generator container through points [position, direction, width, shoulder].
+func _container(mgr: Node, name: String, material: String, thickness: float, pts: Array) -> void:
+	var cont := RoadContainer.new()
+	cont.name = name
+	_mark(cont)
+	cont.flatten_terrain = false
+	cont.material_resource = _res(MAT_DIR + material + ".tres")
+	cont.underside_thickness = thickness
+	mgr.add_child(cont)
+	var prev: RoadPoint = null
+	for i in pts.size():
+		var rp := RoadPoint.new()
+		rp.name = "RP_%03d" % i
+		_mark(rp)
+		cont.add_child(rp)
+		rp.transform = Transform3D(Basis.looking_at(-(pts[i][1] as Vector3), Vector3.UP), pts[i][0])
+		rp.auto_lanes = false
+		rp.traffic_dir = [RoadPoint.LaneDir.FORWARD]
+		rp.lanes = [RoadPoint.LaneType.ONE_WAY]
+		rp.lane_width = pts[i][2]
+		rp.shoulder_width_l = pts[i][3]
+		rp.shoulder_width_r = pts[i][3]
+		rp.gutter_profile = Vector2(0.45, -0.25)
+		var gap: float = (pts[mini(i + 1, pts.size() - 1)][0] as Vector3).distance_to(pts[maxi(i - 1, 0)][0]) * 0.5
+		rp.prior_mag = gap / 3.0
+		rp.next_mag = gap / 3.0
+		if prev != null:
+			prev.connect_roadpoint(RoadPoint.PointInit.NEXT, rp, RoadPoint.PointInit.PRIOR)
+		prev = rp
 
 
 ## Junction half width: the widest trunk segment touching the junction, else the widest of any.
@@ -281,6 +372,10 @@ func road_hw(seg: Dictionary, s: float) -> float:
 
 func _piece_s(seg: Dictionary, key: String) -> float:
 	match key:
+		"jin":
+			return float(_junction[seg["id"]][0])
+		"jout":
+			return (seg["route"] as Route).length - float(_junction[seg["id"]][1])
 		"kick":
 			return float(seg["ramp"]["kick_a"]) + 0.5
 		"lip":
@@ -310,49 +405,28 @@ func _piece_s(seg: Dictionary, key: String) -> float:
 func _bake_roads() -> void:
 	var mgr := RoadManager.new()
 	_replace("Roads", mgr)
+	_junction_lengths()
+	_junction_pieces(mgr)
 	for piece in ROAD_PIECES:
 		var seg: Dictionary = course.segments[piece[1]]
 		var r: Route = seg["route"]
 		var s0 := 0.0 if typeof(piece[2]) == TYPE_INT else _piece_s(seg, piece[2])
 		var s1 := r.length if typeof(piece[3]) == TYPE_INT else _piece_s(seg, piece[3])
-		var cont := RoadContainer.new()
-		cont.name = piece[0]
-		_mark(cont)
-		cont.flatten_terrain = false
-		cont.material_resource = _res(MAT_DIR + String(piece[4]) + ".tres")
-		cont.underside_thickness = piece[5]
-		mgr.add_child(cont)
+		if s1 - s0 < 0.5:
+			_fail("road piece %s is empty (s %.1f..%.1f)" % [piece[0], s0, s1])
+			continue
 		var n := maxi(1, int(ceil((s1 - s0) / ROAD_STEP)))
 		var step := (s1 - s0) / n
-		var detour: bool = piece[1] in DETOURS
-		var prev: RoadPoint = null
+		var pts: Array = []
 		for i in n + 1:
 			var s := s0 + i * step
-			var rp := RoadPoint.new()
-			rp.name = "RP_%03d" % i
-			_mark(rp)
-			cont.add_child(rp)
-			var pos := r.pos_at(s)
 			var dir := (r.pos_at(minf(s + 0.5, r.length)) - r.pos_at(maxf(s - 0.5, 0.0))).normalized()
-			rp.transform = Transform3D(Basis.looking_at(-dir, Vector3.UP), pos)
-			rp.auto_lanes = false
-			rp.traffic_dir = [RoadPoint.LaneDir.FORWARD]
-			rp.lanes = [RoadPoint.LaneType.ONE_WAY]
-			rp.lane_width = 2.0 * road_hw(seg, s)
 			var sh := 0.45
-			if detour and (s < 16.0 or s > r.length - 16.0):
-				sh = 0.0
 			# Blend into the roundabout ring without a shoulder step.
 			if piece[1] == "bends" and (absf(s - float(course.roundabout["s0"])) < 8.0 or absf(s - float(course.roundabout["s1"])) < 8.0):
 				sh = 0.0
-			rp.shoulder_width_l = sh
-			rp.shoulder_width_r = sh
-			rp.gutter_profile = Vector2(0.45, -0.25)
-			rp.prior_mag = step / 3.0
-			rp.next_mag = step / 3.0
-			if prev != null:
-				prev.connect_roadpoint(RoadPoint.PointInit.NEXT, rp, RoadPoint.PointInit.PRIOR)
-			prev = rp
+			pts.append([r.pos_at(s), dir, 2.0 * road_hw(seg, s), sh])
+		_container(mgr, piece[0], piece[4], piece[5], pts)
 	await process_frame
 	for cont in mgr.get_children():
 		(cont as RoadContainer).rebuild_segments(true)
@@ -376,31 +450,56 @@ func _roundabout() -> void:
 	var y := shape.roundabout_y() - 0.015
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var strip := func(l0: Vector3, r0: Vector3, l1: Vector3, r1: Vector3) -> void:
-		for v: Array in [[l0, 0.0], [r1, 1.0], [r0, 1.0], [l0, 0.0], [l1, 0.0], [r1, 1.0]]:
-			st.set_normal(Vector3.UP)
-			st.set_uv(Vector2((1.0 + float(v[1])) / 8.0, 0.0))
-			st.add_vertex(v[0])
-	var n := 96
+	# Lane UV across the ring (u in the 1/8..2/8 lane column) so the edge lines are painted
+	# at the inner and outer edges.
 	var inner := radius - plan.ring_hw
 	var outer := radius + plan.ring_hw
+	var vert := func(d: Vector2, r: float) -> void:
+		st.set_normal(Vector3.UP)
+		st.set_uv(Vector2((1.0 + (r - inner) / (outer - inner)) / 8.0, 0.0))
+		st.add_vertex(Vector3(c.x + d.x * r, y, c.y + d.y * r))
+	# The raced road where it enters and leaves the ring: ring cells under it are left out, so
+	# the two never lie on top of each other.
+	var br: Route = course.segments["bends"]["route"]
+	var road: Array = []
+	var rs := 0.0
+	while rs <= br.length:
+		if rs < float(course.roundabout["s0"]) + 1.0 or rs > float(course.roundabout["s1"]) - 1.0:
+			var q := br.pos_at(rs)
+			road.append([Vector2(q.x, q.z), road_hw(course.segments["bends"], rs)])
+		rs += 0.5
+	var under_road := func(q: Vector2) -> bool:
+		for e in road:
+			if q.distance_to(e[0]) < float(e[1]):
+				return true
+		return false
+	var n := 480
+	var rings := 12
 	for i in n:
-		var t0 := TAU * i / n
-		var t1 := TAU * (i + 1) / n
-		var d0 := Vector2(cos(t0), sin(t0))
-		var d1 := Vector2(cos(t1), sin(t1))
-		var p := func(d: Vector2, r: float) -> Vector3: return Vector3(c.x + d.x * r, y, c.y + d.y * r)
-		strip.call(p.call(d0, outer), p.call(d0, inner), p.call(d1, outer), p.call(d1, inner))
+		var d0 := Vector2(cos(TAU * i / n), sin(TAU * i / n))
+		var d1 := Vector2(cos(TAU * (i + 1) / n), sin(TAU * (i + 1) / n))
+		for k in rings:
+			var r0 := lerpf(inner, outer, float(k) / rings)
+			var r1 := lerpf(inner, outer, float(k + 1) / rings)
+			# A cell belongs to the road when its centre is on it (cells are ~20 cm).
+			var mid := c + (d0 + d1).normalized() * (r0 + r1) * 0.5
+			if under_road.call(mid):
+				continue
+			for v: Array in [[d0, r1], [d1, r0], [d0, r0], [d0, r1], [d1, r1], [d1, r0]]:
+				vert.call(v[0], v[1])
+	# Side streets start at the ring's outer edge (no overlap with the ring).
 	for arm in plan.arms:
 		var a: Vector2 = arm[0]
 		var b: Vector2 = arm[1]
 		var dir := (b - a).normalized()
 		var side := Vector2(-dir.y, dir.x) * VillagePlan.ARM_HALF_WIDTH
-		var a0 := a - dir * 1.5
-		var ya := y
 		var yb := shape.height_at(b.x, b.y) + 0.04
-		strip.call(Vector3(a0.x - side.x, ya, a0.y - side.y), Vector3(a0.x + side.x, ya, a0.y + side.y),
-			Vector3(b.x - side.x, yb, b.y - side.y), Vector3(b.x + side.x, yb, b.y + side.y))
+		var corners := [Vector3(a.x - side.x, y, a.y - side.y), Vector3(a.x + side.x, y, a.y + side.y),
+			Vector3(b.x - side.x, yb, b.y - side.y), Vector3(b.x + side.x, yb, b.y + side.y)]
+		for v: Array in [[0, 0.0], [3, 1.0], [1, 1.0], [0, 0.0], [2, 0.0], [3, 1.0]]:
+			st.set_normal(Vector3.UP)
+			st.set_uv(Vector2((1.0 + float(v[1])) / 8.0, 0.0))
+			st.add_vertex(corners[v[0]])
 	st.set_material(asphalt)
 	_mesh_node(node, "Ring", st.commit(), false)
 	# Island kerb: short stone blocks round the island edge.

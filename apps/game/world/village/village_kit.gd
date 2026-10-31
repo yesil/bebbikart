@@ -647,7 +647,7 @@ func swiss_details(course, plan, shape) -> Dictionary:
 			continue
 		var y: float = ground.call(p)
 		var model := COW_2 if herd % 3 == 0 else (SHEEP if herd % 3 == 1 else COW)
-		var sc := 0.28 if model == COW_2 else (0.55 if model == SHEEP else 0.26)
+		var sc := 0.34 if model == COW_2 else (0.65 if model == SHEEP else 0.32)
 		out.append([model, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc, sc)), Vector3(p.x, y, p.y))])
 		herd += 1
 	# Sheep on the slopes round the alp.
@@ -708,5 +708,7 @@ static func _free(plan, p: Vector2, clear: float) -> bool:
 			if Geometry2D.is_point_in_polygon(p, Geometry2D.offset_polygon(plan.footprint(b), clear)[0]):
 				return false
 	if Geometry2D.is_point_in_polygon(p, plan.pond):
+		return false
+	if plan.polyline_dist(p, plan.alp_stream) < plan.ALP_HALF_WIDTH + clear:
 		return false
 	return plan.polyline_dist(p, plan.brook) > plan.BROOK_HALF_WIDTH + clear

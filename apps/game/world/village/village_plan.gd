@@ -276,10 +276,12 @@ func _landmarks() -> void:
 	# Cheese shop and chocolate shop facing each other across the main street by the start.
 	_fit("shop", "hills1", 5.0, 1, 0.0, "Käse")
 	_fit("shop", "start", 7.0, -1, 0.0, "Schoggi")
-	# The farm on the alp: the farmhouse by the farm track, the cheese and chocolate
-	# factory on the cobbled lane, a hay barn inside the ridge hairpin.
+	# The farm on the alp: the farmhouse by the farm track, the cheese dairy (Käserei) on
+	# the cobbled lane, a hay barn inside the ridge hairpin.
 	_fit("farmhouse", "farm", 16.0, -1, 0.0, "Bauernhof")
-	_fit("factory", "cobbles", 14.0, -1, 0.0, "Käserei & Schoggifabrik")
+	_fit("factory", "cobbles", 14.0, -1, 0.0, "Käserei")
+	# The chocolate factory is a separate works in the village, by the road down to the brook.
+	_fit("factory", "hills2", route("hills2").length * 0.45, 1, 0.0, "Schoggifabrik")
 	_fit("barn", "ridge", route("ridge").length * 0.35, -1, 2.0, "Heustall")
 	# Open meadow south of the causeway.
 	var cr := route("cross_exposed")
