@@ -636,3 +636,80 @@ test("two racers with the same name: the second is 'Mia 2' everywhere, renaming 
   expect((await rename(c, "Sixteen chars ok")).nickname).toBe("Sixteen chars ok");
   expect((await rename(b, "Sixteen chars ok")).nickname).toBe("Sixteen chars 2");
 });
+
+test("a heat: racers who left together see each other's places on their phones, done when all are home", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey });
+  await game.start();
+  await game.wait("welcome");
+  const racer = async (nickname, pair) => {
+    const dev = await fetch(`${base}/api/device`, { method: "POST" });
+    const cookie = dev.headers.get("set-cookie").split(";")[0];
+    const me = await (
+      await fetch(`${base}/api/players`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ nickname }),
+      })
+    ).json();
+    const phone = client({ cookie }, { role: "phone" });
+    await phone.start();
+    await phone.wait("welcome");
+    const form = new FormData();
+    for (const [k, f] of [
+      ["character", `${pair}-character-cat.jpg`],
+      ["vehicle", `${pair}-vehicle-kart.jpg`],
+    ])
+      form.append(
+        k,
+        new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }),
+      );
+    await fetch(`${base}/api/players/me/drawings`, {
+      method: "POST",
+      headers: { cookie },
+      body: form,
+    });
+    await phone.wait("player.updated", (p) => p.status === "ready", 20000);
+    return { me, phone };
+  };
+  const a = await racer("Heat A", "pair01");
+  const b = await racer("Heat B", "pair01");
+  const runIds = [];
+  for (const r of [a, b]) {
+    r.phone.send("phoneToServer", "phone.go", {});
+    runIds.push((await game.wait("run.start", (p) => p.playerId === r.me.id)).payload.runId);
+  }
+  for (const runId of runIds) game.send("gameToServer", "game.run.started", { runId });
+  const result = { splits: {}, events: [], boostsUsed: 0, weatherSeen: [] };
+  game.send("gameToServer", "game.run.finished", {
+    runId: runIds[1],
+    elapsedMs: 31000,
+    ...result,
+    trace: { runId: runIds[1], hz: 10, samples: [] },
+  });
+  // B is home first: both phones hear it, A is still racing.
+  for (const r of [a, b]) {
+    const h = (await r.phone.wait("run.heat", (p) => !p.done)).payload;
+    expect(h.heatId).toBe(runIds[0]);
+    expect(h.entries.map((e) => [e.nickname, e.place, e.timeMs, e.outcome])).toEqual([
+      ["Heat B", 1, 31000, "finished"],
+      ["Heat A", undefined, undefined, undefined],
+    ]);
+  }
+  game.send("gameToServer", "game.run.failed", {
+    runId: runIds[0],
+    elapsedMs: 8000,
+    reason: "flipped",
+    section: "hills",
+    ...result,
+  });
+  for (const r of [a, b]) {
+    const h = (await r.phone.wait("run.heat", (p) => p.done)).payload;
+    expect(h.entries.map((e) => [e.nickname, e.place, e.outcome, e.failReason])).toEqual([
+      ["Heat B", 1, "finished", undefined],
+      ["Heat A", undefined, "failed", "flipped"],
+    ]);
+  }
+  game.ws.close();
+  a.phone.ws.close();
+  b.phone.ws.close();
+}, 30000);

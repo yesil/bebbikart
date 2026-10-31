@@ -454,6 +454,56 @@ export function createGame({ db, settings, hub, log = console.log }) {
       coach: abortTip(config.language),
     });
     pushPlayer(run.playerId);
+    pushHeat(run.id);
+  }
+
+  // ------------------------------------------------------------------ heats
+  // Runs that left the start within HEAT_WINDOW_MS of each other raced each other (the start
+  // countdown sends a group off together). Each time one of them ends, every phone in the heat
+  // gets the places so far (run.heat); the last one home makes it done.
+  const HEAT_WINDOW_MS = 2_500;
+  const heats = new Map(); // heatId (its first run's id) -> { id, startedAt, runIds }
+  const runHeat = new Map(); // runId -> heatId
+  function joinHeat(runId) {
+    const t = Date.now();
+    let heat = [...heats.values()].find((h) => t - h.startedAt <= HEAT_WINDOW_MS);
+    if (!heat) {
+      heat = { id: runId, startedAt: t, runIds: [] };
+      heats.set(heat.id, heat);
+    }
+    heat.runIds.push(runId);
+    runHeat.set(runId, heat.id);
+  }
+  function pushHeat(runId) {
+    const heat = heats.get(runHeat.get(runId));
+    if (!heat) return;
+    const members = heat.runIds
+      .map((id) => runs.get(id))
+      .filter((r) => r && players.has(r.playerId));
+    const done = members.every((r) => r.status === "done");
+    if (members.length >= 2) {
+      const timed = members
+        .filter((r) => r.status === "done" && rankTime(r) !== undefined)
+        .sort((a, b) => rankTime(a) - rankTime(b));
+      const racing = members.filter((r) => r.status !== "done");
+      const out = members.filter((r) => r.status === "done" && rankTime(r) === undefined);
+      const entries = [...timed, ...racing, ...out].map((r) => {
+        const e = { playerId: r.playerId, nickname: players.get(r.playerId).nickname };
+        const avatar = manifests.get(r.playerId)?.renders.avatar_happy;
+        if (avatar) e.avatarUrl = avatar;
+        const i = timed.indexOf(r);
+        if (i >= 0) Object.assign(e, { place: i + 1, timeMs: rankTime(r) });
+        if (r.status === "done") e.outcome = r.outcome;
+        if (r.failReason) e.failReason = r.failReason;
+        return e;
+      });
+      for (const r of members)
+        hub.toPhone(r.playerId, "run.heat", { heatId: heat.id, done, entries });
+    }
+    if (done) {
+      heats.delete(heat.id);
+      for (const id of heat.runIds) runHeat.delete(id);
+    }
   }
   /** The game went away: its runs can't finish. */
   function abortAllRuns(reason) {
@@ -467,6 +517,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
         coach: abortTip(config.language),
       });
       pushPlayer(r.playerId);
+      pushHeat(r.id);
       log(`[run] ${r.id} aborted (${reason})`);
     }
   }
@@ -481,6 +532,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
         if (!r) return;
         const started = { ...r, status: "running", startedAt: now() };
         saveRun(started);
+        joinHeat(r.id);
         hub.toPhone(r.playerId, "run.started", { run: started });
         pushPlayer(r.playerId);
         return;
@@ -605,6 +657,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     );
     const rank = ranks().get(r.playerId);
     hub.toPhone(r.playerId, "run.ended", { run, isPersonalBest, ...(rank ? { rank } : {}), coach });
+    pushHeat(run.id);
     pushPlayer(r.playerId);
     if (isPersonalBest) {
       pushLeaderboard();

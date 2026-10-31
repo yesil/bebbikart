@@ -151,6 +151,17 @@ export const LeaderboardEntrySchema = z.object({
   setAt: iso,
 });
 
+/** One racer in a heat (the runs that left the start together, contracts §7 run.heat). */
+export const HeatEntrySchema = z.object({
+  playerId: z.string(),
+  nickname: z.string(),
+  avatarUrl: z.string().optional(),
+  place: z.number().int().positive().optional(), // by time, among the heat's racers with a time
+  timeMs: ms.optional(), // finish time, or the best lap on a loop track
+  outcome: z.enum(RUN_OUTCOMES).optional(), // absent: still racing
+  failReason: FailReasonSchema.optional(),
+});
+
 export const RosterEntrySchema = z.object({
   playerId: z.string(),
   nickname: z.string(),

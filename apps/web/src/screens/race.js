@@ -166,6 +166,7 @@ export function Result({ ctx }) {
       }
       ${r.rank ? html`<p class="muted">${COPY.garage.rank} #${r.rank}</p>` : null}
     </div>
+    ${s.heat ? html`<${HeatCard} s=${s} />` : null}
     ${
       run.splits && Object.keys(run.splits).length
         ? html`<section class="card">
@@ -199,5 +200,30 @@ export function Result({ ctx }) {
       <button class="ghost" onClick=${() => dispatch({ type: "clearResult", coach: r.coach })}>${COPY.result.change}</button>
       <button class="go small" onClick=${again}>${COPY.result.again}</button>
     </div>
+  `;
+}
+
+/** Everyone who left the start with me: places as they come home, mine highlighted. */
+function HeatCard({ s }) {
+  const h = s.heat;
+  const mine = h.entries.find((e) => e.playerId === s.me.id);
+  const racing = h.entries.filter((e) => !e.outcome).length;
+  return html`
+    <section class="card heat">
+      <h2>
+        ${COPY.result.thisRace}${mine?.place ? html` · <b>${COPY.result.place(mine.place, h.entries.length)}</b>` : null}
+      </h2>
+      <ol class="board">
+        ${h.entries.map(
+          (e) => html`<li key=${e.playerId} class=${e.playerId === s.me.id ? "mine" : ""}>
+            <span class="rank">${e.place ?? ""}</span>
+            ${e.avatarUrl ? html`<img src=${e.avatarUrl} alt="" />` : html`<span class="ph">🏎️</span>`}
+            <span class="who"><b>${e.nickname}</b></span>
+            <span class="time">${e.timeMs !== undefined ? secs(e.timeMs) : e.outcome ? COPY.result.oops : COPY.result.racing}</span>
+          </li>`,
+        )}
+      </ol>
+      ${racing ? html`<p class="muted center">${COPY.result.stillRacing(racing)}</p>` : null}
+    </section>
   `;
 }

@@ -405,6 +405,7 @@ interface Envelope<T extends string, P> {
 | `player.removed`             | `{ playerId }`                                                                                 | The player quit or the admin removed them: back to the join screen |
 | `run.queued` / `run.started` | `{ run }`                                                                                      |                                                       |
 | `run.grid`                   | `{ runId, goInMs }`                                                                            | On the start grid: the lights go green in goInMs (§2c) |
+| `run.heat`                   | `{ heatId, done, entries: HeatEntry[] }`                                                       | A heat-mate's run ended (see "Heats" below)           |
 | `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1 |
 | `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
@@ -415,6 +416,27 @@ interface Envelope<T extends string, P> {
 | `config.updated`             | config                                                                                         |                                                       |
 | `camera.updated`             | `{ playerId?, runId? }`: the racer the big-screen camera follows now; empty when nobody         | Every camera cut (relayed `game.camera`)              |
 | `error`                      | `{ code, message, refId? }`                                                                    |                                                       |
+
+### Heats
+
+Runs that left the start within 2.5 s of each other (a countdown group, or a group pressing Go
+together without one) are a **heat**: they raced each other. Each time one of them ends, the
+server sends every phone in the heat `run.heat`, so a kid who is home first watches the others
+come in; `done` is true once the last one is home. `heatId` is the heat's first run id. A heat of
+one sends nothing.
+
+```ts
+interface HeatEntry {
+  playerId: string;
+  nickname: string;
+  avatarUrl?: string;
+  place?: number; // by time among the heat's racers with a time (finish time, or best lap on a loop)
+  timeMs?: number;
+  outcome?: RunOutcome; // absent: still racing
+  failReason?: FailReason;
+}
+// entries: placed racers by place, then those still racing, then the ones out without a time.
+```
 
 ### Server → Admin
 

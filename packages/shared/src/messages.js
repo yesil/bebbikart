@@ -7,6 +7,7 @@ import {
   CoachTipSchema,
   FailReasonSchema,
   GhostTraceSchema,
+  HeatEntrySchema,
   LeaderboardEntrySchema,
   PlayerViewSchema,
   RosterEntrySchema,
@@ -167,6 +168,13 @@ export const CHANNELS = {
       isPersonalBest: z.boolean(),
       rank: z.number().int().positive().optional(),
       coach: CoachTipSchema,
+    }),
+    // The racers who left the start with this one: places so far, sent on each of their results;
+    // done once the last of them is home (§7 "Heats").
+    "run.heat": z.object({
+      heatId: z.string(),
+      done: z.boolean(),
+      entries: z.array(HeatEntrySchema),
     }),
     // Who the big-screen camera follows now (relayed game.camera); empty when nobody.
     "camera.updated": z.object({

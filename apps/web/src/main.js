@@ -18,6 +18,7 @@ const initial = {
   leaderboard: [],
   live: null, // { runId, progress, elapsedMs, section, boostsLeft, deltaVsBestMs, sections: {s: {splitMs, bestSplitMs}} }
   result: null, // run.ended payload, plus prevBest splits
+  heat: null, // run.heat: everyone who left the start with my last run, places so far
   camera: null, // camera.updated: { playerId?, runId? } of the racer on the big screen
   tab: "garage",
   revealSeen: readRevealSeen(),
@@ -66,7 +67,16 @@ function reducer(s, a) {
 
 /** Back to the join screen: the racer is gone (quit, or removed by the admin). */
 function left(s) {
-  return { ...s, me: null, live: null, result: null, redo: false, quitting: false, tab: "garage" };
+  return {
+    ...s,
+    me: null,
+    live: null,
+    result: null,
+    heat: null,
+    redo: false,
+    quitting: false,
+    tab: "garage",
+  };
 }
 
 function onWs(s, type, p) {
@@ -99,6 +109,7 @@ function onWs(s, type, p) {
       return {
         ...s,
         result: null,
+        heat: s.live?.runId === p.run.id ? s.heat : null,
         live:
           s.live?.runId === p.run.id
             ? s.live
@@ -111,6 +122,9 @@ function onWs(s, type, p) {
               },
         me: s.me ? { ...s.me, currentRun: p.run } : s.me,
       };
+    case "run.heat":
+      // My heat's places so far (contracts §7 "Heats"); updates as the others come home.
+      return p.entries.some((e) => e.playerId === s.me?.id) ? { ...s, heat: p } : s;
     case "run.grid":
       // On the start grid: the big screen's lights go green in goInMs (contracts §2c).
       if (!s.live || s.live.runId !== p.runId) return s;

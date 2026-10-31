@@ -129,6 +129,7 @@ class Phone {
     this.t = {}; // timings (ms)
     this.races = [];
     this.stages = [];
+    this.heats = []; // run.heat payloads (+ at)
   }
 
   get cookie() {
@@ -176,7 +177,8 @@ class Phone {
         this.stages.push([p.job.stage, at]);
         line(this.tag, `making: ${p.job.stage}`);
       }
-    } else if (m.type === "config.updated") this.config = p;
+    } else if (m.type === "run.heat") this.heats.push({ ...p, at });
+    else if (m.type === "config.updated") this.config = p;
     else if (m.type === "player.removed") fail(this.tag, "the racer was removed");
     else if (m.type === "error") fail(this.tag, `server error ${p.code}: ${p.message}`);
     this.race?.onMessage(m, at);
@@ -412,6 +414,35 @@ const stats = (xs, f = ms) => {
   return `min ${f(a[0])} · median ${f(q(0.5))} · p95 ${f(q(0.95))} · max ${f(a[a.length - 1])} (n=${a.length})`;
 };
 
+/** Group results on the phones (run.heat): every racer of a heat gets the same, complete result. */
+function checkHeats(phones, n, lastEnd) {
+  const byHeat = new Map();
+  for (const ph of phones) {
+    const h = ph.heats.filter((x) => x.done).at(-1);
+    if (!h || h.at < lastEnd - 120_000) {
+      fail(ph.tag, `race ${n}: no complete group result (run.heat done) on the phone`);
+      continue;
+    }
+    if (!h.entries.some((e) => e.playerId === ph.me.id))
+      fail(ph.tag, `race ${n}: the group result doesn't list me`);
+    if (!byHeat.has(h.heatId)) byHeat.set(h.heatId, []);
+    byHeat.get(h.heatId).push({ ph, h });
+  }
+  for (const [id, list] of byHeat) {
+    const first = JSON.stringify(list[0].h.entries);
+    for (const { ph, h } of list)
+      if (JSON.stringify(h.entries) !== first)
+        fail(ph.tag, `race ${n}: heat ${id} differs between phones`);
+    const lag = Math.max(...list.map(({ h }) => h.at)) - lastEnd;
+    const names = list[0].h.entries
+      .map((e) => `${e.place ? `${e.place}.` : e.outcome ? "oops" : "?"} ${e.nickname}`)
+      .join(", ");
+    console.log(
+      `  heat ${id}: ${list.length} phones, complete ${Math.round(lag)} ms after the last result · ${names}`,
+    );
+  }
+}
+
 async function switchTrack(track) {
   const st = await rest("GET", "/api/state");
   if (st.config.track === track) return;
@@ -474,6 +505,8 @@ async function main() {
       console.log(
         `  results reached the phones within ${((Math.max(...ends) - Math.min(...ends)) / 1000).toFixed(1)} s of each other`,
       );
+    await Bun.sleep(400); // the last finisher's heat update follows its result
+    checkHeats(ready, n, Math.max(...ends));
   }
   await Bun.sleep(300);
   for (const ph of phones) ph.close();
