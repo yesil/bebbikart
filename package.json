@@ -11,11 +11,15 @@
     "dev": "bun scripts/dev.js",
     "dev:server": "bun run --cwd apps/server dev",
     "dev:web": "bun run --cwd apps/web dev",
-    "dev:game": "godot --path apps/game",
+    "dev:game": "godot --path apps/game -- --server",
     "kit:export": "bun packages/shared/scripts/export-godot.js",
     "test": "bun test packages apps/server",
     "lint": "biome check .",
-    "format": "biome check --write ."
+    "format": "biome check --write .",
+    "game:mock": "godot --path apps/game",
+    "build:web": "bun run --cwd apps/web build",
+    "start": "bun run build:web && bun run --cwd apps/server start",
+    "fake-game": "bun apps/server/scripts/fake-game.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0"

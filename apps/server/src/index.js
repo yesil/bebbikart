@@ -52,7 +52,8 @@ if (import.meta.main) {
   const { server } = startServer(settings);
   console.log(`
   BebbiKart server on port ${server.port}
-    Phones:   ${settings.publicUrl}   (same Wi-Fi)
+    Phones:   ${settings.publicUrl}   (built site: bun run build:web)
+              ${settings.publicUrl.replace(/:\d+$/, ":5173")}   (Vite, with bun run dev)
     Game:     ws://localhost:${server.port}/ws  (game key "${settings.gameKey}")
     Admin PIN ${settings.adminPin} · pipeline ${settings.pipeline} · data ${settings.dataDir}
 `);

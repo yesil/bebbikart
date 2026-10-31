@@ -17,6 +17,9 @@ const RUN_START := "run.start"
 const RUN_BOOST := "run.boost"
 const RUN_ABORT := "run.abort"
 const ROSTER_UPDATED := "roster.updated"
+const WELCOME := "welcome"
+const SESSION_UPDATED := "session.updated"
+const LEADERBOARD_UPDATED := "leaderboard.updated"
 
 
 static func default_config() -> Dictionary:
@@ -35,8 +38,9 @@ static func make_id(prefix: String, rng: RandomNumberGenerator = null) -> String
 	return s
 
 
-## Wraps a payload in the WS envelope: { v, type, id, ts, payload }.
-static func make_msg(type: String, payload: Dictionary) -> Dictionary:
+## Wraps a payload in the WS envelope: { v, type, id, ts, payload }. The payload is usually a
+## Dictionary; roster.updated and leaderboard.updated carry a bare Array.
+static func make_msg(type: String, payload: Variant) -> Dictionary:
 	return {"v": Protocol.PROTOCOL_VERSION, "type": type, "id": make_id("msg"), "ts": now_iso(), "payload": payload}
 
 

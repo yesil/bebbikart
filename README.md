@@ -10,12 +10,17 @@ Needs [Bun](https://bun.sh) and [Godot 4](https://godotengine.org) (`godot` on t
 ```bash
 bun install
 bun run kit:export   # writes the Godot copies of the contracts into apps/game
-bun run dev          # server :8080, phone site :5173, and the Godot game
+bun run dev          # server :8080, phone site :5173, and the Godot game (--server)
 ```
+
+To try the whole thing with a phone on the same Wi-Fi, see [`docs/local-testing.md`](docs/local-testing.md).
 
 | Command | What it does |
 |---|---|
 | `bun run dev` | Starts server, phone site and game together |
+| `bun run start` | Builds the phone site and serves everything from the server on :8080 |
+| `bun run dev:game` / `game:mock` | Godot game against the server / in mock mode |
+| `bun run fake-game` | Stand-in game for testing phones without Godot |
 | `bun run test` | Runs all Bun tests |
 | `bun run lint` / `bun run format` | Biome check / fix |
 | `bun run kit:export` | Regenerates `apps/game/net/protocol.gd`, `data/racer_kit.json`, `data/pkg_default/spec.json` |

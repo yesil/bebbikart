@@ -48,7 +48,8 @@ func _init(config: Dictionary, n_players: int, seed_: int) -> void:
 			"taps": [],
 			"bestTimeMs": 0,
 		})
-	inbox.append(Messages.make_msg(Messages.ROSTER_UPDATED, {"roster": roster()}))
+	# roster.updated carries a bare RosterEntry[] (contracts §7).
+	inbox.append(Messages.make_msg(Messages.ROSTER_UPDATED, roster()))
 
 
 func roster() -> Array:

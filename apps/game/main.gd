@@ -2,7 +2,10 @@
 #   godot --path apps/game                      windowed, 20 mock racers
 #   godot --path apps/game -- --racers=12 --seed=4 --weather=storm --duration=60
 #   godot --headless --path apps/game -- --duration=30 --log=full
-# Options (after --): --mock (default; no real server client yet), --racers=N, --seed=N,
+# Real server (phones race on the big screen):
+#   godot --path apps/game -- --server                     ws://localhost:8080/ws, key "bebbikart-dev"
+#   godot --path apps/game -- --server=ws://host:8080/ws --game-key=KEY   (or env BK_GAME_KEY)
+# Options (after --): --mock (default), --server[=URL], --game-key=KEY, --racers=N, --seed=N,
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
 #   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full
 # Keys: C camera mode, Tab next racer, F next fork shot, R/W start next rain/wind phase,
@@ -14,6 +17,9 @@ const Sim = preload("res://sim/sim.gd")
 const Racer = preload("res://sim/racer.gd")
 const Messages = preload("res://net/messages.gd")
 const MockNet = preload("res://net/mock_net.gd")
+const ServerNet = preload("res://net/server_net.gd")
+const RosterAssets = preload("res://net/roster_assets.gd")
+const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
 const WorldBuilder = preload("res://world/world_builder.gd")
 const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
@@ -25,7 +31,8 @@ var args := {}
 var course: Course
 var config: Dictionary
 var sim: Sim
-var net: MockNet
+var net                    # net/mock_net.gd or net/server_net.gd (same interface)
+var assets = null          # net/roster_assets.gd, server mode only
 var views := {}            # runId -> RacerView
 var colors := {}           # playerId -> Color
 var nicks := {}            # playerId -> nickname
@@ -43,8 +50,6 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		var kv: PackedStringArray = a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
-	if args.has("server"):
-		push_warning("Real server client is not part of WS3a/3b yet; running in mock mode.")
 	var seed_ := int(args.get("seed", str(randi() % 100000)))
 	var n_racers := int(args.get("racers", "20"))
 	# Godot scales the physics delta (not the tick count) with time_scale, so speed up by ticking more often.
@@ -57,15 +62,26 @@ func _ready() -> void:
 	if args.has("weather"):
 		var w: Array = FORCED.get(args["weather"], [0.0, 0.0])
 		sim.weather.force(w[0], w[1], 30.0)
-	net = MockNet.new(config, n_racers, seed_)
+	if args.has("server"):
+		var url: String = args["server"] if String(args["server"]).begins_with("ws") else "ws://localhost:8080/ws"
+		var key: String = args.get("game-key", OS.get_environment("BK_GAME_KEY") if OS.has_environment("BK_GAME_KEY") else "bebbikart-dev")
+		net = ServerNet.new(config, url, key)
+		assets = RosterAssets.new()
+		assets.http_base = net.http_base()
+		assets.game_key = key
+		add_child(assets)
+		assets.racer_ready.connect(_on_racer_ready)
+		print("BebbiKart server mode: %s (protocol v%d)" % [url, Protocol.PROTOCOL_VERSION])
+	else:
+		net = MockNet.new(config, n_racers, seed_)
+		print("BebbiKart mock mode: protocol v%d, %d fake players, seed %d, course %s" % [
+			Protocol.PROTOCOL_VERSION, n_racers, seed_, JSON.stringify(course.all_route_lengths())])
 	net.course = course
 	net.log_mode = args.get("log", "summary")
 	for i in net.players.size():
 		var p: Dictionary = net.players[i]
 		colors[p["playerId"]] = Color.from_hsv(float(i) / maxf(1.0, net.players.size()), 0.75, 0.95)
 		nicks[p["playerId"]] = p["nickname"]
-	print("BebbiKart mock mode: protocol v%d, %d fake players, seed %d, course %s" % [
-		Protocol.PROTOCOL_VERSION, n_racers, seed_, JSON.stringify(course.all_route_lengths())])
 	_build_scene()
 
 
@@ -130,13 +146,20 @@ func _physics_process(_delta: float) -> void:
 
 
 func _handle(msg: Dictionary) -> void:
-	var pl: Dictionary = msg["payload"]
+	var pl = msg["payload"]  # Dictionary, or a bare Array for roster.updated
 	match msg["type"]:
 		Messages.RUN_START:
 			var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
-			var v := RacerView.new()
-			add_child(v)
-			v.setup(r, colors.get(pl["playerId"], Color.WHITE), nicks.get(pl["playerId"], "?"))
+			var spec: Dictionary = assets.spec_for(pl["playerId"]) if assets != null else {}
+			var v  # KitRacerView or the placeholder RacerView
+			if not spec.is_empty():
+				v = KitRacerView.new()
+				add_child(v)
+				v.setup(r, spec, assets.drawing_for(pl["playerId"]), nicks.get(pl["playerId"], "?"))
+			else:
+				v = RacerView.new()
+				add_child(v)
+				v.setup(r, colors.get(pl["playerId"], Color.WHITE), nicks.get(pl["playerId"], "?"))
 			views[pl["runId"]] = v
 			net.remember_run(pl["runId"], nicks.get(pl["playerId"], "?"))
 		Messages.RUN_BOOST:
@@ -144,7 +167,23 @@ func _handle(msg: Dictionary) -> void:
 		Messages.RUN_ABORT:
 			sim.abort(pl["runId"])
 		Messages.ROSTER_UPDATED:
-			pass
+			_on_roster(pl)
+
+
+## Server roster: names and colours for racers, and their kit assets (spec, drawing, renders).
+func _on_roster(roster: Array) -> void:
+	for e in roster:
+		var pid: String = e["playerId"]
+		nicks[pid] = e["nickname"]
+		if not colors.has(pid):
+			colors[pid] = Color.from_hsv(float(absi(hash(pid)) % 360) / 360.0, 0.75, 0.95)
+	if assets != null:
+		assets.update(roster)
+
+
+func _on_racer_ready(player_id: String) -> void:
+	var title: String = assets.spec_for(player_id).get("title", "")
+	_result("NEW  %s · %s" % [assets.nickname(player_id), title])
 
 
 func _outgoing(type: String, pl: Dictionary) -> void:
@@ -205,7 +244,8 @@ func _update_overlay(racing: Array) -> void:
 		return
 	var w := sim.weather
 	var lines: PackedStringArray = []
-	lines.append("BebbiKart · MOCK · t %5.1f s · tick %d" % [sim.tick / 60.0, sim.tick])
+	var mode := "MOCK" if assets == null else "SERVER %s · %d racers" % [net.status, assets.entries.size()]
+	lines.append("BebbiKart · %s · t %5.1f s · tick %d" % [mode, sim.tick / 60.0, sim.tick])
 	lines.append("rain %-8s %.2f   wind %-8s %.2f → %d°%s" % [w.phase("rain"), w.rain_intensity(), w.phase("wind"),
 		w.wind_strength(), int(w.wind["dir_deg"]), "  (forced)" if w.forced else ""])
 	lines.append("racing %d · queued %d · done %d · failed %d" % [sim.racers.size(), sim.queue.size(), net.finished, net.failed])
