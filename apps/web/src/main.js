@@ -18,6 +18,7 @@ const initial = {
   leaderboard: [],
   live: null, // { runId, progress, elapsedMs, section, boostsLeft, deltaVsBestMs, sections: {s: {splitMs, bestSplitMs}} }
   result: null, // run.ended payload, plus prevBest splits
+  camera: null, // camera.updated: { playerId?, runId? } of the racer on the big screen
   tab: "garage",
   revealSeen: readRevealSeen(),
   toast: null,
@@ -91,6 +92,8 @@ function onWs(s, type, p) {
       return { ...s, weather: p };
     case "leaderboard.updated":
       return { ...s, leaderboard: p };
+    case "camera.updated":
+      return { ...s, camera: p };
     case "run.queued":
     case "run.started":
       return {

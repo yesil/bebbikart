@@ -1,6 +1,6 @@
 import { SECTION_IDS } from "@bebbikart/shared";
 import { html } from "htm/preact";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
 import { Avatar, delta, isLoop, secs } from "./common.js";
@@ -16,6 +16,7 @@ export function Run({ ctx }) {
   };
   const [flash, setFlash] = useState(false);
   const [pitting, setPitting] = useState(false);
+  const [asked, setAsked] = useState(false);
   const loop = isLoop(s.me.currentRun?.track ?? s.config.track);
   const lapsDone = live.laps ?? [];
   const lastLap = lapsDone[lapsDone.length - 1];
@@ -23,6 +24,20 @@ export function Run({ ctx }) {
   const boostsLeft = live.boostsLeft ?? s.config.boostsPerRun;
   const lastSection = SECTION_IDS.filter((id) => live.sections?.[id]).pop();
   const last = lastSection ? live.sections[lastSection] : null;
+  const onCamera = !!live.runId && s.camera?.runId === live.runId;
+
+  // On the big screen now: a little buzz, and "Show me" can be asked again after this shot.
+  useEffect(() => {
+    if (!onCamera) return;
+    navigator.vibrate?.([60, 40, 60]);
+    setAsked(false);
+  }, [onCamera]);
+  // A request the big screen never got to (a crowd, or the racer's run ended): ask again later.
+  useEffect(() => {
+    if (!asked) return;
+    const t = setTimeout(() => setAsked(false), 20000);
+    return () => clearTimeout(t);
+  }, [asked]);
 
   function boost(e) {
     e.preventDefault();
@@ -31,6 +46,12 @@ export function Run({ ctx }) {
     navigator.vibrate?.(40);
     setFlash(true);
     setTimeout(() => setFlash(false), 180);
+  }
+
+  function showMe() {
+    if (!started || !live.runId || onCamera || asked) return;
+    send("phone.watch", { runId: live.runId });
+    setAsked(true);
   }
 
   function pitIn() {
@@ -87,7 +108,9 @@ export function Run({ ctx }) {
             </button>`
           : null
       }
-      <p class="muted center">📺 ${COPY.run.watch}</p>
+      <button class=${`ghost watch ${onCamera ? "on" : ""}`} disabled=${!started || onCamera || asked} onClick=${showMe}>
+        ${onCamera ? COPY.run.onScreen : asked ? COPY.run.showMeAsked : COPY.run.showMe}
+      </button>
     </div>
   `;
 }

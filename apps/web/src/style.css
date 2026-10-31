@@ -799,6 +799,22 @@ h2 {
 .pit {
   margin-top: 0;
 }
+.watch:disabled {
+  opacity: 0.6;
+}
+.watch.on,
+.watch.on:disabled {
+  opacity: 1;
+  border-color: var(--good);
+  color: var(--good);
+  background: #eafaf0;
+  animation: on-screen 1.2s ease-in-out infinite;
+}
+@keyframes on-screen {
+  50% {
+    transform: scale(1.03);
+  }
+}
 .laps {
   margin: 0;
   padding-left: 1.6em;
