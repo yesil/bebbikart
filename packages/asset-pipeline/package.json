@@ -1,0 +1,24 @@
+{
+  "name": "@bebbikart/asset-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "bin": {
+    "bebbikart-design": "src/cli.js"
+  },
+  "scripts": {
+    "design": "bun src/cli.js design",
+    "pipeline": "bun src/cli.js",
+    "samples": "bun scripts/make-samples.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@bebbikart/shared": "workspace:*",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.7"
+  }
+}

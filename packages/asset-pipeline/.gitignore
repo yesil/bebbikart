@@ -1,0 +1,4 @@
+out/
+specs/
+.env
+node_modules/
