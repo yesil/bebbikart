@@ -37,8 +37,11 @@ var errors: PackedStringArray = []
 var _meshes := {}           # module name -> Mesh
 
 
-## Model file of a module: a Kenney kit name, or "nature:<name>" for the Quaternius kit.
+## Model file of a module: a Kenney kit name, "nature:<name>" for the Quaternius kit, or a
+## res:// path.
 static func model_path(module: String) -> String:
+	if module.begins_with("res://"):
+		return module
 	if module.begins_with("nature:"):
 		return NATURE + module.trim_prefix("nature:") + ".gltf"
 	return KIT + module + ".glb"
@@ -478,6 +481,81 @@ func props(course, plan, shape) -> Array:
 		out.append(["nature:Pine_%d" % rng.randi_range(1, 5), Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s)), Vector3(p.x, y - 0.1, p.y))])
 		pines += 1
 	return out
+
+
+const COW := "res://assets/village/quaternius_cow/Cow.glb"
+
+
+## Swiss details: flag poles (Kenney wooden pillars) and their flags, yellow hiking signposts
+## before each fork, and cows on the pastures. Returns {modules: [[module, Transform3D]],
+## flags: [Transform3D of the cloth's hoist corner, x along the cloth], signs: [Transform3D of
+## a sign board centre, x along the board]}.
+func swiss_details(course, plan, shape) -> Dictionary:
+	var out: Array = []
+	var flags: Array = []
+	var signs: Array = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1291    # the Federal Charter
+	var ground := func(p: Vector2) -> float: return shape.height_at(p.x, p.y)
+	var pole := func(p: Vector2, height: float, yaw: float) -> void:
+		var y: float = ground.call(p)
+		out.append(["pillar-wood", Transform3D(Basis().scaled(Vector3(0.9, height, 0.9)), Vector3(p.x, y, p.y))])
+		flags.append(Transform3D(Basis(Vector3.UP, yaw), Vector3(p.x, y + height - 0.15, p.y)))
+	# Two tall flags either side of the start/finish line, one at the inn, one by the church,
+	# one at each end of the covered bridge, and one on the square.
+	var sr = course.segments["start"]["route"]
+	var hw: float = course.segments["start"]["half_width"]
+	for side: float in [-1.0, 1.0]:
+		var q: Vector3 = sr.world_at(0.0, side * (hw + 1.6))
+		pole.call(Vector2(q.x, q.z), 8.0, sr.heading_at(0.0) + PI * 0.5)
+	for b in plan.buildings:
+		if b["kind"] in ["inn", "church", "school"]:
+			var fwd := Vector2(sin(b["yaw"]), cos(b["yaw"]))
+			var rgt := Vector2(fwd.y, -fwd.x)
+			var p: Vector2 = b["pos"] + fwd * (b["size"].y * 0.5 + 1.2) + rgt * (b["size"].x * 0.5 + 1.0)
+			if _free(plan, p, 0.6):
+				pole.call(p, 7.0, b["yaw"])
+	var br = course.segments["pond_bridge"]["route"]
+	var bhw: float = course.segments["pond_bridge"]["half_width"]
+	for ds: float in [-9.5, 9.5]:
+		var q: Vector3 = br.world_at(plan.bridge_s + ds, bhw + 1.4)
+		if _free(plan, Vector2(q.x, q.z), 0.6):
+			pole.call(Vector2(q.x, q.z), 6.0, br.heading_at(plan.bridge_s))
+	var sq: Vector2 = plan.fountain + (plan.lime_tree - plan.fountain).rotated(PI * 0.6)
+	pole.call(sq, 7.0, 0.0)
+	# Yellow hiking signposts on the outside of each fork's run-in, arrows down both branches.
+	for fk in [["hills1", "ramp_around"], ["hills2", "pond_bridge"], ["mill", "cross_sheltered"]]:
+		var r = course.segments[fk[0]]["route"]
+		var fhw: float = course.segments[fk[0]]["half_width"]
+		var s: float = r.length - 7.0
+		var detour = course.segments[fk[1]]["route"]
+		# The detour peels off to the side its curvature first turns away from.
+		var side := -signf(detour.curv_at(8.0)) if absf(detour.curv_at(8.0)) > 0.001 else 1.0
+		var q: Vector3 = r.world_at(s, side * (fhw + 1.5))
+		var p := Vector2(q.x, q.z)
+		if not _free(plan, p, 0.4):
+			errors.append("no room for the signpost before the %s fork" % fk[1])
+			continue
+		var y: float = ground.call(p)
+		out.append(["pillar-wood", Transform3D(Basis().scaled(Vector3(0.8, 2.6, 0.8)), Vector3(p.x, y, p.y))])
+		var h: float = r.heading_at(s)
+		signs.append(Transform3D(Basis(Vector3.UP, h - PI * 0.5 + 0.35), Vector3(p.x, y + 2.25, p.y)))
+		signs.append(Transform3D(Basis(Vector3.UP, h - PI * 0.5 - 0.35), Vector3(p.x, y + 1.85, p.y)))
+	# Cows on the pastures outside the loop.
+	var cows := 0
+	var tries := 0
+	while cows < 16 and tries < 4000:
+		tries += 1
+		var p := Vector2(rng.randf_range(shape.rect.position.x, shape.rect.end.x), rng.randf_range(shape.rect.position.y, shape.rect.end.y))
+		var d: float = shape.course_dist_at(p)
+		if d < 10.0 or d > 90.0 or plan._inside_loop(p) or not _free(plan, p, 3.0):
+			continue
+		var y: float = ground.call(p)
+		if absf(shape.height_at(p.x + 2.0, p.y) - y) > 0.5 or absf(shape.height_at(p.x, p.y + 2.0) - y) > 0.5:
+			continue
+		out.append([COW, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.26, 0.26, 0.26)), Vector3(p.x, y, p.y))])
+		cows += 1
+	return {"modules": out, "flags": flags, "signs": signs}
 
 
 ## p keeps `clear` metres from every road edge, building, the pond and the brook.

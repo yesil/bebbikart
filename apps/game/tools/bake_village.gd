@@ -574,10 +574,10 @@ func _instanced(parent: Node, kit: VillageKit, placed: Dictionary) -> void:
 		if kit.mesh(module) == null:
 			continue
 		var n := InstancedModel.new()
-		n.name = module.replace("nature:", "").to_pascal_case()
+		n.name = module.get_file().get_basename() if module.begins_with("res://") else module.replace("nature:", "").to_pascal_case()
 		n.model = VillageKit.model_path(module)
 		n.transforms = InstancedModel.pack(placed[module])
-		if not module.begins_with("nature:"):
+		if not module.begins_with("nature:") and not module.begins_with("res://"):
 			n.override = swiss
 		_mark(n)
 		parent.add_child(n)
@@ -638,9 +638,57 @@ func _bake_props() -> void:
 	_replace("Props", node)
 	var placed := {}
 	var props: Array = kit.props(course, plan, shape)
+	var swiss: Dictionary = kit.swiss_details(course, plan, shape)
+	props.append_array(swiss["modules"])
 	for m in props:
 		if not placed.has(m[0]):
 			placed[m[0]] = []
 		placed[m[0]].append(m[1])
 	_instanced(node, kit, placed)
-	print("bake: %d props, %d types" % [props.size(), placed.size()])
+	_flags(node, swiss["flags"])
+	_signs(node, swiss["signs"])
+	print("bake: %d props, %d types, %d flags, %d signs" % [props.size(), placed.size(), swiss["flags"].size(), swiss["signs"].size()])
+
+
+## Swiss flags: a square cloth (the public-domain flag, assets/village/swiss_flag/) hanging
+## from each pole top, gently bent so it reads as cloth.
+func _flags(parent: Node, at: Array) -> void:
+	var path := VMAT_DIR + "swiss_flag.tres"
+	if not ResourceLoader.exists(path):
+		var m := StandardMaterial3D.new()
+		m.albedo_texture = _res("res://assets/village/swiss_flag/Flag_of_Switzerland.svg")
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		m.roughness = 0.9
+		ResourceSaver.save(m, path)
+	var mat: Material = _res(path)
+	if mat == null:
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var size := 1.6
+	var n := 6
+	for xf: Transform3D in at:
+		for i in n:
+			var u0 := float(i) / n
+			var u1 := float(i + 1) / n
+			var quad: Array[Vector3] = []
+			for uv: Vector2 in [Vector2(u0, 0), Vector2(u1, 0), Vector2(u1, 1), Vector2(u0, 1)]:
+				var wave := sin(uv.x * PI * 1.5) * 0.18 * uv.x
+				quad.append(xf * Vector3(0.12 + uv.x * size, -uv.y * size, wave))
+			var uvs: Array[Vector2] = [Vector2(u0, 0), Vector2(u1, 0), Vector2(u1, 1), Vector2(u0, 1)]
+			for k: int in [0, 1, 2, 0, 2, 3]:
+				st.set_uv(uvs[k])
+				st.add_vertex(quad[k])
+	st.generate_normals()
+	st.set_material(mat)
+	_mesh_node(parent, "SwissFlags", st.commit())
+
+
+## Yellow hiking signpost boards (Swiss Wanderweg style): a pointed yellow board per arrow.
+func _signs(parent: Node, at: Array) -> void:
+	var yellow := _std_material("wanderweg_yellow", "", Color(0.98, 0.78, 0.05), 0.6)
+	var mb := MeshBatch.new(1.0)
+	for xf: Transform3D in at:
+		mb.box(Transform3D(xf.basis, xf.origin + xf.basis.x * 0.55), Vector3(1.0, 0.3, 0.05))
+		mb.box(Transform3D(xf.basis * Basis(Vector3.BACK, PI * 0.25), xf.origin + xf.basis.x * 1.05), Vector3(0.21, 0.21, 0.05))
+	_mesh_node(parent, "WanderwegSigns", mb.commit(yellow))

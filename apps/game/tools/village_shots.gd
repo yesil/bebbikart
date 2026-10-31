@@ -99,6 +99,7 @@ static func viewpoints(c: VillageCourse, plan: VillagePlan) -> Array:
 		["brook", hump + Vector3(0, 14, 0) + pb.normal_at(c.segments["pond_bridge"]["route"].length * 0.5) * -20.0, hump, 60.0],
 		["laubengasse", cs.pos_at(8.0) + up * 3.0, cs.pos_at(30.0) + up * 2.0],
 		["causeway", mid + ce.normal_at(ce.length * 0.5) * 24.0 + up * 4.0, mid + ce.normal_at(ce.length * 0.5) * -60.0 + up * 15.0],
+		["signpost", r.call("hills2").pos_at(r.call("hills2").length - 16.0) + up * 3.0, pw.pos_at(10.0) + up * 1.5],
 		["fountain", f + Vector3(10, 5, -10), f + up],
 		["overview", centre + Vector3(-60, 70, -110), centre, 55.0],
 		["mountains", centre + Vector3(0, 30, 60), centre + Vector3(0, 20, -300), 60.0],
