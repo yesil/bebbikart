@@ -10,7 +10,8 @@
 #   --track=countryside|village (mock mode; with --server the session config picks the track),
 #   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full
 # Keys: C camera mode, Tab next racer, F next fork shot, R/W start next rain/wind phase,
-#   K toggle forced calm, B boost the followed racer, H hide overlay.
+#   K toggle forced calm, B boost the followed racer, H hide overlay,
+#   Esc or ⌘, options menu (fullscreen, track, quit), ⌃⌘F or F11 fullscreen, ⌘Q quit.
 extends Node3D
 
 const Course = preload("res://sim/course.gd")
@@ -31,6 +32,7 @@ const Viewpoints = preload("res://world/viewpoints.gd")
 const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
+const OptionsMenu = preload("res://ui/options_menu.gd")
 
 const FORCED := {"calm": [0.0, 0.0], "rain": [1.0, 0.0], "wind": [0.0, 0.8], "storm": [1.0, 0.8]}
 
@@ -39,6 +41,8 @@ var course                 # sim/course.gd or sim/village_course.gd (loop)
 var track := ""            # TrackId of the loaded course and world
 ## Track to load after a reload (config.track changed while the game was running).
 static var next_track := ""
+## The "Options…" item is added to the macOS app menu once; it outlives scene reloads.
+static var native_menu_added := false
 var config: Dictionary
 var sim: Sim
 var net                    # net/mock_net.gd or net/server_net.gd (same interface)
@@ -57,9 +61,13 @@ var follow_run := ""
 var run_time := 0.0
 var shot_taken := false
 var forced_calm := false
+var menu: OptionsMenu
+var quitting := false
 
 
 func _ready() -> void:
+	# Window close and the app menu's Quit (⌘Q) go through _quit so the run summary prints.
+	get_tree().auto_accept_quit = false
 	for a in OS.get_cmdline_user_args():
 		var kv: PackedStringArray = a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
@@ -149,6 +157,45 @@ func _build_scene() -> void:
 	overlay.add_theme_font_override("font", SystemFont.new())
 	(overlay.get_theme_font("font") as SystemFont).font_names = PackedStringArray(["Menlo", "Monaco", "monospace"])
 	panel.add_child(overlay)
+	menu = OptionsMenu.new()
+	add_child(menu)
+	menu.setup(track, assets != null)
+	menu.fullscreen_toggled.connect(_toggle_fullscreen)
+	menu.track_chosen.connect(_switch_track)
+	menu.quit_pressed.connect(_quit)
+	_add_native_menu()
+
+
+## macOS: put "Options…  ⌘," in the application menu, next to Quit.
+static func _add_native_menu() -> void:
+	if native_menu_added or not NativeMenu.has_feature(NativeMenu.FEATURE_GLOBAL_MENU):
+		return
+	native_menu_added = true
+	var app_menu := NativeMenu.get_system_menu(NativeMenu.APPLICATION_MENU_ID)
+	NativeMenu.add_item(app_menu, "Options…", _open_options_from_menu, Callable(), null, KEY_MASK_META | KEY_COMMA)
+
+
+static func _open_options_from_menu(_tag) -> void:
+	var main = (Engine.get_main_loop() as SceneTree).current_scene
+	if main == null or main.get("menu") == null:
+		push_error("Options menu: no running game scene to open it in")
+		return
+	main.menu.open()
+
+
+## Mock mode only (the menu locks the track in server mode): reload on the chosen course.
+func _switch_track(id: String) -> void:
+	if assets != null:
+		push_error("track switch refused: the server session owns the track")
+		menu.show_error("Refused: the server session owns the track.")
+		return
+	if not Protocol.TRACK_IDS.has(id):
+		push_error("track switch: unknown track \"%s\"" % id)
+		menu.show_error("Unknown track \"%s\"." % id)
+		return
+	print("track change (options menu): %s -> %s, reloading" % [track, id])
+	next_track = id
+	get_tree().reload_current_scene()
 
 
 ## The countryside course world: baked from course.gd by tools/bake_world.gd, plus the
@@ -403,14 +450,32 @@ func _update_overlay(racing: Array) -> void:
 		for l in results:
 			lines.append("  " + l)
 	lines.append("")
-	lines.append("C cam  Tab racer  F fork  R rain  W wind  K calm  B boost  H hide")
+	lines.append("C cam  Tab racer  F fork  R rain  W wind  K calm  B boost  H hide  " +
+		("Esc/⌘, options  ⌃⌘F fullscreen  ⌘Q quit" if OS.get_name() == "macOS" else "Esc options  F11 fullscreen"))
 	overlay.text = "\n".join(lines)
 
 
 func _unhandled_input(e: InputEvent) -> void:
 	if not (e is InputEventKey and e.pressed and not e.echo):
 		return
-	match (e as InputEventKey).keycode:
+	var k := e as InputEventKey
+	# Window keys: Esc toggles the options menu, ⌘, opens it, ⌘Q quits;
+	# F11 or Ctrl+Cmd+F (the macOS shortcut) toggles fullscreen.
+	if k.keycode == KEY_ESCAPE:
+		menu.toggle()
+		return
+	if k.keycode == KEY_COMMA and k.meta_pressed:
+		menu.open()
+		return
+	if k.keycode == KEY_Q and k.meta_pressed:
+		_quit()
+		return
+	if k.keycode == KEY_F11 or (k.keycode == KEY_F and k.ctrl_pressed and k.meta_pressed):
+		_toggle_fullscreen()
+		return
+	if menu.is_open():
+		return  # game keys are off while the menu is up
+	match k.keycode:
 		KEY_C:
 			camera.cycle_mode()
 		KEY_F:
@@ -437,6 +502,18 @@ func _unhandled_input(e: InputEvent) -> void:
 			overlay.get_parent().visible = not overlay.get_parent().visible
 
 
+func _toggle_fullscreen() -> void:
+	var w := get_window()
+	var full := w.mode == Window.MODE_FULLSCREEN or w.mode == Window.MODE_EXCLUSIVE_FULLSCREEN
+	w.mode = Window.MODE_WINDOWED if full else Window.MODE_FULLSCREEN
+	menu.sync_fullscreen()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_quit()
+
+
 func _screenshot(path: String) -> void:
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
@@ -448,6 +525,12 @@ func _screenshot(path: String) -> void:
 
 
 func _quit() -> void:
+	if quitting:
+		return
+	quitting = true
+	if sim == null:  # startup failed and already reported; nothing to summarise
+		get_tree().quit(1)
+		return
 	set_process(false)
 	set_physics_process(false)
 	print("mock summary: %.1f s wall, %d sim ticks, finished %d, failed %d, sent %s" % [

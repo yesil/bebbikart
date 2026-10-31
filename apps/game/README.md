@@ -40,6 +40,13 @@ Keys:
 | R / W | Advance the rain / wind phase |
 | K | Toggle forced calm |
 | H | Hide the overlay |
+| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, track, quit |
+| Ctrl+Cmd+F, or F11 | Toggle fullscreen (on a Mac keyboard F11 may need fn) |
+| Cmd+Q, or closing the window | Quit (prints the run summary) |
+
+The options menu does not pause the race. Picking a track reloads the course in mock mode; in
+server mode the track is locked to the session config (end the session and change it on the
+admin page, the big screen follows).
 
 Sweep flags:
 
