@@ -5,10 +5,18 @@ extends Node3D
 ##
 ##   godot --path apps/game res://racer_viewer/racer_viewer.tscn [-- --specs=<dir>[,<dir>]]
 ##   (or BEBBI_SPECS_DIR=<dir>). Always watched: res://racer_kit/samples and
-##   <repo>/packages/asset-pipeline/out.  Extra: --shot=<png> saves a screenshot and quits.
+##   <repo>/packages/asset-pipeline/out.  Extra: --shot=<png> saves a screenshot and quits;
+##   --file=<spec file name> starts on that racer; --actions=cheer,wave,… plays only those
+##   actions (names from ACTIONS, up to the first space); --action-time=SEC (default 2.5).
 
-const HELP := "←/→ racer   A auto-demo   Space next action   1-6 mood (0 auto)   T turntable   N name tag   G lineup   R render avatars"
-const ACTIONS := ["idle", "drive", "boost", "airborne", "bump", "celebrate", "wave", "fail", "fast lean"]
+const HELP := "←/→ racer   A auto-demo   Space / ⌫ next / previous action   1-6 mood (0 auto)   T turntable   N name tag   G lineup   R render avatars"
+const Gestures = preload("res://racer_kit/racer_gestures.gd")
+## Driving states, events and every gesture of racer_gestures.gd.
+const ACTIONS := ["idle", "drive", "corner (hair swings)", "boost", "wheee jump", "bump (brace, dizzy)", "cheer",
+	"wave", "fist pump", "glance back", "rain (hunch, shield)", "dry-off (rain stops: head shake)", "wind (hold the hat)",
+	"tuck jump", "slip (flail)", "splash (surprised)", "brace", "fail (spin, slump)", "finish (cheer, wave)", "fast lean"]
+const IDLE := {"speed": 0.0, "lean": 0.0, "airborne": false, "boost": false, "turn": 0.0, "ahead_turn": 0.0,
+	"vy": 0.0, "big_air": false, "in_water": false, "slipping": false, "rain": 0.0, "wind": Vector3.ZERO}
 
 var dirs := PackedStringArray()
 var files := PackedStringArray()
@@ -30,6 +38,9 @@ var _renderer: AvatarRenderer
 var _shot_path := ""
 var _shot_t := 2.5
 var _last_render := ""
+var _actions: Array = ACTIONS.duplicate()   # the ones auto-demo / Space cycle through
+var _action_time := 2.5
+var _start_file := ""
 
 
 func _ready() -> void:
@@ -42,10 +53,35 @@ func _ready() -> void:
 			index = int(a.trim_prefix("--index="))
 		elif a == "--lineup":
 			call_deferred("_toggle_lineup")
+		elif a.begins_with("--file="):
+			_start_file = a.trim_prefix("--file=")
+		elif a.begins_with("--action-time="):
+			_action_time = float(a.trim_prefix("--action-time="))
+		elif a.begins_with("--actions="):
+			_actions.clear()
+			for want in a.trim_prefix("--actions=").split(",", false):
+				var found := ""
+				for full in ACTIONS:
+					if full.get_slice(" ", 0) == want:
+						found = full
+				if found == "":
+					push_error("racer viewer: unknown action \"%s\" (known: %s)" % [want, ", ".join(ACTIONS)])
+					get_tree().quit(1)
+					return
+				_actions.append(found)
 	_build_stage()
 	_renderer = AvatarRenderer.new()
 	add_child(_renderer)
 	_rescan()
+	if _start_file != "":
+		index = -1
+		for i in files.size():
+			if files[i].get_file() == _start_file:
+				index = i
+		if index < 0:
+			push_error("racer viewer: --file=%s is not in %s" % [_start_file, ", ".join(dirs)])
+			get_tree().quit(1)
+			return
 	_show(index)
 
 
@@ -163,7 +199,7 @@ func _show(i: int) -> void:
 	_pivot.add_child(racer)
 	var box := RacerBuilder._aabb(racer, Transform3D.IDENTITY)
 	_frame(box.size.y)
-	action = 0
+	action = _actions.size() - 1  # the first _next_action() plays the first one
 	_act_t = 0.0
 	_update_ui()
 
@@ -175,14 +211,14 @@ func _update_ui() -> void:
 	_info.text = "%s  (%d/%d)  %s\n%s  ·  ride: %s  ·  %s\naction: %s   mood: %s%s\n%s\n%s" % [
 		s.title, index + 1, files.size(), files[index].get_file(),
 		", ".join(s.personality), s.ride.base, ", ".join(s.palette),
-		ACTIONS[action], racer.get_mood(), "" if not racer._mood_locked else " (locked)",
+		_actions[action], racer.get_mood(), "" if not racer._mood_locked else " (locked)",
 		HELP, _last_render]
 	_warn.text = ""
 
 
-func _next_action() -> void:
-	action = (action + 1) % ACTIONS.size()
-	_act_t = 2.5
+func _next_action(step := 1) -> void:
+	action = posmod(action + step, _actions.size())
+	_act_t = _action_time
 	_apply_action(racer)
 	for r in lineup:
 		_apply_action(r)
@@ -190,15 +226,26 @@ func _next_action() -> void:
 
 
 func _apply_action(r: ToyRacer) -> void:
-	r.set_state({"speed": 0.0, "lean": 0.0, "airborne": false, "boost": false})
-	match ACTIONS[action]:
+	r.set_state(IDLE)
+	match _actions[action]:
 		"drive": r.set_state({"speed": 8.0, "lean": 0.0})
+		"corner (hair swings)": r.set_state({"speed": 14.0, "turn": 0.9, "ahead_turn": 0.6, "lean": 0.5})
 		"boost": r.set_state({"speed": 18.0, "boost": true})
-		"airborne": r.set_state({"speed": 10.0, "airborne": true})
-		"bump": r.set_state({"speed": 6.0}); r.bump()
-		"celebrate": r.celebrate(3)
-		"wave": r.wave()
-		"fail": r.fail()
+		"wheee jump", "tuck jump":
+			r.gestures.air_pose = Gestures.G.WHEEE if _actions[action] == "wheee jump" else Gestures.G.TUCK
+			r.set_state({"speed": 10.0, "airborne": true, "big_air": true})
+		"bump (brace, dizzy)": r.set_state({"speed": 6.0}); r.bump()
+		"cheer": r.celebrate(3)
+		"wave": r.wave(); r.look_at_node(_cam, 1.8)
+		"fist pump": r.gesture("fist_pump")
+		"glance back": r.gesture("glance_back")
+		"rain (hunch, shield)": r.set_state({"rain": 1.0})
+		"wind (hold the hat)": r.set_state({"wind": Vector3(0.9, 0.0, 0.0)})
+		"slip (flail)": r.set_state({"speed": 8.0, "slipping": true})
+		"splash (surprised)": r.set_state({"speed": 4.0, "in_water": true})
+		"brace": r.set_state({"speed": 8.0}); r.gesture("brace")
+		"fail (spin, slump)": r.fail()
+		"finish (cheer, wave)": r.finish()
 		"fast lean": r.set_state({"speed": 14.0, "lean": 0.8})
 
 
@@ -251,6 +298,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 		KEY_RIGHT: _show(index + 1)
 		KEY_LEFT: _show(index - 1)
 		KEY_SPACE: auto_demo = false; _next_action()
+		KEY_BACKSPACE: auto_demo = false; _next_action(-1)
 		KEY_A: auto_demo = not auto_demo
 		KEY_T: turntable = not turntable
 		KEY_N:

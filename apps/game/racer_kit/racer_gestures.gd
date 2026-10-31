@@ -198,7 +198,7 @@ var _was_water := false
 var _was_boost := false
 var _was_slip := false
 var _was_hat := false
-var _was_air := false
+var _air_held := -1          # the jump pose being held while airborne, or -1
 
 var _t := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -682,7 +682,7 @@ func reset() -> void:
 	_was_boost = false
 	_was_slip = false
 	_was_hat = false
-	_was_air = false
+	_air_held = -1
 	_char_xf = _char_rest
 	_char_inv = _char_rest.affine_inverse()
 	_head_xf = _head_rest
@@ -841,10 +841,13 @@ func _states() -> void:
 	if windy != _was_hat:
 		hold(G.HAT, windy)
 		_was_hat = windy
-	var air := r.airborne and r.big_air
-	if air != _was_air:
-		hold(air_pose, air)
-		_was_air = air
+	var pose := air_pose if r.airborne and r.big_air else -1
+	if pose != _air_held:
+		if _air_held >= 0:
+			hold(_air_held, false)
+		if pose >= 0:
+			hold(pose, true)
+		_air_held = pose
 	if r.slipping != _was_slip:
 		if r.slipping:
 			play(G.FLAIL, 0, 0.5)
