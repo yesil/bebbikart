@@ -27,8 +27,8 @@ const FORK_PROBE := 12.0
 const STUB := 3.0                 # straight shared stub at every junction
 const SPLIT_ZONE := 6.0           # sibling stubs overlap this far from a junction
 
-const VIEW := Rect2(-110, -30, 180, 445)   # x, z, w, h in metres
-const PANEL_W := 420
+const VIEW := Rect2(-110, -30, 180, 470)   # x, z, w, h in metres
+const PANEL_W := 480
 
 const SECTION_COLORS := {
 	"hills": Color(0.85, 0.62, 0.30), "pond": Color(0.55, 0.55, 0.62),
@@ -36,6 +36,7 @@ const SECTION_COLORS := {
 }
 
 var course: Course
+var land: Landscape
 var img: Image
 var px := 3.0
 var fails: PackedStringArray = []
@@ -49,6 +50,7 @@ func _init() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	px = float(args.get("scale", "3"))
 	course = Course.new()
+	land = Landscape.new(course)
 	_check_all()
 	_draw()
 	var out := String(args.get("out", "res://docs/layout_map.png"))
@@ -277,7 +279,7 @@ func _check_landscape() -> void:
 	var s := 0.0
 	while s <= ford.length:
 		var p := _xz(ford.pos_at(s))
-		var inside := Landscape.in_pond(p)
+		var inside := land.in_pond(p)
 		var y := ford.pos_at(s).y
 		if s > float(wr[0]) + 5.0 and s < float(wr[1]) - 5.0:
 			if not inside:
@@ -295,14 +297,14 @@ func _check_landscape() -> void:
 			continue
 		for q in _samples(id, 1.0):
 			# Fenced (railed) lanes may run along the shore; open roads keep 2 m of bank.
-			if Landscape.in_pond(q[1], _hw(id) + (0.8 if course.segments[id]["rails"] else 2.0)):
+			if land.in_pond(q[1], _hw(id) + (0.8 if course.segments[id]["rails"] else 2.0)):
 				fails.append("pond: %s runs into the pond at (%.0f, %.0f)" % [id, q[1].x, q[1].y])
 				break
 	# Stream: crossed once, by the bridge lane, at its hump.
 	var crossings := {}
 	for id in course.ordered_ids:
 		for q in _samples(id, 0.5):
-			if Landscape.stream_dist(q[1]) < Landscape.STREAM_HALF_WIDTH + _hw(id):
+			if land.stream_dist(q[1]) < Landscape.STREAM_HALF_WIDTH + _hw(id):
 				crossings[id] = q[0]
 				break
 	if crossings.keys() != ["pond_bridge"]:
@@ -328,7 +330,7 @@ func _check_landscape() -> void:
 	var d1 := -INF
 	s = 0.0
 	while s <= jr.length:
-		if Landscape.in_dip(_xz(jr.pos_at(s))):
+		if land.in_dip(_xz(jr.pos_at(s))):
 			d0 = minf(d0, s)
 			d1 = maxf(d1, s)
 		s += 0.5
@@ -339,14 +341,14 @@ func _check_landscape() -> void:
 		if id == "ramp_jump":
 			continue
 		for q in _samples(id, 1.0):
-			if Landscape.in_dip(q[1]):
+			if land.in_dip(q[1]):
 				fails.append("dip: %s runs through the dip" % id)
 				break
 	# Knoll: between the two ramp branches, clear of both road edges.
 	for id in ["ramp_jump", "ramp_around"]:
 		var best := INF
 		for q in _samples(id, 0.5):
-			best = minf(best, (q[1] as Vector2).distance_to(Landscape.KNOLL_CENTER))
+			best = minf(best, (q[1] as Vector2).distance_to(land.knoll_center))
 		var clear := best - _hw(id)
 		notes.append("knoll top is %.1f m from the %s road edge" % [clear, id])
 		if clear < 2.5:
@@ -355,7 +357,7 @@ func _check_landscape() -> void:
 	for id in course.ordered_ids:
 		var hit := false
 		for q in _samples(id, 1.0):
-			var vi: Array = Landscape.valley_info(q[1])
+			var vi: Array = land.valley_info(q[1])
 			if float(vi[0]) < float(vi[1]):
 				hit = true
 				break
@@ -368,7 +370,7 @@ func _stream_crossing_s(r: Route) -> float:
 	var best_s := 0.0
 	var s := 0.0
 	while s <= r.length:
-		var dd := Landscape.stream_dist(_xz(r.pos_at(s)))
+		var dd := land.stream_dist(_xz(r.pos_at(s)))
 		if dd < best:
 			best = dd
 			best_s = s
@@ -413,21 +415,21 @@ func _draw() -> void:
 				var dd := p.distance_to(Vector2(hl.x, hl.y)) / hl.z
 				if dd < 1.0:
 					lift += hl.w * (0.5 + 0.5 * cos(PI * dd))
-			var vi: Array = Landscape.valley_info(p)
+			var vi: Array = land.valley_info(p)
 			var col := Color(0.55, 0.72, 0.42).lightened(clampf(lift / 30.0, 0.0, 0.4))
 			if int(lift) % 2 == 1 and fmod(lift, 1.0) < 0.12:
 				col = col.darkened(0.12)   # contour every 2 m
 			if float(vi[0]) < float(vi[1]):
-				col = col.darkened(0.25 * (1.0 - float(vi[0]) / float(vi[1])))
-			if Landscape.in_dip(p):
+				col = col.lerp(Color(0.33, 0.45, 0.25), 0.8 * (1.0 - float(vi[0]) / float(vi[1])))
+			if land.in_dip(p):
 				col = Color(0.50, 0.40, 0.28)
-			if p.distance_to(Landscape.KNOLL_CENTER) < Landscape.KNOLL_RADIUS:
-				col = col.lightened(0.25 * (1.0 - p.distance_to(Landscape.KNOLL_CENTER) / Landscape.KNOLL_RADIUS))
-			if Landscape.FLAT_START.has_point(p) or Landscape.FLAT_FINISH.has_point(p):
+			if p.distance_to(land.knoll_center) < land.knoll_radius:
+				col = col.lightened(0.25 * (1.0 - p.distance_to(land.knoll_center) / land.knoll_radius))
+			if Landscape.FLAT_START.has_point(p) or land.flat_finish.has_point(p):
 				col = col.lerp(Color(0.7, 0.7, 0.62), 0.35)
-			if Landscape.in_pond(p):
+			if land.in_pond(p):
 				col = Color(0.30, 0.55, 0.80)
-			elif Landscape.stream_dist(p) < Landscape.STREAM_HALF_WIDTH:
+			elif land.stream_dist(p) < Landscape.STREAM_HALF_WIDTH:
 				col = Color(0.30, 0.55, 0.80)
 			img.set_pixel(x, y, col)
 	# Grid every 10 m, labelled every 50 m.
@@ -500,11 +502,11 @@ func _draw() -> void:
 	_line(_to_px(_xz(r_end.world_at(r_end.length, -5.0))), _to_px(_xz(r_end.world_at(r_end.length, 5.0))), 4.0, Color.BLACK)
 	_text("FINISH", _to_px(_xz(r_end.pos_at(r_end.length))) + Vector2(14, -6), 2, Color.BLACK)
 	_text("START", _to_px(Vector2(0, 0)) + Vector2(14, -6), 2, Color.BLACK)
-	_text("POND", _to_px(Landscape.pond_center()) + Vector2(12, 30), 1, Color(0.85, 0.95, 1.0))
-	_text("STREAM", _to_px(Vector2(-90, 182)) + Vector2(0, -16), 1, Color(0.85, 0.95, 1.0))
-	_text("VALLEY", _to_px(Vector2(-80, 246)), 1, Color(0.2, 0.25, 0.15))
-	_text("DIP", _to_px(Landscape.DIP_CENTER) + Vector2(-34, -4), 1, Color.WHITE)
-	_text("KNOLL", _to_px(Landscape.KNOLL_CENTER) + Vector2(-14, -14), 1, Color(0.2, 0.3, 0.15))
+	_text("POND", _to_px(land.pond_center()) + Vector2(12, 30), 1, Color(0.85, 0.95, 1.0))
+	_text("STREAM", _to_px(land.stream[1]) + Vector2(0, -16), 1, Color(0.85, 0.95, 1.0))
+	_text("VALLEY", _to_px(Vector2(land.valley[2].x, land.valley[2].y)) + Vector2(0, -4), 1, Color.WHITE)
+	_text("DIP", _to_px(land.dip_center) + Vector2(-60, -4), 1, Color.WHITE, true)
+	_text("KNOLL", _to_px(land.knoll_center) + Vector2(-14, -14), 1, Color(0.2, 0.3, 0.15))
 	_panel(w)
 
 

@@ -52,7 +52,7 @@ Sweep flags:
 
 - `sim/`: the simulation. Plain `RefCounted` GDScript with no scene nodes, so it runs headless in the sweep.
   - `tuning.gd`: every constant.
-  - `route.gd`, `course.gd`: the course and all fork variants, with section lines, boost zones and widths.
+  - `route.gd`, `course.gd`: the course and all fork variants, with section lines, boost zones and widths. Routes are drawn from straights and constant-radius arcs, and every fork is a Y-split with a shared 3 m stub.
   - `weather.gd`: the weather state machine.
   - `builds.gd`: stars → stats, plus random builds.
   - `racer.gd`: racer state (s/d/v/vy), autopilot, fails, boost, events, splits and traces, timed in sim ticks.
@@ -68,35 +68,39 @@ Sweep flags:
   - `camera_rig.gd`: simple follow, wide and fork cameras.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
+- `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
+- `world/landscape.gd`: the terrain features each fork alternative is built around (pond, inflow stream, jump dip, knoll, valley, hills), anchored to the course.
 
 ## Balance snapshot
 
-Results from `sweep --builds=60 --seeds=2`, solo racers with perfect boosts.
+Results from `sweep --builds=60 --seeds=2`, solo racers with perfect boosts, on the 2026-10-31 course redesign (arc-built routes, Y-split forks).
+
+Route lengths: jump 67.8 m / around 75.6 m, water 100.0 m / bridge 130.0 m, exposed 63.7 m / sheltered 76.1 m. Full path 430.6 m (jump/water/exposed) to 480.7 m (around/bridge/sheltered).
 
 **Default build** (balanced style, around/bridge/sheltered):
 
 | Weather | Time |
 |---|---|
-| calm | 32.2 s |
-| rain | 37.0 s |
-| wind | 35.1 s |
-| storm | 40.5 s |
+| calm | 31.6 s |
+| rain | 37.7 s |
+| wind | 34.6 s |
+| storm | 41.2 s |
 
-**Driving style, calm:** careful 35.1 s, balanced 32.2 s, daring 29.7 s.
+**Driving style, calm:** careful 34.6 s, balanced 31.6 s, daring 29.3 s.
 
 **Random builds:**
 
 | Weather | Median | Best–worst | Fail rate |
 |---|---|---|---|
-| calm | 31.9 s | 27.9–39.1 s | 0% |
-| rain | 36.6 s | — | 0.8% |
-| wind | 35.9 s | — | 3.3% |
-| storm | 40.0 s | — | 11.7% |
+| calm | 32.2 s | 27.8–39.1 s | 0% |
+| rain | 37.0 s | 29.7–49.7 s | 4.2% |
+| wind | 36.8 s | 31.6–45.2 s | 4.2% |
+| storm | 40.5 s | 34.1–56.9 s | 13.3% |
 
 **Forks:**
-- **Ramp:** jumping is worse at jump 0–3 (+0.4–0.9 s) and better at jump 4–5 (about −1 s).
-- **Pond:** water wins from water 1 star upward (−0.4 to −3.7 s calm), and wins by more in rain and storm.
-- **Crossing:** the exposed route is about 1.8 s faster in calm. In wind, sheltered wins at stability 0.
+- **Ramp:** jumping is worse at jump 0–3 (+0.3–0.9 s) and better at jump 4–5 (about −1 s).
+- **Pond:** water loses at water 0–1 (+0.6–1.4 s calm), is about even at 2 and wins from 3 upward (−1.7 to −2.8 s calm). It wins at every level in rain and storm.
+- **Crossing:** the exposed route is about 1.4–2.3 s faster in calm. In wind, sheltered wins at stability 0 (+1.0 s) and it is roughly even at 1–3.
 
 ## Known issues and deviations
 
