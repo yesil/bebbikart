@@ -1,0 +1,618 @@
+extends CanvasLayer
+## Big-screen HUD for a group race (built for 4 to 8 racers, works up to 20): who is who, who is
+## ahead, and how everyone did. Every string comes from ui/i18n.gd.
+##  - Tags: a place badge and the name over every kart, in the racer's colour, pushed apart so
+##    they never overlap (side by side on the grid, bunched up in a bend).
+##  - Race board (right): place, avatar, name, lap or section, time. Finishers stay with their
+##    time while the rest of the field comes home, so the group sees its own results.
+##  - Paddock (bottom): everyone in the session, by rank: avatar, best time, or what the designer
+##    is doing while their racer is made.
+##  - Banners (top): each finish and each oops as it happens.
+##  - Problems (bottom left, red): errors for the facilitator. No fallbacks: shown, never hidden.
+## main.gd feeds it (set_roster, set_leaderboard, run_result, run_gone, problem) and calls
+## update() every frame with the sim and the racer views.
+
+const I18n = preload("res://ui/i18n.gd")
+
+## Distinct racer colours, in join order (a colour comes free again when its racer leaves).
+const PALETTE := [
+	Color("#ff4b4b"), Color("#3b8cff"), Color("#ffd23a"), Color("#33d17a"),
+	Color("#ff8a1f"), Color("#b061ff"), Color("#24d6e0"), Color("#ff5fb8"),
+	Color("#a8e03a"), Color("#c08457"), Color("#e8e8f0"), Color("#7a8cff"),
+]
+const BOARD_ROWS := 10
+const BOARD_W := 480
+const PADDOCK_ROW := 10          # cards per paddock row; more racers wrap to a second, smaller row
+const RESULT_HOLD_S := 25.0     # a finisher stays on the board this long at most
+const EMPTY_HOLD_S := 10.0      # ...or this long after the last racer left the track
+const BANNER_S := 3.5
+const PROBLEM_S := 30.0
+const TAG_NEAR := 14.0          # metres: tags shrink beyond this distance
+const FONT_NAMES := ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue", "Arial"]
+
+var camera: Camera3D
+## pid -> Texture2D (or null while it downloads). Server mode: RosterAssets.avatar_for.
+var avatar_of := Callable()
+## Mock mode has no server leaderboard: bests come from the runs finished here.
+var local_bests := false
+var laps_per_run := 3
+
+var _font: SystemFont
+var _t := 0.0
+var _colors := {}               # pid -> Color
+var _roster := {}               # pid -> RosterEntry-like {nickname, status, stage, connected}
+var _join_order: Array = []     # pids, oldest first
+var _ranks := {}                # pid -> {rank, bestTimeMs}
+var _heat := {}                 # runId -> {pid, state, result_ms, reason, done_t}
+var _empty_since := -1.0
+var _tags := {}                 # runId -> PanelContainer
+var _tag_layer: Control
+var _board_panel: PanelContainer
+var _board_title: Label
+var _board_rows: Array = []     # [{root, place, chip, avatar, initial, name, info, time}]
+var _board_more: Label
+var _paddock: HFlowContainer
+var _paddock_dirty := true
+var _paddock_t := 0.0
+var _banners: VBoxContainer
+var _problems: VBoxContainer
+
+
+func _ready() -> void:
+	layer = 5
+	_font = SystemFont.new()
+	_font.font_names = PackedStringArray(FONT_NAMES)
+	_font.font_weight = 700
+	_tag_layer = Control.new()
+	_tag_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_tag_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_tag_layer)
+	_build_board()
+	_build_paddock()
+	_banners = VBoxContainer.new()
+	_banners.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_banners.offset_left = -380
+	_banners.offset_right = 380
+	_banners.offset_top = 18
+	_banners.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_banners.add_theme_constant_override("separation", 8)
+	_banners.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_banners)
+	_problems = VBoxContainer.new()
+	_problems.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_problems.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_problems.offset_left = 16
+	_problems.offset_right = 916
+	_problems.offset_top = -160
+	_problems.offset_bottom = -160
+	_problems.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_problems)
+
+
+# ---------------------------------------------------------------- data in
+
+## The racer's colour for tags, board, paddock and its name tag.
+func color_for(pid: String) -> Color:
+	if not _colors.has(pid):
+		var used := {}
+		for c in _colors.values():
+			used[c] = true
+		var pick := Color.WHITE
+		var found := false
+		for c in PALETTE:
+			if not used.has(c):
+				pick = c
+				found = true
+				break
+		if not found:  # more racers than colours: a lighter round of the palette
+			pick = PALETTE[_colors.size() % PALETTE.size()].lightened(0.35)
+		_colors[pid] = pick
+	return _colors[pid]
+
+
+## Roster entries (server RosterEntry, or mock players): names, status, design step, presence.
+func set_roster(entries: Array) -> void:
+	var still := {}
+	for e in entries:
+		var pid := String(e["playerId"])
+		still[pid] = true
+		if not _roster.has(pid):
+			_join_order.append(pid)
+		_roster[pid] = e
+		color_for(pid)
+	for pid in _roster.keys():
+		if not still.has(pid):
+			_roster.erase(pid)
+			_colors.erase(pid)
+			_ranks.erase(pid)
+			_join_order.erase(pid)
+	_paddock_dirty = true
+
+
+## Server leaderboard.updated: rank and best time per racer.
+func set_leaderboard(entries: Array) -> void:
+	_ranks.clear()
+	for e in entries:
+		_ranks[String(e["playerId"])] = {"rank": int(e["rank"]), "bestTimeMs": int(e["bestTimeMs"])}
+	_paddock_dirty = true
+
+
+## A run finished (ok) or failed: result_ms is the finish time, or the best lap on a loop.
+func run_result(run_id: String, pid: String, ok: bool, result_ms: int, reason: String) -> void:
+	var h: Dictionary = _heat.get(run_id, {"pid": pid})
+	h["state"] = "finished" if ok else "failed"
+	h["result_ms"] = result_ms
+	h["reason"] = reason
+	h["done_t"] = _t
+	_heat[run_id] = h
+	var name := _nick(pid)
+	if ok:
+		var place := _finish_place(run_id)
+		var best: Dictionary = _ranks.get(pid, {})
+		var pb := best.is_empty() or result_ms < int(best["bestTimeMs"])
+		_banner(I18n.f("hud.banner_finish", [_ordinal(place), name, result_ms / 1000.0]) + ("   " + I18n.t("hud.new_best") if pb and not best.is_empty() else ""), color_for(pid))
+		if local_bests and pb:
+			_ranks[pid] = {"rank": 0, "bestTimeMs": result_ms}
+			_rerank_local()
+	else:
+		_banner(I18n.f("hud.banner_oops", [name, I18n.t("fail." + reason)]), color_for(pid).darkened(0.35))
+	_paddock_dirty = true
+
+
+## A run left the track without a result (aborted, the racer quit): off the board.
+func run_gone(run_id: String) -> void:
+	_heat.erase(run_id)
+	var tag: Control = _tags.get(run_id)
+	if tag != null:
+		tag.queue_free()
+		_tags.erase(run_id)
+
+
+## An error the facilitator must see (red, bottom left, for PROBLEM_S).
+func problem(text: String) -> void:
+	var l := _label(text, 20, Color(1, 0.92, 0.9))
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(900, 0)
+	var p := _panel(Color(0.55, 0.05, 0.05, 0.88), 8)
+	p.add_child(l)
+	p.set_meta("until", _t + PROBLEM_S)
+	_problems.add_child(p)
+	while _problems.get_child_count() > 4:
+		_problems.get_child(0).free()
+
+
+# ---------------------------------------------------------------- per frame
+
+## sim: sim/sim.gd (racers on track and in the start queue); views: runId -> racer view node.
+func update(delta: float, sim, views: Dictionary) -> void:
+	_t += delta
+	for r in sim.racers:
+		_heat_entry(r, "racing")
+	for r in sim.queue:
+		_heat_entry(r, "queued")
+	var on_track: bool = not sim.racers.is_empty() or not sim.queue.is_empty()
+	if on_track:
+		_empty_since = -1.0
+	elif _empty_since < 0.0:
+		_empty_since = _t
+	for run_id in _heat.keys():
+		var h: Dictionary = _heat[run_id]
+		if h["state"] == "racing" or h["state"] == "queued":
+			if not sim.by_run.has(run_id):
+				_heat.erase(run_id)  # gone without a result we saw (aborted)
+			continue
+		if _t - float(h["done_t"]) > RESULT_HOLD_S or (_empty_since >= 0.0 and _t - _empty_since > EMPTY_HOLD_S):
+			_heat.erase(run_id)
+	var order := _order(sim)
+	_update_board(order, sim)
+	_update_tags(order, sim, views, delta)
+	_paddock_t -= delta
+	if _paddock_dirty or _paddock_t <= 0.0:
+		_rebuild_paddock(sim)
+	_expire(_banners)
+	_expire(_problems)
+
+
+func _heat_entry(r, state: String) -> void:
+	var h: Dictionary = _heat.get(r.run_id, {})
+	if h.is_empty():
+		_heat[r.run_id] = {"pid": r.player_id, "state": state, "racer": r}
+	else:
+		h["state"] = state
+		h["racer"] = r
+
+
+## Run ids by place: finishers by time, then racers by distance, then the start queue, then oopses.
+func _order(sim) -> Array:
+	var fin: Array = []
+	var racing: Array = []
+	var queued: Array = []
+	var failed: Array = []
+	for run_id in _heat:
+		match String(_heat[run_id]["state"]):
+			"finished": fin.append(run_id)
+			"racing": racing.append(run_id)
+			"queued": queued.append(run_id)
+			_: failed.append(run_id)
+	fin.sort_custom(func(a, b): return int(_heat[a]["result_ms"]) < int(_heat[b]["result_ms"]))
+	racing.sort_custom(func(a, b):
+		var ra = _heat[a]["racer"]
+		var rb = _heat[b]["racer"]
+		return ra.lap + ra.progress() > rb.lap + rb.progress())
+	var qorder: Array = sim.queue.map(func(r): return r.run_id)
+	queued.sort_custom(func(a, b): return qorder.find(a) < qorder.find(b))
+	return fin + racing + queued + failed
+
+
+func _finish_place(run_id: String) -> int:
+	var ms := int(_heat[run_id]["result_ms"])
+	var place := 1
+	for other in _heat:
+		if other != run_id and _heat[other]["state"] == "finished" and int(_heat[other]["result_ms"]) < ms:
+			place += 1
+	return place
+
+
+func _ordinal(n: int) -> String:
+	return I18n.t("hud.place_%d" % n) if n <= 3 else I18n.f("hud.place_n", [n])
+
+
+# ---------------------------------------------------------------- race board
+
+func _build_board() -> void:
+	_board_panel = _panel(Color(0.06, 0.07, 0.1, 0.72), 14)
+	_board_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_board_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_board_panel.offset_left = -16 - BOARD_W
+	_board_panel.offset_right = -16
+	_board_panel.offset_top = 16
+	_board_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_board_panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	_board_panel.add_child(box)
+	_board_title = _label("", 26, Color(1, 0.86, 0.3))
+	box.add_child(_board_title)
+	for i in BOARD_ROWS:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var place := _label("", 30, Color.WHITE)
+		place.custom_minimum_size = Vector2(44, 0)
+		place.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(place)
+		var chip := _avatar_chip(44)
+		row.add_child(chip["root"])
+		var name := _label("", 28, Color.WHITE)
+		name.custom_minimum_size = Vector2(140, 0)
+		name.clip_text = true
+		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(name)
+		var info := _label("", 20, Color(0.8, 0.84, 0.92))
+		info.custom_minimum_size = Vector2(90, 0)
+		row.add_child(info)
+		var time := _label("", 28, Color.WHITE)
+		time.custom_minimum_size = Vector2(92, 0)
+		time.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(time)
+		box.add_child(row)
+		_board_rows.append({"root": row, "place": place, "chip": chip, "name": name, "info": info, "time": time})
+	_board_more = _label("", 20, Color(0.8, 0.84, 0.92))
+	box.add_child(_board_more)
+
+
+func _update_board(order: Array, sim) -> void:
+	_board_panel.visible = not order.is_empty()
+	if order.is_empty():
+		return
+	var racing := false
+	for run_id in order:
+		if _heat[run_id]["state"] == "racing" or _heat[run_id]["state"] == "queued":
+			racing = true
+	_board_title.text = I18n.t("hud.race") if racing else I18n.t("hud.results")
+	for i in BOARD_ROWS:
+		var row: Dictionary = _board_rows[i]
+		row["root"].visible = i < order.size()
+		if i >= order.size():
+			continue
+		var h: Dictionary = _heat[order[i]]
+		var pid := String(h["pid"])
+		var col := color_for(pid)
+		var state := String(h["state"])
+		_fill_chip(row["chip"], pid, col)
+		row["name"].text = _nick(pid)
+		row["name"].add_theme_color_override("font_color", col.lightened(0.25))
+		row["place"].text = str(i + 1) if state != "failed" else "–"
+		row["place"].add_theme_color_override("font_color", _place_color(i + 1) if state == "finished" else Color.WHITE)
+		var info := ""
+		var time := ""
+		match state:
+			"queued":
+				info = I18n.t("hud.at_start")
+			"racing":
+				var r = h["racer"]
+				if r.looping:
+					info = I18n.f("hud.lap", [mini(r.lap + 1, laps_per_run), laps_per_run])
+					time = "%.1f" % (r.lap_ms() / 1000.0)
+				else:
+					info = I18n.t("section." + String(r.section))
+					time = "%.1f" % (r.elapsed_ms() / 1000.0)
+			"finished":
+				info = I18n.t("hud.finished")
+				time = "%.2f" % (int(h["result_ms"]) / 1000.0)
+			_:
+				info = I18n.t("hud.oops")
+				time = ""
+		row["info"].text = info
+		row["time"].text = time
+		row["time"].add_theme_color_override("font_color", _place_color(i + 1) if state == "finished" else Color.WHITE)
+		row["root"].modulate.a = 0.55 if state == "failed" or state == "queued" else 1.0
+	_board_more.visible = order.size() > BOARD_ROWS
+	_board_more.text = I18n.f("hud.more", [order.size() - BOARD_ROWS])
+
+
+func _place_color(place: int) -> Color:
+	match place:
+		1: return Color("#ffd23a")
+		2: return Color("#d9e2ec")
+		3: return Color("#e0a060")
+	return Color.WHITE
+
+
+# ---------------------------------------------------------------- kart tags
+
+func _update_tags(order: Array, sim, views: Dictionary, delta: float) -> void:
+	var places := {}
+	for i in order.size():
+		places[order[i]] = i + 1
+	# Tags for racers on the track; nearest first, so the kart in front of the camera keeps its
+	# tag on its head and the ones behind move up out of its way.
+	var shown: Array = []
+	var vp := get_viewport().get_visible_rect()
+	for r in sim.racers:
+		var v: Node3D = views.get(r.run_id)
+		var tag: PanelContainer = _tags.get(r.run_id)
+		if tag == null:
+			tag = _make_tag(r.player_id)
+			_tags[r.run_id] = tag
+		if camera == null or v == null or not v.visible:
+			tag.visible = false
+			continue
+		var anchor: Vector3 = v.tag_anchor()
+		if camera.is_position_behind(anchor):
+			tag.visible = false
+			continue
+		var p := camera.unproject_position(anchor)
+		var dist := camera.global_position.distance_to(anchor)
+		if not vp.grow(200).has_point(p):
+			tag.visible = false
+			continue
+		tag.visible = true
+		var badge: Label = tag.get_meta("badge")
+		badge.text = str(places.get(r.run_id, 0))
+		var k := clampf(TAG_NEAR / maxf(dist, 0.1), 0.55, 1.0)
+		tag.scale = Vector2(k, k)
+		shown.append({"tag": tag, "p": p, "dist": dist, "size": tag.get_combined_minimum_size() * k})
+	shown.sort_custom(func(a, b): return a["dist"] < b["dist"])
+	var placed: Array = []
+	for s in shown:
+		var size: Vector2 = s["size"]
+		var rect := Rect2(s["p"] - Vector2(size.x * 0.5, size.y), size)
+		for _pass in 12:
+			var moved := false
+			for other in placed:
+				var o: Rect2 = other
+				if rect.grow(-1).intersects(o):
+					rect.position.y = o.position.y - size.y - 3.0
+					moved = true
+			if not moved:
+				break
+		placed.append(rect)
+		var tag: Control = s["tag"]
+		# Glide to the new spot (no jitter when two karts swap), jump on a camera cut.
+		if tag.position.distance_to(rect.position) > 220.0 or not tag.has_meta("placed"):
+			tag.position = rect.position
+			tag.set_meta("placed", true)
+		else:
+			tag.position = tag.position.lerp(rect.position, 1.0 - exp(-delta * 14.0))
+	for run_id in _tags.keys():
+		if not sim.by_run.has(run_id) or sim.by_run[run_id].state != "racing":
+			if not sim.queue.any(func(q): return q.run_id == run_id):
+				_tags[run_id].queue_free()
+				_tags.erase(run_id)
+
+
+func _make_tag(pid: String) -> PanelContainer:
+	var col := color_for(pid)
+	var tag := _panel(col.darkened(0.45), 10, col, 3)
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	tag.add_child(row)
+	var badge_bg := _panel(col, 6)
+	badge_bg.custom_minimum_size = Vector2(34, 0)
+	var badge := _label("", 26, Color(0.08, 0.08, 0.1))
+	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge.remove_theme_constant_override("outline_size")
+	badge_bg.add_child(badge)
+	row.add_child(badge_bg)
+	row.add_child(_label(_nick(pid), 28, Color.WHITE))
+	tag.set_meta("badge", badge)
+	tag.visible = false
+	_tag_layer.add_child(tag)
+	tag.reset_size()
+	tag.pivot_offset = Vector2.ZERO
+	return tag
+
+
+# ---------------------------------------------------------------- paddock
+
+func _build_paddock() -> void:
+	var panel := _panel(Color(0.06, 0.07, 0.1, 0.6), 10)
+	panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	panel.offset_left = 16
+	panel.offset_right = -16
+	panel.offset_top = -12
+	panel.offset_bottom = -12
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(panel)
+	_paddock = HFlowContainer.new()
+	_paddock.add_theme_constant_override("h_separation", 10)
+	_paddock.add_theme_constant_override("v_separation", 8)
+	_paddock.alignment = FlowContainer.ALIGNMENT_CENTER
+	panel.add_child(_paddock)
+	set_meta("paddock_panel", panel)
+
+
+func _rebuild_paddock(sim) -> void:
+	_paddock_dirty = false
+	_paddock_t = 0.5  # avatars arrive and racers start and stop: refresh twice a second
+	var panel: Control = get_meta("paddock_panel")
+	panel.visible = not _roster.is_empty()
+	for c in _paddock.get_children():
+		c.queue_free()
+	var on_track := {}
+	for r in sim.racers:
+		on_track[r.player_id] = true
+	for r in sim.queue:
+		on_track[r.player_id] = true
+	# Ranked racers first (by rank), then everyone else in join order.
+	var pids: Array = _join_order.duplicate()
+	pids.sort_custom(func(a, b):
+		var ra: int = _ranks.get(a, {}).get("rank", 9999)
+		var rb: int = _ranks.get(b, {}).get("rank", 9999)
+		if ra != rb:
+			return ra < rb
+		return _join_order.find(a) < _join_order.find(b))
+	var n := pids.size()
+	var compact := n > PADDOCK_ROW
+	var per_row := mini(n, PADDOCK_ROW)
+	var w := clampf((1868.0 - 10.0 * (per_row - 1)) / maxf(1.0, per_row), 150.0, 260.0)
+	var av := 40 if compact else 64
+	for pid in pids:
+		var e: Dictionary = _roster[pid]
+		var col := color_for(pid)
+		var card := _panel(Color(col.r, col.g, col.b, 0.22), 8, col, 2)
+		card.custom_minimum_size = Vector2(w, 52 if compact else 84)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		card.add_child(row)
+		var chip := _avatar_chip(av)
+		_fill_chip(chip, pid, col)
+		row.add_child(chip["root"])
+		var col_box := VBoxContainer.new()
+		col_box.add_theme_constant_override("separation", 0)
+		col_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(col_box)
+		var rank: Dictionary = _ranks.get(pid, {})
+		var name := _label(("#%d " % int(rank["rank"]) if not rank.is_empty() and int(rank["rank"]) > 0 else "") + _nick(pid), 18 if compact else 22, Color.WHITE)
+		name.clip_text = true
+		name.custom_minimum_size = Vector2(w - av - 28, 0)
+		col_box.add_child(name)
+		var status := String(e.get("status", "ready"))
+		var line := ""
+		var line_col := Color(0.85, 0.88, 0.95)
+		if status == "processing":
+			var stage := String(e.get("stage", ""))
+			line = I18n.t("making." + stage) if stage != "" else I18n.t("hud.queued_design")
+			line_col = Color(1, 0.86, 0.3)
+		elif status == "ready" or status == "":
+			if on_track.has(pid):
+				line = I18n.t("hud.racing")
+				line_col = Color(0.5, 1, 0.6)
+			elif not rank.is_empty():
+				line = I18n.f("hud.best", [int(rank["bestTimeMs"]) / 1000.0])
+			else:
+				line = I18n.t("hud.ready")
+		else:
+			line = I18n.t("hud.status_" + status)
+			line_col = Color(1, 0.6, 0.5)
+		var sl := _label(line, 15 if compact else 17, line_col)
+		sl.clip_text = compact
+		if not compact:
+			sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sl.custom_minimum_size = Vector2(w - av - 28, 0)
+		col_box.add_child(sl)
+		if not bool(e.get("connected", true)):
+			card.modulate.a = 0.45
+		_paddock.add_child(card)
+
+
+# ---------------------------------------------------------------- helpers
+
+func _nick(pid: String) -> String:
+	return String(_roster.get(pid, {}).get("nickname", "?"))
+
+
+func _rerank_local() -> void:
+	var pids: Array = _ranks.keys()
+	pids.sort_custom(func(a, b): return int(_ranks[a]["bestTimeMs"]) < int(_ranks[b]["bestTimeMs"]))
+	for i in pids.size():
+		_ranks[pids[i]]["rank"] = i + 1
+
+
+func _avatar_chip(size: int) -> Dictionary:
+	var root := _panel(Color.WHITE, size / 2, Color.WHITE, 3)
+	root.custom_minimum_size = Vector2(size, size)
+	var tex := TextureRect.new()
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tex.custom_minimum_size = Vector2(size - 6, size - 6)
+	root.add_child(tex)
+	var initial := _label("", int(size * 0.55), Color.WHITE)
+	initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	initial.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	root.add_child(initial)
+	return {"root": root, "tex": tex, "initial": initial}
+
+
+func _fill_chip(chip: Dictionary, pid: String, col: Color) -> void:
+	var tex: Texture2D = avatar_of.call(pid) if avatar_of.is_valid() else null
+	chip["tex"].texture = tex
+	chip["initial"].text = "" if tex != null else _nick(pid).left(1).to_upper()
+	var sb: StyleBoxFlat = chip["root"].get_theme_stylebox("panel")
+	sb.bg_color = col.darkened(0.2) if tex == null else Color(0.95, 0.95, 0.98)
+	sb.border_color = col
+
+
+func _panel(bg: Color, radius: int, border := Color.TRANSPARENT, border_w := 0) -> PanelContainer:
+	var p := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.set_corner_radius_all(radius)
+	sb.set_content_margin_all(6 if radius < 10 else 10)
+	if border_w > 0:
+		sb.border_color = border
+		sb.set_border_width_all(border_w)
+	p.add_theme_stylebox_override("panel", sb)
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return p
+
+
+func _label(text: String, size: int, col: Color) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_override("font", _font)
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_color_override("font_color", col)
+	l.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.08))
+	l.add_theme_constant_override("outline_size", maxi(4, size / 5))
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return l
+
+
+func _banner(text: String, col: Color) -> void:
+	var p := _panel(col.darkened(0.25), 14, Color.WHITE, 3)
+	var l := _label(text, 38, Color.WHITE)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	p.add_child(l)
+	p.set_meta("until", _t + BANNER_S)
+	_banners.add_child(p)
+	while _banners.get_child_count() > 3:
+		_banners.get_child(0).free()
+
+
+func _expire(box: Container) -> void:
+	for c in box.get_children():
+		if _t > float(c.get_meta("until", INF)):
+			c.queue_free()
