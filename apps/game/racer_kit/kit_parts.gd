@@ -66,6 +66,65 @@ static func aim_z(n: Node3D, dir: Vector3) -> void:
 
 # --- character ---
 
+## Clothes over a body blob (p = body params, bscale = body scale, cy = body centre height).
+static func outfit(type: String, color: Color, p: Dictionary, bscale: Vector3, cy: float) -> Node3D:
+	var root := node("Outfit_" + type)
+	var ax: float = p.ax * bscale.x
+	var ay: float = p.ay * bscale.y
+	var zr: float = p.az / p.ax * bscale.z / bscale.x  # keep the body's depth/width ratio
+	var band := func(y0: float, y1: float, r0: float, r1: float) -> MeshInstance3D:
+		var m := mi(KitMesh.cylinder(r1, r0, y1 - y0, 24), color, Vector3(0, (y0 + y1) * 0.5, 0))
+		m.scale = Vector3(1, 1, zr)
+		return m
+	match type:
+		"tshirt", "jacket":
+			root.add_child(band.call(cy - ay * 0.15, cy + ay * 0.6, ax * 1.06, ax * 0.98))
+			for s in [-1, 1]:
+				root.add_child(mi(KitMesh.sphere(ax * 0.32), color, Vector3(s * ax * 0.92, cy + ay * 0.45, 0)))
+			if type == "jacket":
+				var collar := mi(KitMesh.torus(ax * 0.55, ax * 0.72), color.darkened(0.15), Vector3(0, cy + ay * 0.72, 0))
+				collar.scale = Vector3(1, 1.4, zr)
+				root.add_child(collar)
+		"dress":
+			root.add_child(band.call(ay * 0.05, cy + ay * 0.55, ax * 1.5, ax * 1.0))
+		"skirt":
+			root.add_child(band.call(ay * 0.12, cy - ay * 0.05, ax * 1.45, ax * 1.04))
+		"shorts":
+			root.add_child(band.call(ay * 0.05, cy - ay * 0.1, ax * 1.08, ax * 1.05))
+		"overalls":
+			root.add_child(band.call(ay * 0.05, cy - ay * 0.05, ax * 1.08, ax * 1.05))
+			var bib := mi(KitMesh.rounded_box(Vector3(ax * 0.9, ay * 0.6, 0.03)), color, Vector3(0, cy + ay * 0.2, -p.az * bscale.z * 0.98))
+			root.add_child(bib)
+			for s in [-1, 1]:
+				root.add_child(mi(KitMesh.sphere(0.022), GOLD, Vector3(s * ax * 0.35, cy + ay * 0.45, -p.az * bscale.z - 0.01)))
+	return root
+
+
+## Two legs from the hips with shoes. sitting: legs reach forward (-Z); otherwise straight down.
+static func legs(color: Color, shoes: String, shoe_color: Color, p: Dictionary, bscale: Vector3, length: float, sitting: bool) -> Node3D:
+	var root := node("Legs")
+	for s in [-1, 1]:
+		var hip := Vector3(s * p.ax * bscale.x * 0.45, p.ay * bscale.y * 0.25, 0)
+		var dir := Vector3(0, -0.45, -1).normalized() if sitting else Vector3.DOWN
+		var leg := node("Leg", hip)
+		aim_y(leg, -dir)
+		leg.add_child(mi(KitMesh.capsule(0.045, length + 0.06), color, Vector3(0, -length / 2, 0)))
+		var foot := node("Foot", Vector3(0, -length, 0))
+		foot.basis = leg.basis.inverse()  # shoes stay level with the ground
+		match shoes:
+			"sneakers":
+				foot.add_child(mi(KitMesh.rounded_box(Vector3(0.11, 0.07, 0.17)), shoe_color, Vector3(0, -0.01, -0.03)))
+				foot.add_child(mi(KitMesh.rounded_box(Vector3(0.115, 0.02, 0.175)), WHITE, Vector3(0, -0.045, -0.03)))
+			"boots":
+				foot.add_child(mi(KitMesh.capsule(0.06, 0.2), shoe_color, Vector3(0, 0.05, 0)))
+				foot.add_child(mi(KitMesh.rounded_box(Vector3(0.12, 0.07, 0.17)), shoe_color, Vector3(0, -0.03, -0.03)))
+			_:
+				foot.add_child(mi(KitMesh.sphere(0.055), color.lightened(0.1)))
+		leg.add_child(foot)
+		root.add_child(leg)
+	return root
+
+
 ## Body mesh whose bottom sits at y=0. Returns {node, params, top, center}.
 static func body(shape: String, color: Color) -> Dictionary:
 	var p: Dictionary = BODY_PARAMS.get(shape, BODY_PARAMS.bean)
@@ -140,6 +199,26 @@ static func hair(style: String, color: Color, p: Dictionary) -> Node3D:
 				if pitch > PI / 2:
 					pos = surface(p, PI, PI - pitch, 0.02)
 				root.add_child(mi(KitMesh.sphere(0.065 - absf(i - 2.5) * 0.006), color, pos))
+		"buns", "pigtails":
+			var cap3 := mi(dome(ax * 1.06, ay * 0.62, az * 1.06), color, Vector3(0, ay * 0.4, 0))
+			cap3.rotation.x = 0.25
+			root.add_child(cap3)
+			for s in [-1, 1]:
+				if style == "buns":
+					root.add_child(mi(KitMesh.sphere(0.085), color, surface(p, s * 0.9, 1.0, 0.05)))
+				else:
+					var at := surface(p, s * 1.45, 0.25, 0.0)
+					var tail := mi(KitMesh.capsule(0.055, 0.24), color, at + Vector3(s * 0.08, -0.04, 0))
+					tail.rotation.z = s * 1.1
+					root.add_child(tail)
+					root.add_child(mi(KitMesh.sphere(0.03), GOLD, at))
+		"bob":
+			var b2 := mi(dome(ax * 1.12, ay * 0.9, az * 1.12), color, Vector3(0, -ay * 0.15, 0.02))
+			b2.rotation.x = 0.25
+			root.add_child(b2)
+			var fr := mi(KitMesh.capsule(0.05, ax * 1.6), color, surface(p, 0, 0.6, 0.01))
+			fr.rotation.z = PI / 2
+			root.add_child(fr)
 		_:  # tuft
 			for i in 3:
 				var t := mi(KitMesh.capsule(0.025, 0.14), color, Vector3((i - 1) * 0.04, ay * 1.02, 0))

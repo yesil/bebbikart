@@ -26,6 +26,8 @@ export function catalogText(kit = RACER_KIT) {
     group("character.face.mouth", kit.mouths),
     group("character.hair.style", kit.hairStyles),
     group("character.hat.type", kit.hatTypes),
+    group("character.outfit[].type", kit.outfits),
+    group("character.legs.shoes", kit.shoeStyles),
     group("ride.base", kit.rideBases),
     group("ride.wheels.style", kit.wheelStyles),
     group("ride.legs.style", kit.legStyles),
@@ -61,6 +63,8 @@ function schemaText(L = SPEC_LIMITS) {
     "hair": { "style": <hair style>, "color": <palette index> } (optional),
     "hat": { "type": <hat type>, "color": <palette index> } (optional),
     "arms": { "color": <palette index> },
+    "outfit": [ { "type": <outfit>, "color": <palette index>, "pattern": <pattern> (optional) } ] max 2, e.g. a top + a skirt (optional),
+    "legs": { "color": <palette index>, "shoes": <shoe style>, "shoeColor": <palette index> } (optional, visible legs and shoes),
     "extras": [<extra>] max ${L.characterExtrasMax}, character sockets only
   },
   "ride": {
@@ -201,28 +205,34 @@ const DESIGN_RULES = `HOW TO DESIGN A GREAT RACER
    colour and the right count (three horns = three cones, not two; five buttons = five spheres). Use the closest kit
    part, then extras to add what the parts can't show. Map each feature in "featureMap".
 2. The child's colours. Build the palette from the drawing's real colours, made bright and toy-like (up to ${SPEC_LIMITS.paletteMax}).
+   A drawing done only in pencil or black pen has no colours to copy: then choose a cheerful palette that suits the
+   character (never a grey racer), and keep the drawn markings (stripes, checks) as patterns.
    Keep the drawing's main colour as the main colour of the matching part: a red kart is red, a purple cat is purple.
    Recreate markings with patterns: stripes, spots, stars, hearts, zigzags, checks. When the child coloured a part in
    with visible crayon/marker strokes, use the "crayon" pattern in a lighter or darker shade of that colour so the toy
    keeps the hand-made look. A rainbow or multicolour part = several extras in different palette colours.
-3. Exaggerate what the child exaggerated: a huge head = head.size 1.4+, tiny wheels = wheels.size 0.6, a long body =
+3. Use real kit parts before extras: a closed car, van or bus is ride.base "car" (its glass cabin is built in), clothes
+   are "outfit" (a top + a skirt, a dress, overalls…), visible legs, boots and shoes are "legs", buns and pigtails are
+   hair styles. NEVER build cabins, windows, roofs or big blocks out of extras over the seat: they hide the driver.
+   The driver must always be visible.
+4. Exaggerate what the child exaggerated: a huge head = head.size 1.4+, tiny wheels = wheels.size 0.6, a long body =
    stretched scale. Bold, chunky toy proportions beat timid ones.
-4. Personality you can see. Choose eyes, brows, mouth, motion.style and energy, title, personality words and tagline
+5. Personality you can see. Choose eyes, brows, mouth, motion.style and energy, title, personality words and tagline
    from the drawing's expression, pose and story. A grumpy face gets "angry" eyes, a happy one a "grin" or "tongue",
    a dreamy unicorn "lashes" + "sparkle" + "floaty", a robot "visor" + "metallic" + "jittery".
-5. Sound to match the vehicle and the character: sound.engine from what the vehicle is (kart → putter or vroom,
+6. Sound to match the vehicle and the character: sound.engine from what the vehicle is (kart → putter or vroom,
    horse → hooves, dragon → flap, boat → splash, slime → squelch, rocket shoe → rocket), sound.horn from the character
    or vehicle (a cat says meow, a dog woof, a horse neigh, a cow moo, a monster roar; otherwise honk/beep/toot/squeak/
    bell/boing to suit the personality), pitch higher for small cute racers, lower for big heavy ones.
-6. Imagination: add 1–3 delightful finishing touches that fit the drawing's story and never contradict it (a cat's
+7. Imagination: add 1–3 delightful finishing touches that fit the drawing's story and never contradict it (a cat's
    kart gets a fish-shaped flag, a sea monster's boat gets a bubbling exhaust, a princess gets a sparkle finish).
    Say which touches are yours in "featureMap" (feature "touch: …").
-7. Unique: avoid the bland defaults (bean body, round head, big_round eyes, smile, toy wheels, glossy) unless the
+8. Unique: avoid the bland defaults (bean body, round head, big_round eyes, smile, toy wheels, glossy) unless the
    drawing really shows them. Two different drawings must never give two similar-looking racers.
-8. Readable from the race camera: fewer, bigger, well-placed extras beat many tiny ones. Use "mirror": true for pairs.
+9. Readable from the race camera: fewer, bigger, well-placed extras beat many tiny ones. Use "mirror": true for pairs.
    The character and the ride should contrast so the rider stands out.
-9. ${KIDS_RULES}
-10. Set "drawingSticker": true when the vehicle drawing is a flat-sided thing worth showing (karts, boats, rockets).
+10. ${KIDS_RULES}
+11. Set "drawingSticker": true when the vehicle drawing is a flat-sided thing worth showing (karts, boats, rockets).
     Give the ride a "number" when the child drew one, or when the racer is a classic race kart/bike.`;
 
 export function designSystemPrompt() {
@@ -290,7 +300,8 @@ Check, one by one:
 - proportions and readability: exaggerations kept? Extras big enough to see, placed sensibly (ears on the head side,
   horns on top), not floating or buried?
 - fun: a little imaginative touch that fits the story?
-Only suggest fixes the kit can do (catalog below). Be concrete: name the spec field and the new value.
+Flag any extra that hides the driver (boxes or blocks over the seat, fake cabins): suggest ride.base "car" or
+removing it. Only suggest fixes the kit can do (catalog below). Be concrete: name the spec field and the new value.
 
 Reply with ONE JSON object and nothing else:
 {

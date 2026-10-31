@@ -204,6 +204,16 @@ static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: 
 	ch.add_child(body_node)
 	if c.body.has("pattern"):
 		KitMaterial.look(b.node, c.body.pattern, cols[c.body.pattern.color], "")
+	for piece in c.get("outfit", []):
+		var o := P.outfit(piece.type, cols[piece.color], bp, bscale, b.center * bscale.y)
+		if piece.has("pattern"):
+			KitMaterial.look(o, piece.pattern, cols[piece.pattern.color], "")
+		ch.add_child(o)
+	if c.has("legs"):
+		const LEG := 0.24
+		if d.stand:
+			ch.position.y += LEG  # stand on the deck
+		ch.add_child(P.legs(cols[c.legs.color], c.legs.shoes, cols[c.legs.shoeColor], bp, bscale, LEG, not d.stand))
 	var center: float = b.center * bscale.y
 
 	# Head

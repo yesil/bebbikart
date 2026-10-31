@@ -53,6 +53,9 @@ export const RACER_KIT = Object.freeze({
     { name: "ponytail", desc: "ponytail" },
     { name: "mohawk", desc: "mohawk stripe" },
     { name: "tuft", desc: "single tuft on top" },
+    { name: "buns", desc: "two round space buns on top" },
+    { name: "pigtails", desc: "two pigtails sticking out at the sides" },
+    { name: "bob", desc: "short rounded bob cut with a fringe" },
   ],
   hatTypes: [
     { name: "cap", desc: "baseball cap" },
@@ -65,7 +68,8 @@ export const RACER_KIT = Object.freeze({
     { name: "party", desc: "party cone hat" },
   ],
   rideBases: [
-    { name: "kart", desc: "go-kart, anything with a seat and wheels" },
+    { name: "kart", desc: "open go-kart, a seat on wheels" },
+    { name: "car", desc: "closed car, van or bus with a see-through glass cabin over the driver" },
     { name: "bike", desc: "bicycle, scooter or motorbike" },
     { name: "animal4", desc: "four-legged animal: horse, dog, dinosaur" },
     { name: "bird", desc: "big bird or flying creature" },
@@ -133,6 +137,19 @@ export const RACER_KIT = Object.freeze({
     glasses: "round glasses, put on head_front",
     cape: "flowing cape, put on body_back",
   },
+  outfits: [
+    { name: "tshirt", desc: "t-shirt or top" },
+    { name: "jacket", desc: "jacket or hoodie with a collar" },
+    { name: "dress", desc: "dress, from the chest flaring out to the knees" },
+    { name: "skirt", desc: "short flared skirt" },
+    { name: "shorts", desc: "shorts or trousers" },
+    { name: "overalls", desc: "dungarees with a bib" },
+  ],
+  shoeStyles: [
+    { name: "sneakers", desc: "chunky trainers" },
+    { name: "boots", desc: "tall boots" },
+    { name: "none", desc: "bare feet or paws" },
+  ],
   patterns: [
     { name: "stripes", desc: "bands around the part: tigers, zebras, bees, racing stripes" },
     { name: "spots", desc: "round spots: leopards, ladybirds, dinos, cows" },

@@ -245,10 +245,12 @@ interface RacerSpec {
     hair?: { style: string; color: PaletteRef };
     hat?: { type: string; color: PaletteRef };
     arms: { color: PaletteRef };
+    outfit?: { type: string; color: PaletteRef; pattern?: Pattern }[]; // ≤ 2: tshirt | jacket | dress | skirt | shorts | overalls
+    legs?: { color: PaletteRef; shoes: string; shoeColor: PaletteRef }; // shoes: sneakers | boots | none
     extras: Extra[]; // ≤ 10
   };
   ride: {
-    base: "kart" | "bike" | "animal4" | "bird" | "board" | "rocket" | "boat" | "blob";
+    base: "kart" | "car" | "bike" | "animal4" | "bird" | "board" | "rocket" | "boat" | "blob";
     color: PaletteRef;
     accent: PaletteRef;
     scale: Vec3;

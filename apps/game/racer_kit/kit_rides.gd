@@ -11,6 +11,7 @@ const P = preload("res://racer_kit/kit_parts.gd")
 
 static func build(base: String, main: Color, accent: Color) -> Dictionary:
 	match base:
+		"car": return _car(main, accent)
 		"bike": return _bike(main, accent)
 		"animal4": return _animal4(main, accent)
 		"bird": return _bird(main, accent)
@@ -87,6 +88,45 @@ static func _kart(main: Color, accent: Color) -> Dictionary:
 	var stripe := P.mi(KitMesh.rounded_box(Vector3(0.9, 0.06, 0.5)), accent, Vector3(0, 0.36, -0.42))
 	b.add_child(stripe)
 	_steering(b, Vector3(0, 0.6, -0.36), Vector3(0, 0.38, -0.2))
+	return d
+
+
+## Closed car / van: long low body, the driver sits under a see-through glass cabin.
+static func _car(main: Color, accent: Color) -> Dictionary:
+	var d := _base(Vector3(0, 0.36, 0.1), {
+		"handle": Vector3(0, 0.58, -0.32), "hand_spread": 0.11, "wheel_r": 0.2,
+		"ground": _wheel_sets(0.2, 0.52, -0.58, 0.56),
+		"wing": Vector3(0.45, 0.4, 0.15), "tail": Vector3(0, 0.36, 0.95),
+		"sticker": {"pos": Vector3(0.5, 0.3, 0.42), "size": 0.3},
+		"defaults": {"wheels": {"count": 4, "style": "toy"}},
+		"sockets": {"ride_front": Vector3(0, 0.3, -0.98), "ride_back": Vector3(0, 0.36, 0.95),
+			"ride_top": Vector3(0, 0.98, 0.1), "ride_left": Vector3(-0.5, 0.3, 0),
+			"ride_right": Vector3(0.5, 0.3, 0), "ride_bottom": Vector3(0, 0.12, 0)},
+	})
+	var b: Node3D = d.body
+	b.add_child(P.mi(KitMesh.blob({"ax": 0.5, "ay": 0.17, "az": 0.96, "n": 3.0, "nose": 0.06}), main, Vector3(0, 0.3, 0)))
+	# Side stripe and bumpers in the accent colour.
+	for s in [-1, 1]:
+		var stripe := P.mi(KitMesh.rounded_box(Vector3(0.04, 0.07, 1.6)), accent, Vector3(s * 0.49, 0.28, 0))
+		b.add_child(stripe)
+	for z in [-0.96, 0.95]:
+		var bumper := P.mi(KitMesh.capsule(0.06, 0.92), accent, Vector3(0, 0.2, z))
+		bumper.rotation.z = PI / 2
+		b.add_child(bumper)
+	# Cabin: glass dome over the seat, roof rim in the main colour.
+	var cabin := MeshInstance3D.new()
+	cabin.name = "Glass"
+	cabin.mesh = KitMesh.dome(0.44, 0.56, 0.62)
+	cabin.material_override = KitMaterial.glass()
+	cabin.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	cabin.position = Vector3(0, 0.42, 0.08)
+	b.add_child(cabin)
+	var rim := P.mi(KitMesh.torus(0.42, 0.47), main.darkened(0.15), Vector3(0, 0.43, 0.08))
+	rim.scale = Vector3(1, 1, 1.4)
+	b.add_child(rim)
+	for s in [-1, 1]:
+		b.add_child(P.mi(KitMesh.sphere(0.07), P.GOLD, Vector3(s * 0.32, 0.32, -0.93), 0.6))
+	_steering(b, Vector3(0, 0.58, -0.32), Vector3(0, 0.4, -0.2))
 	return d
 
 

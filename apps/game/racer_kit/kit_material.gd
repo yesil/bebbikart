@@ -9,6 +9,7 @@ const PATTERNS := ["", "stripes", "spots", "stars", "hearts", "zigzag", "checks"
 const FINISHES := ["glossy", "matte", "metallic", "sparkle", "glow"]
 
 static var _toon: ShaderMaterial
+static var _glass: StandardMaterial3D
 
 
 static func toon() -> ShaderMaterial:
@@ -40,6 +41,20 @@ static func look(n: Node, pattern: Dictionary, pattern_color: Color, finish: Str
 			gi.set_instance_shader_parameter("finish", FINISHES.find(finish))
 	for c in n.get_children():
 		look(c, pattern, pattern_color, finish, only)
+
+
+## See-through glass (car cabins), shared.
+static func glass() -> StandardMaterial3D:
+	if _glass == null:
+		_glass = StandardMaterial3D.new()
+		_glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_glass.albedo_color = Color(0.75, 0.92, 1.0, 0.22)
+		_glass.roughness = 0.05
+		_glass.metallic_specular = 1.0
+		_glass.rim_enabled = true
+		_glass.rim = 0.4
+		_glass.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return _glass
 
 
 static func sticker(tex: Texture2D) -> ShaderMaterial:

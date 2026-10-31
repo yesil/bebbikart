@@ -47,6 +47,13 @@ test("optional look fields: patterns, finishes, number, motion and tagline", () 
   raw.character.head.pattern = { type: "spots", color: 2, scale: 0.8 };
   raw.ride.pattern = { type: "checks", color: 0, scale: 1.5 };
   raw.ride.finish = "metallic";
+  raw.ride.base = "car";
+  raw.character.hair = { style: "buns", color: 1 };
+  raw.character.outfit = [
+    { type: "tshirt", color: 1, pattern: { type: "stripes", color: 0, scale: 1 } },
+    { type: "skirt", color: 2 },
+  ];
+  raw.character.legs = { color: 0, shoes: "boots", shoeColor: 1 };
   raw.ride.number = { value: 7, color: 1 };
   expect(RacerSpecSchema.safeParse(raw).success).toBe(true);
 

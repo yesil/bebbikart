@@ -4,7 +4,7 @@ extends RefCounted
 ## validate() repairs nothing and fills in nothing: every unknown part name, out-of-range
 ## number, invalid colour or palette reference, missing required field or over-long list is
 ## reported as an error, and a spec with errors must not be built. Only the fields contracts §5
-## marks optional (tagline, motion, sound, sound, cheeks, hair, hat, patterns, finishes, ride number,
+## marks optional (tagline, motion, sound, cheeks, hair, hat, outfit, legs, patterns, finishes, ride number,
 ## wheels/legs/wings/tail, extra.mirror) may be absent.
 ## Spec frame: +y up, +z forward, +x = the racer's LEFT (see to_godot()).
 
@@ -123,6 +123,24 @@ static func validate(raw: Dictionary) -> Dictionary:
 			"color": _ref(hat.get("color"), n, "character.hat.color", e)}
 	var arms := _dict(rc.get("arms"), "character.arms", e)
 	c.arms = {"color": _ref(arms.get("color"), n, "character.arms.color", e)}
+	if rc.get("outfit") != null:
+		var items := _arr(rc.outfit, "character.outfit", e)
+		if items.size() > 2:
+			e.append("character.outfit: %d pieces, at most 2" % items.size())
+		c.outfit = []
+		for i in items.size():
+			var where := "character.outfit[%d]" % i
+			var o := _dict(items[i], where, e)
+			var piece := {"type": _part(o.get("type"), "outfits", where + ".type", e),
+				"color": _ref(o.get("color"), n, where + ".color", e)}
+			if o.get("pattern") != null:
+				piece.pattern = _pattern(o.pattern, n, where + ".pattern", e)
+			c.outfit.append(piece)
+	if rc.get("legs") != null:
+		var lg := _dict(rc.legs, "character.legs", e)
+		c.legs = {"color": _ref(lg.get("color"), n, "character.legs.color", e),
+			"shoes": _part(lg.get("shoes"), "shoeStyles", "character.legs.shoes", e),
+			"shoeColor": _ref(lg.get("shoeColor"), n, "character.legs.shoeColor", e)}
 	c.extras = _extras(rc.get("extras"), "characterExtrasMax", "character", n, e)
 	out.character = c
 

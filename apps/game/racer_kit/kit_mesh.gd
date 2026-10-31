@@ -323,6 +323,11 @@ static func _make_slab(outline: PackedVector2Array, thickness: float, bend: Call
 	return st.commit()
 
 
+## Dome = top half of a blob with a flat base at y=0 (glass cabins).
+static func dome(ax: float, ay: float, az: float) -> Mesh:
+	return blob({"ax": ax, "ay": ay, "az": az, "n": 2.0, "flat_bottom": 0.96}, 12, 22)
+
+
 ## Outline shapes for the flat extras, about 1 unit across (centred on the origin).
 static func shape_outline(shape: String) -> PackedVector2Array:
 	var out := PackedVector2Array()

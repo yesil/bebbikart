@@ -140,6 +140,17 @@ function specSchema(mode, fixes) {
       hair: z.object({ style: part(partNames(kit.hairStyles)), color: paletteRef }).optional(),
       hat: z.object({ type: part(partNames(kit.hatTypes)), color: paletteRef }).optional(),
       arms: z.object({ color: paletteRef }),
+      outfit: z
+        .array(z.object({ type: part(partNames(kit.outfits)), color: paletteRef, pattern }))
+        .max(2)
+        .optional(),
+      legs: z
+        .object({
+          color: paletteRef,
+          shoes: part(partNames(kit.shoeStyles)),
+          shoeColor: paletteRef,
+        })
+        .optional(),
       extras: capped(extra(CHARACTER_SOCKETS), L.characterExtrasMax, "character.extras"),
     }),
     ride: z.object({
@@ -241,6 +252,12 @@ function* paletteRefs(spec) {
     at(c.hair, "color", ["character", "hair"]),
     at(c.hat, "color", ["character", "hat"]),
     at(c.arms, "color", ["character", "arms"]),
+    ...(c.outfit ?? []).flatMap((o, i) => [
+      at(o, "color", ["character", "outfit", i]),
+      at(o.pattern, "color", ["character", "outfit", i, "pattern"]),
+    ]),
+    at(c.legs, "color", ["character", "legs"]),
+    at(c.legs, "shoeColor", ["character", "legs"]),
     ...c.extras.map((e, i) => at(e, "color", ["character", "extras", i])),
     at(r, "color", ["ride"]),
     at(r, "accent", ["ride"]),
