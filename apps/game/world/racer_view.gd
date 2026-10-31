@@ -2,6 +2,8 @@ extends Node3D
 ## Placeholder toy racer (the real racer kit is WS3d): coloured body, head, wheels and a name tag.
 ## Pose comes straight from the sim racer every frame.
 
+const CameraHud = preload("res://ui/camera_hud.gd")
+
 var racer = null   # sim/racer.gd
 var color := Color.WHITE
 var nickname := ""
@@ -61,6 +63,7 @@ func setup(p_racer, p_color: Color, p_nickname: String) -> void:
 	_label.modulate = color.lightened(0.3)
 	_label.no_depth_test = true
 	_label.position = Vector3(0, 1.9, 0)
+	_label.layers = CameraHud.NAME_TAG_LAYER  # not drawn in the picture-in-picture inset
 	add_child(_label)
 	sync()
 
@@ -73,6 +76,18 @@ func tag_anchor() -> Vector3:
 ## The HUD draws its own tags; the 3D label is off then.
 func show_name_tag(on: bool) -> void:
 	_label.visible = on
+
+
+## Where the second camera (ui/camera_hud.gd) looks, in world space.
+func shot_frame() -> Dictionary:
+	return {
+		"root": global_position,
+		"head": _body.global_transform * Vector3(0, 0.95, -0.15),
+		"head_r": 0.32,
+		"center": _body.global_transform * Vector3(0, 0.6, 0),
+		"radius": 1.1,
+		"fwd": _body.global_basis.z.normalized(),
+	}
 
 
 func _part(mesh: Mesh, m: Material, pos: Vector3) -> MeshInstance3D:
