@@ -30,6 +30,8 @@ export const DEFAULT_CONFIG = {
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
   launchCooldownMs: 2_000, // after a run ends, before the same racer can launch again
+  track: "countryside", // TrackId; changes only while no session is running (409 track_locked)
+  lapsPerRun: 3, // loop tracks: a run ends after this many laps, or earlier on "Pit in"
   weather: {
     rain: { minCalmMs: 20_000, maxCalmMs: 90_000, minMs: 6_000, maxMs: 15_000, warningMs: 5_000 },
     wind: {
@@ -46,12 +48,21 @@ export const DEFAULT_CONFIG = {
 } as const;
 ```
 
+## 2a. Tracks and laps
+
+The facilitator picks the session's **track** in config (`track`). Both tracks have the same four sections and the same three forks, so builds, splits and coach tips mean the same on either.
+
+- `countryside` is point to point: a run is one trip from start to finish, and `elapsedMs` ranks.
+- `village` is a **loop** (in `LOOP_TRACKS`): the racer crosses the line and keeps going. Each crossing books a lap (`game.run.lap`). The run finishes after `lapsPerRun` laps, or at the next crossing after the player taps **Pit in** (`phone.stop` → `run.stop`). The player's **best lap** ranks: `Player.bestTimeMs` and `LeaderboardEntry.bestTimeMs` hold the best lap, `run.splits` and the ghost trace are the best lap's, and `runTimeCapMs` applies per lap. A run that fails after completing laps still reports them (`laps`, `bestLapMs`), and those laps count.
+- `track` can't change while a session is running (the leaderboard is per session). `PATCH /api/admin/config` with a new track during a session → 409 `track_locked`. The game loads the matching world on `config.updated`, and refuses (logs an error and shows it on the big screen) a track it doesn't have.
+
 ## 3. Enums
 
 ```ts
 type Ability = "speed" | "jump" | "grip" | "water" | "stability" | "bounce";
 type DrivingStyle = "careful" | "balanced" | "daring";
-type SectionId = "hills" | "pond" | "crossing" | "bends"; // timed sections, in course order
+type TrackId = "countryside" | "village"; // village is a loop (LOOP_TRACKS), see §2a
+type SectionId = "hills" | "pond" | "crossing" | "bends"; // timed sections, in course order (both tracks)
 type ForkId = "pond" | "ramp" | "crossing";
 type ForkChoice = {
   // per fork
@@ -145,7 +156,10 @@ interface Run {
   startedAt?: string;
   endedAt?: string;
   elapsedMs?: number; // sim time, finished runs only
-  splits?: Partial<Record<SectionId, number>>; // ms spent in each section
+  track?: TrackId; // set by the server when the run is queued
+  laps?: number[]; // loop tracks: every completed lap (ms), in order
+  bestLapMs?: number; // loop tracks: fastest of laps; this ranks
+  splits?: Partial<Record<SectionId, number>>; // ms spent in each section (loop tracks: of the best lap)
   events?: RunEvent[];
   boostsUsed?: number;
   weatherSeen?: WeatherKind[];
@@ -339,6 +353,7 @@ interface Envelope<T extends string, P> {
 | ------------- | --------------------------- |
 | `phone.go`    | `{}`, same as `POST …/runs` |
 | `phone.boost` | `{ runId }`                 |
+| `phone.stop`  | `{ runId }`, loop tracks: "Pit in", finish at the next line crossing |
 
 ### Server → Phone
 
@@ -347,7 +362,8 @@ interface Envelope<T extends string, P> {
 | `welcome`                    | `{ session, config, me?: PlayerView, weather }`                                                | On connect                                            |
 | `player.updated`             | `PlayerView`                                                                                   | Any change to this player (job progress, build, best) |
 | `run.queued` / `run.started` | `{ run }`                                                                                      |                                                       |
-| `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft }` | ≤ 5 Hz                                                |
+| `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1 |
+| `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
 | `run.ended`                  | `{ run, isPersonalBest, rank?, coach: CoachTip }`                                              | Finish or fail                                        |
 | `leaderboard.updated`        | `LeaderboardEntry[]` (top 20)                                                                  |                                                       |
@@ -368,7 +384,7 @@ Everything a phone gets that isn't about one player's run (`leaderboard.updated`
 
 ### Error codes
 
-`bad_request`, `bad_message`, `unauthorized`, `not_found`, `invalid_build`, `player_exists`, `server_full`, `run_in_progress`, `cooldown`, `session_not_running`, `not_ready`, `game_offline`, `reroll_limit`. REST errors use the body `{ error: { code, message } }`.
+`bad_request`, `bad_message`, `unauthorized`, `not_found`, `invalid_build`, `player_exists`, `server_full`, `run_in_progress`, `cooldown`, `session_not_running`, `not_ready`, `game_offline`, `reroll_limit`, `track_locked`. REST errors use the body `{ error: { code, message } }`.
 
 ### Server → Game
 
@@ -378,6 +394,7 @@ Everything a phone gets that isn't about one player's run (`leaderboard.updated`
 | `roster.updated`                                             | `RosterEntry[]`                                                      | Player joins, leaves, connects, gets assets, renames |
 | `run.start`                                                  | `RunStart`                                                           | Server admitted a run                                |
 | `run.boost`                                                  | `{ runId }`                                                          | Phone tapped Boost                                   |
+| `run.stop`                                                   | `{ runId }`                                                          | Loop tracks: phone tapped Pit in                     |
 | `run.abort`                                                  | `{ runId, reason }`                                                  | Admin stop, player deleted                           |
 | `session.updated` / `config.updated` / `leaderboard.updated` | as above                                                             |                                                      |
 
@@ -405,10 +422,11 @@ interface RunStart {
 | type                | payload                                                                                      |
 | ------------------- | -------------------------------------------------------------------------------------------- |
 | `game.run.started`  | `{ runId }` (racer crossed the start line)                                                   |
-| `game.run.progress` | `{ runId, progress, elapsedMs, section, boostsLeft }`, ≤ 5 Hz                                |
+| `game.run.progress` | `{ runId, progress, elapsedMs, section, boostsLeft, lap?, lapMs? }`, ≤ 5 Hz (lap fields on loops) |
 | `game.run.section`  | `{ runId, section, splitMs }`                                                                |
-| `game.run.finished` | `{ runId, elapsedMs, splits, events, boostsUsed, weatherSeen, trace: GhostTrace }`           |
-| `game.run.failed`   | `{ runId, reason: FailReason, section, elapsedMs, splits, events, boostsUsed, weatherSeen }` |
+| `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, isBest }`: loop tracks, each line crossing (`isBest` within this run) |
+| `game.run.finished` | `{ runId, elapsedMs, splits, events, boostsUsed, weatherSeen, trace: GhostTrace, laps?, bestLapMs? }` |
+| `game.run.failed`   | `{ runId, reason: FailReason, section, elapsedMs, splits, events, boostsUsed, weatherSeen, laps?, bestLapMs? }` |
 | `game.weather`      | `WeatherState` (on every phase change)                                                       |
 | `game.capacity`     | `{ freeSlots }` (if the game ever wants fewer than `maxConcurrentRuns`)                      |
 

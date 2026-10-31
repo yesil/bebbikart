@@ -12,6 +12,10 @@ export const ABILITIES = /** @type {const} */ ([
 export const DRIVING_STYLES = /** @type {const} */ (["careful", "balanced", "daring"]);
 /** Timed sections, in course order. */
 export const SECTION_IDS = /** @type {const} */ (["hills", "pond", "crossing", "bends"]);
+/** Courses. `countryside` is point to point; `village` is a loop raced lap after lap. */
+export const TRACK_IDS = /** @type {const} */ (["countryside", "village"]);
+/** Tracks raced in laps (best lap ranks). */
+export const LOOP_TRACKS = /** @type {const} */ (["village"]);
 export const FORK_IDS = /** @type {const} */ (["pond", "ramp", "crossing"]);
 export const FORK_CHOICES = /** @type {const} */ ({
   pond: ["water", "bridge"],
@@ -92,6 +96,7 @@ export const ERROR_CODES = /** @type {const} */ ([
   "not_ready",
   "game_offline",
   "reroll_limit",
+  "track_locked",
 ]);
 
 /** WS close code when `hello` is missing or rejected. */

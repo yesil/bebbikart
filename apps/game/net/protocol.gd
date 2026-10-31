@@ -33,7 +33,8 @@ const ERROR_CODES = [
 	"session_not_running",
 	"not_ready",
 	"game_offline",
-	"reroll_limit"
+	"reroll_limit",
+	"track_locked"
 ]
 const FAIL_REASONS = [
 	"off_track",
@@ -78,6 +79,9 @@ const JOB_STATUSES = [
 	"rejected",
 	"needs_review",
 	"failed"
+]
+const LOOP_TRACKS = [
+	"village"
 ]
 const MOODS = [
 	"happy",
@@ -147,6 +151,10 @@ const SESSION_STATUSES = [
 	"ended"
 ]
 const SIM_TICK_HZ = 60
+const TRACK_IDS = [
+	"countryside",
+	"village"
+]
 const WEATHER_KINDS = [
 	"rain",
 	"wind"
@@ -167,6 +175,8 @@ const DEFAULT_CONFIG = {
 	"runTimeCapMs": 90000,
 	"stuckTimeoutMs": 3000,
 	"launchCooldownMs": 2000,
+	"track": "countryside",
+	"lapsPerRun": 3,
 	"weather": {
 		"rain": {
 			"minCalmMs": 20000,
@@ -207,7 +217,8 @@ const DEFAULT_BUILD = {
 const MSG_PHONE_TO_SERVER = [
 	"hello",
 	"phone.go",
-	"phone.boost"
+	"phone.boost",
+	"phone.stop"
 ]
 const MSG_ADMIN_TO_SERVER = [
 	"hello"
@@ -217,6 +228,7 @@ const MSG_GAME_TO_SERVER = [
 	"game.run.started",
 	"game.run.progress",
 	"game.run.section",
+	"game.run.lap",
 	"game.run.finished",
 	"game.run.failed",
 	"game.weather",
@@ -233,6 +245,7 @@ const MSG_SERVER_TO_PHONE = [
 	"run.queued",
 	"run.started",
 	"run.progress",
+	"run.lap",
 	"run.section",
 	"run.ended"
 ]
@@ -255,5 +268,6 @@ const MSG_SERVER_TO_GAME = [
 	"roster.updated",
 	"run.start",
 	"run.boost",
+	"run.stop",
 	"run.abort"
 ]

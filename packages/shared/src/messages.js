@@ -48,10 +48,17 @@ const phoneBroadcasts = {
   "weather.updated": WeatherStateSchema,
 };
 
+const lapInfo = {
+  lap: z.number().int().positive().optional(), // loop tracks: lap in progress, from 1
+  lapMs: ms.optional(), // loop tracks: time on the lap in progress
+};
+
 const runResult = {
   runId: z.string(),
   elapsedMs: ms,
-  splits: SplitsSchema,
+  laps: z.array(ms).optional(), // loop tracks: completed laps, in order
+  bestLapMs: ms.optional(), // loop tracks: fastest completed lap
+  splits: SplitsSchema, // loop tracks: the best lap's splits
   events: z.array(RunEventSchema),
   boostsUsed: z.number().int().nonnegative(),
   weatherSeen: z.array(WeatherKindSchema),
@@ -62,6 +69,8 @@ export const CHANNELS = {
     hello,
     "phone.go": empty,
     "phone.boost": z.object({ runId: z.string() }),
+    // Loop tracks: "Pit in" ends the run when the racer next crosses the line.
+    "phone.stop": z.object({ runId: z.string() }),
   },
   adminToServer: {
     hello,
@@ -75,8 +84,18 @@ export const CHANNELS = {
       elapsedMs: ms,
       section: SectionIdSchema,
       boostsLeft: z.number().int().nonnegative(),
+      ...lapInfo,
     }),
     "game.run.section": z.object({ runId: z.string(), section: SectionIdSchema, splitMs: ms }),
+    // Loop tracks: the racer crossed the line. isBest = fastest lap of this run so far.
+    "game.run.lap": z.object({
+      runId: z.string(),
+      lap: z.number().int().positive(),
+      lapMs: ms,
+      elapsedMs: ms,
+      splits: SplitsSchema,
+      isBest: z.boolean(),
+    }),
     "game.run.finished": z.object({ ...runResult, trace: GhostTraceSchema }),
     "game.run.failed": z.object({
       ...runResult,
@@ -104,6 +123,15 @@ export const CHANNELS = {
       section: SectionIdSchema,
       deltaVsBestMs: z.number().int().optional(),
       boostsLeft: z.number().int().nonnegative(),
+      ...lapInfo,
+    }),
+    // Loop tracks: a lap completed. isLapBest = the player's fastest lap ever (session).
+    "run.lap": z.object({
+      runId: z.string(),
+      lap: z.number().int().positive(),
+      lapMs: ms,
+      isLapBest: z.boolean(),
+      deltaVsBestLapMs: z.number().int().optional(),
     }),
     "run.section": z.object({
       runId: z.string(),
@@ -142,6 +170,7 @@ export const CHANNELS = {
     "roster.updated": z.array(RosterEntrySchema),
     "run.start": RunStartSchema,
     "run.boost": z.object({ runId: z.string() }),
+    "run.stop": z.object({ runId: z.string() }), // loop tracks: finish at the next line crossing
     "run.abort": z.object({ runId: z.string(), reason: z.string() }),
   },
 };

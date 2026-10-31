@@ -16,6 +16,7 @@ import {
   RUN_STATUSES,
   SECTION_IDS,
   SESSION_STATUSES,
+  TRACK_IDS,
   WEATHER_KINDS,
   WEATHER_PHASES,
 } from "./enums.js";
@@ -28,6 +29,7 @@ export const AbilitySchema = z.enum(ABILITIES);
 export const SectionIdSchema = z.enum(SECTION_IDS);
 export const ForkIdSchema = z.enum(FORK_IDS);
 export const FailReasonSchema = z.enum(FAIL_REASONS);
+export const TrackIdSchema = z.enum(TRACK_IDS);
 export const WeatherKindSchema = z.enum(WEATHER_KINDS);
 export const PlayerStatusSchema = z.enum(PLAYER_STATUSES);
 export const JobStatusSchema = z.enum(JOB_STATUSES);
@@ -80,7 +82,10 @@ export const RunSchema = z.object({
   startedAt: iso.optional(),
   endedAt: iso.optional(),
   elapsedMs: ms.optional(), // sim time, finished runs only
-  splits: SplitsSchema.optional(),
+  track: TrackIdSchema.optional(), // set by the server when the run is queued
+  laps: z.array(ms).optional(), // loop tracks: every completed lap, in order
+  bestLapMs: ms.optional(), // loop tracks: fastest of `laps` (what ranks)
+  splits: SplitsSchema.optional(), // loop tracks: the best lap's splits
   events: z.array(RunEventSchema).optional(),
   boostsUsed: z.number().int().nonnegative().optional(),
   weatherSeen: z.array(WeatherKindSchema).optional(),
