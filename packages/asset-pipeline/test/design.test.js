@@ -103,7 +103,7 @@ describe("runDesignJob (mock)", () => {
     }
   });
 
-  test("skipCheck designs anyway; unknown drawings fall back to a recoloured default", async () => {
+  test("drawings the model can't design fail the job (no default racer)", async () => {
     const out = await mkdtemp(join(tmpdir(), "bk-specs-"));
     try {
       const client = createMockClient();
@@ -120,8 +120,8 @@ describe("runDesignJob (mock)", () => {
         undefined,
         { client },
       );
-      expect(r.status).toBe("ready");
-      expect(r.fallback).toBe(true);
+      expect(r.status).toBe("failed");
+      expect(r.error).toContain("invalid twice");
     } finally {
       await rm(out, { recursive: true, force: true });
     }
@@ -151,14 +151,13 @@ describe("runDesignJob (mock)", () => {
         { client },
       );
       expect(r.status).toBe("ready");
-      expect(r.fallback).toBe(false);
       expect(seen[1]).toContain("empty");
     } finally {
       await rm(out, { recursive: true, force: true });
     }
   });
 
-  test("a failing call needs review", async () => {
+  test("a failing call fails the job with the reason", async () => {
     const client = {
       name: "down",
       complete: async () => {
@@ -176,6 +175,7 @@ describe("runDesignJob (mock)", () => {
       undefined,
       { client },
     );
-    expect(r.status).toBe("needs_review");
+    expect(r.status).toBe("failed");
+    expect(r.error).toContain("HTTP 503");
   });
 });

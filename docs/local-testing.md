@@ -45,10 +45,17 @@ macOS may ask whether `bun` may accept incoming connections: allow it, or phones
 
 `bun run fake-game` connects a stand-in game that "races" each run in about 12 s with fake splits, so you can test the phone flow on its own (run it instead of the Godot game; only one game connection is kept).
 
-## Asset pipeline: mock or DeepSeek
+## DeepSeek key (required, no fallbacks)
 
-- With `DEEPSEEK_API_KEY` set (e.g. in `.env`), the server uses DeepSeek to check and design each racer. Photos of real people, blank pages etc. are rejected, and the phone asks to retake that photo.
-- Without a key it runs in **mock** mode: no checks, and each phone photo gets one of the pipeline's hand-written sample designs (picked from the photo), so every test racer still looks different. Force a mode with `BK_PIPELINE=mock|deepseek`.
+The server designs every racer from the kid's drawings with DeepSeek. It reads `DEEPSEEK_API_KEY` from the environment or from the first of these `.env` files that sets it: `apps/server/.env`, `.env` (repo root), `packages/asset-pipeline/.env`. The start-up banner says which file it used.
+
+There is no mock or sample-design fallback:
+- No key → the server refuses to start and says where to put it.
+- DeepSeek fails (network, bad key, timeout, invalid reply twice) → the job fails, the server logs `[job] … FAILED: <reason>`, and the phone shows the reason in a red box with a retry.
+- DeepSeek says a photo isn't a usable drawing → the phone asks to retake that photo.
+- In the game, a racer without a spec, a drawing that doesn't download, or a render/upload that fails shows as an `ERROR …` line in the overlay and in the Godot log.
+
+The garage has a **New drawings** button to redo a racer's photos without resetting anything.
 
 ## Settings (env)
 
@@ -72,5 +79,5 @@ curl -H 'x-admin-pin: 1234' localhost:8080/api/admin/players                   #
 
 - **Phone can't load the page:** same Wi-Fi? Guest networks often block device-to-device traffic. Check the IP the server printed, and the macOS firewall prompt.
 - **"The big screen isn't connected yet" on Go!:** the game isn't connected. Its overlay says `SERVER online` when it is; check the game key.
-- **Racer stuck on "Looking at your drawing…":** see the server log (`[job] …`). Jobs time out after 60 s and the phone offers a retry.
+- **Racer stuck on "Looking at your drawing…":** see the server log (`[job] …`). Jobs time out after 200 s (one DeepSeek call can take 90 s, plus one retry) and the phone shows the error.
 - **Fresh start:** stop the server and delete `apps/server/data/`, or call the reset endpoint above.

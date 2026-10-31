@@ -64,6 +64,7 @@ export function Create({ ctx, only }) {
       // player.updated (processing) arrives over WS; refresh in case the socket is down.
       const st = await api("GET", "/api/state");
       if (st.me) dispatch({ type: "me", me: st.me });
+      dispatch({ type: "redo", on: false });
     } catch (err) {
       dispatch({ type: "toast", text: COPY.errors[err.code] ?? err.message });
     } finally {
@@ -75,7 +76,15 @@ export function Create({ ctx, only }) {
   return html`
     <form class="card create" onSubmit=${submit}>
       <h1>${COPY.create.title}</h1>
-      ${failed ? html`<p class="warn">${COPY.making.failed}</p>` : null}
+      ${
+        failed
+          ? html`<div class="error-box">
+              <b>${COPY.making.failed}</b>
+              <div>${COPY.making.failedHint}</div>
+              <code>${me.job.error ?? "unknown error"}</code>
+            </div>`
+          : null
+      }
       <label class="field">
         <span>${COPY.create.nameLabel}</span>
         <input
@@ -103,6 +112,13 @@ export function Create({ ctx, only }) {
           ? html`<div class="progress"><div style=${{ width: `${Math.round(progress * 100)}%` }}></div></div>
               <p class="muted small">${COPY.create.uploading}</p>`
           : html`<button class="primary" disabled=${!ready}>${COPY.create.submit}</button>`
+      }
+      ${
+        s.redo && me?.status === "ready"
+          ? html`<button type="button" class="ghost" onClick=${() => dispatch({ type: "redo", on: false })}>
+              ${COPY.create.cancel}
+            </button>`
+          : null
       }
     </form>
   `;

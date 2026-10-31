@@ -31,13 +31,37 @@ function fileConfig() {
   return {};
 }
 
+/**
+ * Loads KEY=value lines from .env files into `env` without overriding what is already set.
+ * Bun only reads the .env in the current directory (apps/server when started via the scripts),
+ * so the server also reads the repo root and packages/asset-pipeline ones (where the CLI's key lives).
+ * @returns {string[]} the files that were read
+ */
+export function loadDotEnvs(env = process.env, files = DOTENV_FILES) {
+  const read = [];
+  for (const file of files) {
+    if (!existsSync(file)) continue;
+    read.push(file);
+    for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+      if (!m || m[1] in env) continue;
+      env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
+    }
+  }
+  return read;
+}
+export const DOTENV_FILES = [
+  join(REPO_ROOT, "apps/server/.env"),
+  join(REPO_ROOT, ".env"),
+  join(REPO_ROOT, "packages/asset-pipeline/.env"),
+];
+
 export function loadSettings(env = process.env) {
   const port = Number(env.PORT ?? 8080);
   let config = mergeConfig(DEFAULT_CONFIG, fileConfig());
   if (env.BK_MAX_PLAYERS) config = mergeConfig(config, { maxPlayers: Number(env.BK_MAX_PLAYERS) });
   if (env.BK_SESSION_MINUTES)
     config = mergeConfig(config, { sessionMinutes: Number(env.BK_SESSION_MINUTES) });
-  const pipeline = env.BK_PIPELINE ?? (env.DEEPSEEK_API_KEY ? "deepseek" : "mock");
   return {
     port,
     config,
@@ -46,9 +70,10 @@ export function loadSettings(env = process.env) {
     gameKey: env.BK_GAME_KEY ?? "bebbikart-dev",
     dataDir: resolve(env.BK_DATA_DIR ?? join(REPO_ROOT, "apps/server/data")),
     webDist: resolve(env.BK_WEB_DIST ?? join(REPO_ROOT, "apps/web/dist")),
-    pipeline, // "mock" | "deepseek"
     // Dev convenience: start a session at boot so phones can race straight away.
     autoStart: (env.BK_AUTOSTART ?? "1") !== "0",
-    jobTimeoutMs: Number(env.BK_JOB_TIMEOUT_MS ?? 60_000),
+    hasDeepSeekKey: !!env.DEEPSEEK_API_KEY,
+    // One DeepSeek call can take up to 90 s, plus one retry for an invalid reply.
+    jobTimeoutMs: Number(env.BK_JOB_TIMEOUT_MS ?? 200_000),
   };
 }

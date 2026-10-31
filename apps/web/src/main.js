@@ -39,6 +39,8 @@ function reducer(s, a) {
       return { ...s, online: a.online };
     case "me":
       return { ...s, me: a.me };
+    case "redo":
+      return { ...s, redo: a.on };
     case "tab":
       return { ...s, tab: a.tab };
     case "toast":
@@ -165,7 +167,7 @@ function screen(ctx) {
   if (me.status === "processing") return html`<${Making} ctx=${ctx} />`;
   if (me.status === "needs_review") return html`<${Making} ctx=${ctx} review />`;
   if (me.status === "rejected") return html`<${Rejected} ctx=${ctx} />`;
-  if (me.status === "draft") return html`<${Create} ctx=${ctx} />`;
+  if (me.status === "draft" || s.redo) return html`<${Create} ctx=${ctx} />`;
   // ready
   if (s.live || me.currentRun) return html`<${Run} ctx=${ctx} />`;
   if (s.result) return html`<${Result} ctx=${ctx} />`;

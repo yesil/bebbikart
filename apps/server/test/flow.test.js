@@ -1,9 +1,10 @@
-// End-to-end over real HTTP + WebSockets: phone creates a racer, uploads drawings (mock pipeline),
+// End-to-end over real HTTP + WebSockets: phone creates a racer, uploads drawings (a fake design client stands in for DeepSeek),
 // the game gets the roster, the phone presses Go, the game races and reports, the phone gets the result.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { MOCK_DESIGNS } from "@bebbikart/asset-pipeline";
 import { DEFAULT_CONFIG, makeMsg } from "@bebbikart/shared";
 import { loadSettings, REPO_ROOT } from "../src/env.js";
 import { startServer } from "../src/index.js";
@@ -18,7 +19,11 @@ beforeAll(() => {
     ...loadSettings({}),
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-test-")),
-    pipeline: "mock",
+    designClient: {
+      name: "fake",
+      complete: async () =>
+        JSON.stringify({ check: {}, spec: MOCK_DESIGNS.pair01.spec, notes: "test" }),
+    },
     config: { ...DEFAULT_CONFIG, launchCooldownMs: 0 },
   };
   settings.dbFile = ":memory:";
@@ -99,7 +104,7 @@ test("phone → drawings → racer on the big screen → race → result", async
   const early = await fetch(`${base}/api/players/me/runs`, { method: "POST", headers: h });
   expect((await early.json()).error.code).toBe("not_ready");
 
-  // Upload the sample pair (mock pipeline knows it).
+  // Upload the sample pair.
   const form = new FormData();
   form.append(
     "character",
@@ -122,7 +127,7 @@ test("phone → drawings → racer on the big screen → race → result", async
   expect((await up.json()).status).toBe("queued");
 
   const ready = await phone.wait("player.updated", (p) => p.status === "ready", 20000);
-  expect(ready.payload.asset.spec.title.length).toBeGreaterThan(0);
+  expect(ready.payload.asset.spec.title).toBe("The Purple Flash");
   const roster = await game.wait("roster.updated", (r) => r.some((e) => e.status === "ready"));
   const entry = roster.payload.find((e) => e.playerId === player.id);
   expect(entry.connected).toBe(true);
@@ -193,5 +198,39 @@ test("bad hello is refused, admin needs the PIN", async () => {
   const ok = await fetch(`${base}/api/admin/players`, {
     headers: { "x-admin-pin": settings.adminPin },
   });
-  expect((await ok.json()).length).toBe(1);
+  expect((await ok.json()).length).toBeGreaterThanOrEqual(1);
+});
+
+test("a DeepSeek failure fails the job loudly: no sample design, phone sees the error", async () => {
+  settings.designClient.complete = async () => {
+    throw new Error("HTTP 401: invalid api key");
+  };
+  const dev = await fetch(`${base}/api/device`, { method: "POST" });
+  const cookie = dev.headers.get("set-cookie").split(";")[0];
+  await fetch(`${base}/api/players`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ nickname: "Fails" }),
+  });
+  const form = new FormData();
+  for (const [k, f] of [
+    ["character", "pair01-character-cat.jpg"],
+    ["vehicle", "pair01-vehicle-kart.jpg"],
+  ])
+    form.append(k, new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }));
+  await fetch(`${base}/api/players/me/drawings`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  let me;
+  for (let i = 0; i < 50; i++) {
+    me = (await (await fetch(`${base}/api/state`, { headers: { cookie } })).json()).me;
+    if (me.job?.status === "failed") break;
+    await Bun.sleep(100);
+  }
+  expect(me.job.status).toBe("failed");
+  expect(me.job.error).toContain("HTTP 401");
+  expect(me.status).toBe("draft");
+  expect(me.asset).toBeUndefined();
 });

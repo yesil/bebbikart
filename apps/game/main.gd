@@ -71,6 +71,7 @@ func _ready() -> void:
 		assets.game_key = key
 		add_child(assets)
 		assets.racer_ready.connect(_on_racer_ready)
+		assets.problem.connect(func(text: String): _result("ERROR " + text))
 		print("BebbiKart server mode: %s (protocol v%d)" % [url, Protocol.PROTOCOL_VERSION])
 	else:
 		net = MockNet.new(config, n_racers, seed_)
@@ -149,14 +150,21 @@ func _handle(msg: Dictionary) -> void:
 	var pl = msg["payload"]  # Dictionary, or a bare Array for roster.updated
 	match msg["type"]:
 		Messages.RUN_START:
-			var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
-			var spec: Dictionary = assets.spec_for(pl["playerId"]) if assets != null else {}
-			var v  # KitRacerView or the placeholder RacerView
-			if not spec.is_empty():
+			var v  # server: KitRacerView from the player's RacerSpec; mock: placeholder RacerView
+			if assets != null:
+				var spec: Dictionary = assets.spec_for(pl["playerId"])
+				if spec.is_empty():
+					# No fallback racer: say so loudly and don't race a stand-in.
+					var err := "ERROR run %s: no RacerSpec for player %s (%s) in the roster" % [pl["runId"], pl["playerId"], nicks.get(pl["playerId"], "?")]
+					push_error(err)
+					_result(err)
+					return
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
 				v = KitRacerView.new()
 				add_child(v)
 				v.setup(r, spec, assets.drawing_for(pl["playerId"]), nicks.get(pl["playerId"], "?"))
 			else:
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
 				v = RacerView.new()
 				add_child(v)
 				v.setup(r, colors.get(pl["playerId"], Color.WHITE), nicks.get(pl["playerId"], "?"))

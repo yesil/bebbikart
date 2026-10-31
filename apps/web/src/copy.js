@@ -14,13 +14,15 @@ export const COPY = {
     submit: "Make my racer!",
     uploading: "Sending your drawings…",
     needBoth: "We need both drawings.",
+    cancel: "Keep my racer",
   },
   making: {
     queued: "Waiting in line…",
     designing: "Looking at your drawing…",
     building: "Building your racer…",
     review: "A grown-up is checking it, one moment.",
-    failed: "Oops, that didn't work. Let's try again!",
+    failed: "We couldn't make your racer from these drawings.",
+    failedHint: "Tell a grown-up what it says, then try again:",
   },
   reject: {
     not_a_drawing: "That looks like a real photo. Please take a picture of the drawing!",
@@ -46,6 +48,8 @@ export const COPY = {
     best: "Best",
     rank: "Rank",
     noBest: "No time yet",
+    newDrawings: "New drawings",
+    lookFailed: "Your new look didn't work:",
     racing: (n) => (n === 1 ? "1 racer on the track" : `${n} racers on the track`),
   },
   abilities: {

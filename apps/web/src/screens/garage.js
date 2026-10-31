@@ -84,6 +84,12 @@ export function Garage({ ctx }) {
       </div>
     </section>
 
+    ${
+      me.job?.status === "failed"
+        ? html`<div class="error-box"><b>${COPY.garage.lookFailed}</b><code>${me.job.error}</code></div>`
+        : null
+    }
+
     <${WeatherStrip} weather=${s.weather} />
 
     <section class="card">
@@ -141,6 +147,8 @@ export function Garage({ ctx }) {
         )}
       </div>
     </section>
+
+    <button class="ghost" onClick=${() => dispatch({ type: "redo", on: true })}>📷 ${COPY.garage.newDrawings}</button>
 
     <div class="go-bar">
       ${blocked ? html`<div class="muted small center">${blocked}</div>` : null}

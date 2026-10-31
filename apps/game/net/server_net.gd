@@ -77,7 +77,9 @@ func poll(dt: float, _free_slots: int) -> Array:
 			if _open or status == "connecting":
 				var code := _ws.get_close_code()
 				if _open:
-					print("ServerNet: disconnected (%d %s), retrying" % [code, _ws.get_close_reason()])
+					push_error("ServerNet: disconnected from %s (%d %s), retrying every %d s" % [url, code, _ws.get_close_reason(), RECONNECT_S])
+				else:
+					push_error("ServerNet: can't reach %s, retrying every %d s (is the server running?)" % [url, RECONNECT_S])
 				if code == 4001:
 					push_error("ServerNet: server refused the game key; check --game-key / BK_GAME_KEY")
 			_open = false
@@ -100,7 +102,7 @@ func _take() -> Array:
 func _receive(text: String) -> void:
 	var msg = JSON.parse_string(text)
 	if typeof(msg) != TYPE_DICTIONARY or not msg.has("type"):
-		push_warning("ServerNet: bad message " + text.left(200))
+		push_error("ServerNet: bad message " + text.left(200))
 		return
 	var type: String = msg["type"]
 	var pl = msg.get("payload", {})
@@ -120,7 +122,7 @@ func _receive(text: String) -> void:
 			_active[pl["runId"]] = true
 			_inbox.append(msg)
 		"error":
-			push_warning("ServerNet: server error %s: %s" % [pl.get("code", "?"), pl.get("message", "")])
+			push_error("ServerNet: server error %s: %s" % [pl.get("code", "?"), pl.get("message", "")])
 		_:
 			_inbox.append(msg)
 

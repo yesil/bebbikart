@@ -1,9 +1,9 @@
 // runDesignJob: photos → one DeepSeek check + design call → validated RacerSpec file (asset-pipeline.md §1, §5).
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clampRacerSpec, DEFAULT_SPEC, RacerSpecSchema } from "@bebbikart/shared";
+import { clampRacerSpec } from "@bebbikart/shared";
 import { createDeepSeekClient } from "./deepseek.js";
-import { extractPalette, normaliseDrawing, UnsupportedFileError } from "./normalise.js";
+import { normaliseDrawing, UnsupportedFileError } from "./normalise.js";
 import { buildMessages, PROMPT_VERSION, REJECT_MESSAGES } from "./prompt.js";
 
 const IMAGES = /** @type {const} */ (["character", "vehicle"]);
@@ -66,8 +66,8 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
         { ...ctx, attempt },
       );
     } catch (err) {
-      // Call failed → the facilitator looks at it and reruns the job.
-      return { status: "needs_review", notes: `design call failed: ${err.message}` };
+      // No fallbacks: a failed call fails the job, loudly, with the reason.
+      return { status: "failed", error: `DeepSeek call failed: ${err.message}` };
     }
 
     const reply = parseReply(content);
@@ -89,7 +89,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
 
     const clamped = clampRacerSpec(reply.value.spec);
     if (clamped.ok) {
-      result = { spec: clamped.spec, fixes: clamped.fixes, fallback: false, attempts: attempt };
+      result = { spec: clamped.spec, fixes: clamped.fixes, attempts: attempt };
     } else {
       errors =
         reply.value.spec == null ? ['"spec" is missing: design the racer anyway'] : clamped.errors;
@@ -99,10 +99,12 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
     }
   }
 
-  // 3 · Still broken → safe default spec in the drawing's colours, so the kid can still race.
+  // 3 · Still broken → fail. No default racer: the drawing must drive the racer or we say so.
   if (!result) {
-    const palette = await extractPalette([imgs.character.jpeg, imgs.vehicle.jpeg]);
-    result = { spec: recolourDefault(palette), fixes: [], fallback: true, attempts: 2, errors };
+    return {
+      status: "failed",
+      error: `DeepSeek reply was invalid twice: ${(errors ?? []).slice(0, 3).join("; ")}`,
+    };
   }
 
   const file = await writeSpec(input.outDir, name, result.spec, {
@@ -119,7 +121,6 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
   return {
     status: "ready",
     spec: result.spec,
-    fallback: result.fallback,
     fixes: result.fixes,
     notes,
     file,
@@ -152,14 +153,6 @@ export function parseReply(content) {
   } catch (err) {
     return { ok: false, error: `reply is not valid JSON: ${err.message}` };
   }
-}
-
-/** DEFAULT_SPEC with its palette replaced by the drawing's colours (padded to the 4 slots it uses). */
-export function recolourDefault(palette) {
-  const spec = structuredClone(DEFAULT_SPEC);
-  const colours = palette.filter((c) => /^#[0-9a-f]{6}$/i.test(c)).slice(0, 4);
-  spec.palette = [...colours, ...DEFAULT_SPEC.palette.slice(colours.length)];
-  return RacerSpecSchema.parse(spec);
 }
 
 /**

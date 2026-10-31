@@ -6,9 +6,11 @@ extends Node
 ##   assets.update(roster)          # on every roster.updated
 ##   assets.spec_for(player_id)     # {} when the racer has no package yet
 ##   assets.drawing_for(player_id)  # Texture2D or null
-## Signals: racer_ready(player_id) when a player's package is first seen (for a "new racer" moment).
+## Signals: racer_ready(player_id) when a player's package is first seen (for a "new racer" moment),
+## problem(text) when something fails (no fallbacks: main shows it on screen, and it is logged).
 
 signal racer_ready(player_id: String)
+signal problem(text: String)
 
 var http_base := "http://localhost:8080"
 var game_key := ""
@@ -84,15 +86,17 @@ func _download_drawing(pkg: String, path: String) -> void:
 	var res: Array = await req.request_completed
 	req.queue_free()
 	if res[0] != HTTPRequest.RESULT_SUCCESS or res[1] != 200:
-		push_warning("RosterAssets: drawing download failed for %s (%s)" % [pkg, res[1]])
+		_fail("drawing download failed for %s: result %d, HTTP %d (%s)" % [pkg, res[0], res[1], _url(path)])
 		return
 	var img := Image.new()
 	var body: PackedByteArray = res[3]
 	var err := img.load_jpg_from_buffer(body)
 	if err != OK:
 		err = img.load_png_from_buffer(body)
-	if err == OK:
-		_drawings[pkg] = ImageTexture.create_from_image(img)
+	if err != OK:
+		_fail("drawing for %s is not a JPEG/PNG (%s)" % [pkg, _url(path)])
+		return
+	_drawings[pkg] = ImageTexture.create_from_image(img)
 
 
 ## One render at a time: each takes a few frames of the offscreen viewport.
@@ -100,6 +104,7 @@ func _pump() -> void:
 	if _rendering or _queue.is_empty():
 		return
 	if not _renderer.can_render():
+		_fail("can't render racer images for the phones in headless mode (%d waiting)" % _queue.size())
 		_queue.clear()
 		return
 	_rendering = true
@@ -107,14 +112,27 @@ func _pump() -> void:
 		var pid: String = _queue.pop_front()
 		var spec := spec_for(pid)
 		if spec.is_empty():
+			_fail("no RacerSpec for %s, can't render" % nickname(pid))
 			continue
 		# Give the drawing a moment to arrive so the sticker is in the hero render.
 		var pkg := String(entries[pid]["asset"].get("packageId", ""))
-		for i in 60:
+		for i in 300:
 			if _drawings.has(pkg):
 				break
 			await get_tree().process_frame
+		if not _drawings.has(pkg):
+			_fail("rendering %s without the ride drawing sticker: it did not download" % nickname(pid))
 		var paths: Dictionary = await _renderer.render_all(spec, pid, drawing_for(pid))
+		if paths.size() != 4:
+			_fail("rendering %s produced %d of 4 images" % [nickname(pid), paths.size()])
 		var ok: int = await _renderer.upload_all(pid, paths)
-		print("RosterAssets: rendered %s (%s), uploaded %d/%d" % [nickname(pid), spec.get("title", "?"), ok, paths.size()])
+		if ok != paths.size():
+			_fail("uploaded %d of %d images for %s to %s" % [ok, paths.size(), nickname(pid), http_base])
+		else:
+			print("RosterAssets: rendered %s (%s), uploaded %d images" % [nickname(pid), spec.get("title", "?"), ok])
 	_rendering = false
+
+
+func _fail(text: String) -> void:
+	push_error("RosterAssets: " + text)
+	problem.emit(text)

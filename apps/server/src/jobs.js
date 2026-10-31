@@ -1,13 +1,7 @@
 // Asset jobs: uploads on disk → runDesignJob (packages/asset-pipeline) → asset package (contracts §5).
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  createMockClient,
-  MOCK_DESIGNS,
-  normaliseDrawing,
-  parseReply,
-  runDesignJob,
-} from "@bebbikart/asset-pipeline";
+import { normaliseDrawing, runDesignJob } from "@bebbikart/asset-pipeline";
 import { newId } from "@bebbikart/shared";
 import { ApiError } from "./errors.js";
 
@@ -16,39 +10,11 @@ const CONCURRENCY = 3;
 const MAX_REROLLS = 3;
 const now = () => new Date().toISOString();
 
-/**
- * Mock mode for real phone photos: the pipeline's mock only knows the sample files, so for any
- * other photo we hand back one of its hand-written designs (picked by the file name), so every
- * test racer looks different and goes through the same check → clamp path as DeepSeek output.
- */
-export function createServerMockClient() {
-  const base = createMockClient();
-  const designs = Object.values(MOCK_DESIGNS);
-  return {
-    name: "mock",
-    async complete(messages, opts, ctx) {
-      const content = await base.complete(messages, opts, ctx);
-      const reply = parseReply(content);
-      if (!reply.ok || reply.value.spec) return content;
-      const failed = Object.values(reply.value.check ?? {}).some((c) => c && c.ok === false);
-      if (failed) return content;
-      let h = 0;
-      for (const ch of `${ctx.characterPath}${ctx.reroll ? "#r" : ""}`)
-        h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-      const d = designs[h % designs.length];
-      return JSON.stringify({
-        ...reply.value,
-        spec: d.spec,
-        notes: `mock: reused design "${d.spec.title}"`,
-      });
-    },
-  };
-}
-
-export function createJobs({ game, settings, log = console.log }) {
+export function createJobs({ game, settings, log = console.log, logError = console.error }) {
   const queue = [];
   let active = 0;
-  const client = settings.pipeline === "mock" ? createServerMockClient() : undefined; // undefined → DeepSeek from env
+  // DeepSeek from env. Tests inject a client; there is no mock or fallback at runtime.
+  const client = settings.designClient;
   const uploadsDir = join(settings.dataDir, "uploads");
   const assetsDir = join(settings.dataDir, "assets");
   const workDir = join(settings.dataDir, "jobs");
@@ -134,12 +100,13 @@ export function createJobs({ game, settings, log = console.log }) {
     } else if (result.status === "needs_review") {
       update(job, { status: "needs_review", error: result.notes });
       game.setPlayerStatus(job.playerId, "needs_review");
-      log(`[job] ${job.id} needs review: ${result.notes}`);
+      logError(`[job] ${job.id} needs review: ${result.notes}`);
     } else {
       update(job, { status: "failed", error: result.error ?? "unknown error" });
-      // A racer that already has a look keeps it; otherwise back to the photo step.
+      // The phone shows job.error. A racer that already had a look keeps it (it is theirs, from
+      // their earlier drawings); otherwise back to the photo step.
       game.setPlayerStatus(job.playerId, game.manifests.has(job.playerId) ? "ready" : "draft");
-      log(`[job] ${job.id} failed: ${result.error}`);
+      logError(`[job] ${job.id} FAILED after ${secs} s: ${result.error}`);
     }
     await rm(input.outDir, { recursive: true, force: true }).catch(() => {});
   }
@@ -165,7 +132,6 @@ export function createJobs({ game, settings, log = console.log }) {
         vehicle: `${base}/drawing_vehicle.jpg`,
       },
       renders: {},
-      ...(result.fallback ? { fallback: true } : {}),
     };
   }
 
