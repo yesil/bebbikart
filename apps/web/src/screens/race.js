@@ -60,7 +60,7 @@ export function Run({ ctx }) {
       }
       <div class="track">
         <div class="fill" style=${{ width: `${Math.round((live.progress ?? 0) * 100)}%` }}></div>
-        ${SECTION_IDS.slice(1).map((id, i) => html`<i key=${id} style=${{ left: `${((i + 1) / SECTION_IDS.length) * 100}%` }}></i>`)}
+        ${SECTION_IDS.slice(1).map((id, i) => html`<i key=${id} class="tick" style=${{ left: `${((i + 1) / SECTION_IDS.length) * 100}%` }}></i>`)}
       </div>
       <div class="sections">
         ${SECTION_IDS.map((id) => html`<span key=${id} class=${live.section === id ? "on" : ""}>${COPY.sections[id]}</span>`)}

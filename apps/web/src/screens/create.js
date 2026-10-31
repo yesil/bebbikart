@@ -152,7 +152,7 @@ export function Making({ ctx, review }) {
       <h2>${text}</h2>
       ${
         step >= 0
-          ? html`<div class="stages">${STAGES.map((st, i) => html`<i class=${i < step ? "done" : i === step ? "on" : ""}></i>`)}</div>`
+          ? html`<div class="stages">${STAGES.map((_stage, i) => html`<i class=${i < step ? "done" : i === step ? "on" : ""}></i>`)}</div>`
           : null
       }
       ${step >= 0 ? html`<p class="hint">${COPY.making.slow}</p>` : null}
