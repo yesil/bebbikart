@@ -209,7 +209,7 @@ export const RacerSpecSchema = specSchema("strict", []).superRefine((spec, ctx) 
  */
 export function clampRacerSpec(raw) {
   const fixes = [];
-  const parsed = specSchema("repair", fixes).safeParse(raw);
+  const parsed = specSchema("repair", fixes).safeParse(dropNulls(raw, "", fixes));
   if (!parsed.success) {
     return {
       ok: false,
@@ -232,6 +232,23 @@ export function clampRacerSpec(raw) {
     };
   }
   return { ok: true, spec: check.data, fixes };
+}
+
+/**
+ * Models often write `"number": null` for an optional field they leave out. Optional fields are
+ * absent, not null, so null object fields are dropped (and reported); a required field that is
+ * null still fails validation as missing.
+ */
+function dropNulls(v, path, fixes) {
+  if (Array.isArray(v)) return v.map((x, i) => dropNulls(x, `${path}.${i}`, fixes));
+  if (!v || typeof v !== "object") return v;
+  const out = {};
+  for (const [k, x] of Object.entries(v)) {
+    const p = path ? `${path}.${k}` : k;
+    if (x === null) fixes.push(`${p}: null → left out`);
+    else out[k] = dropNulls(x, p, fixes);
+  }
+  return out;
 }
 
 /** Yields [path, ref, setter] for every palette reference in a spec. */

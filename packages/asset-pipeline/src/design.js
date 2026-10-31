@@ -23,6 +23,8 @@ const REQUIRED_NEW = ["tagline", "motion", "sound"];
 
 /**
  * Claude effort per pass (adaptive thinking; ilyas asked for Sonnet 5.5 at high effort).
+ * Measured 2026-10-31 on three real drawings: high/high 30–60 s; medium/medium 20–30 s but visibly
+ * less faithful (a winged two-wheeler lost its wheels, a yellow car turned orange), so high stays.
  * Override with CLAUDE_PASS_EFFORT="design,review", each low|medium|high|xhigh|max.
  */
 export const DESIGN_EFFORT = effortFromEnv(process.env.CLAUDE_PASS_EFFORT) ?? {

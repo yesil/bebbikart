@@ -68,6 +68,18 @@ test("optional look fields: patterns, finishes, number, motion and tagline", () 
   expect(r.spec.tagline).toBe("Loves fish, scared of puddles");
 });
 
+test("null optional fields are left out, null required fields still fail", () => {
+  const raw = structuredClone(DEFAULT_SPEC);
+  raw.ride.number = null;
+  raw.character.hat = null;
+  const r = clampRacerSpec(raw);
+  expect(r.ok).toBe(true);
+  expect(r.spec.ride.number).toBeUndefined();
+  expect(r.fixes.join()).toContain("ride.number: null");
+  raw.ride.base = null;
+  expect(clampRacerSpec(raw).ok).toBe(false);
+});
+
 test("clamp reports structural errors it can't fix", () => {
   const raw = structuredClone(DEFAULT_SPEC);
   delete raw.ride;
