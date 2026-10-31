@@ -7,10 +7,10 @@ extends RefCounted
 ## Pond the ford crosses ("pond_water" water range s 10..90). The west shore follows the fenced
 ## bridge lane ~7 m inside it; the ford enters at the south shore and leaves at the north shore.
 const POND: Array[Vector2] = [
-	Vector2(0, 140.6), Vector2(5, 138.8), Vector2(10, 140.8), Vector2(15, 148), Vector2(17, 162), Vector2(17.5, 179),
-	Vector2(17, 195), Vector2(15, 209), Vector2(10, 216.8), Vector2(5, 219), Vector2(0, 217.2), Vector2(-4, 213.8),
-	Vector2(-8, 209.2), Vector2(-15.8, 205.2), Vector2(-20.5, 199.8), Vector2(-22.7, 192.8), Vector2(-23, 179),
-	Vector2(-22.7, 165), Vector2(-20.5, 158), Vector2(-15.8, 152.6), Vector2(-8, 148.6), Vector2(-4, 144),
+	Vector2(0, 141.4), Vector2(5, 138.8), Vector2(10, 140.8), Vector2(15, 148), Vector2(17, 162), Vector2(17.5, 179),
+	Vector2(17, 195), Vector2(15, 209), Vector2(10, 216.8), Vector2(5, 219), Vector2(0, 215.6), Vector2(-4.5, 211.2),
+	Vector2(-8.5, 207.4), Vector2(-15.8, 205.2), Vector2(-20.5, 199.8), Vector2(-22.7, 192.8), Vector2(-23, 179),
+	Vector2(-22.7, 165), Vector2(-20.5, 158), Vector2(-15.8, 152.6), Vector2(-8.5, 149.8), Vector2(-4.5, 145.6),
 ]
 const POND_LEVEL := 0.12          # water surface y; the ford road sits ~0.3 m below it
 const POND_FLOOR := -1.4          # deepest point away from the ford

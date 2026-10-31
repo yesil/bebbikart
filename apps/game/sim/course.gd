@@ -45,7 +45,7 @@ func _init() -> void:
 	# west round the pond and crosses its inflow stream on a humped stone bridge.
 	var j3 := _end("hills2")
 	# A tight first arc gets the lane clear of the ford before the ford dips into the water.
-	var bridge_ops := [["S", 3.0], ["A", 10.0, -80.0], ["A", 26.3, 80.0], ["S", 22.5], ["A", 26.3, 80.0], ["A", 10.0, -80.0], ["S", 3.0]]
+	var bridge_ops := [["S", 3.0], ["A", 10.5, -80.0], ["A", 25.8, 80.0], ["S", 22.5], ["A", 25.8, 80.0], ["A", 10.5, -80.0], ["S", 3.0]]
 	var bridge_pts := _draw("pond_bridge", j3, bridge_ops, [[0.0, 0.4]])
 	var bl := _length(bridge_pts)
 	bridge_pts = _draw("pond_bridge", j3, bridge_ops, [[0.0, 0.4], [bl * 0.5 - 12.0, 0.4], [bl * 0.5, 1.6], [bl * 0.5 + 12.0, 0.4], [bl, 0.4]])
