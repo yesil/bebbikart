@@ -107,6 +107,16 @@ session's fastest on it, whoever did it (`fastestMs`, `fastestPlayerId`, `fastes
 included). Bests come from every completed lap (a point-to-point run: finished runs) on the session's
 track since the session started. The coach (§8) picks its tip from them.
 
+## 2e. Track maps (phone)
+
+The phone draws each track from `TRACK_MAPS` (`packages/shared/src/track-maps.js`, `trackMap(track)`
+throws for a track without one): the sim course flattened to 2D polylines, one per segment in course
+order, each with its `stretch` (§2d), `fork` and `choice`, points about 2.5 m apart; `bounds`, the
+`start` line and `loop`. Map coordinates are metres, x = world x, y = −world z (north up). The JSON is
+generated from the Godot sim (`bun run maps:export`, `tools/export_track_maps.gd`); `bun run
+maps:check` and `village_laps.gd` fail when a map no longer matches its course, and a bun test checks
+each map's stretches against `TRACK_STRETCHES`. Never edit the JSON by hand.
+
 ## 3. Enums
 
 ```ts

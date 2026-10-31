@@ -1,7 +1,14 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/dist", "!apps/game", "!**/bun.lock"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!apps/game",
+      "!**/bun.lock",
+      "!packages/shared/src/track-maps"
+    ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
   "javascript": { "formatter": { "quoteStyle": "double" } },

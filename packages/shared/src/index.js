@@ -8,3 +8,4 @@ export * from "./messages.js";
 export * from "./racer-kit.js";
 export * from "./racer-spec.js";
 export * from "./schemas.js";
+export * from "./track-maps.js";

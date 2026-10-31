@@ -9,6 +9,7 @@ extends SceneTree
 const VillageCourse = preload("res://sim/village_course.gd")
 const Course = preload("res://sim/course.gd")
 const Tuning = preload("res://sim/tuning.gd")
+const TrackMaps = preload("res://tools/track_maps.gd")
 const Sim = preload("res://sim/sim.gd")
 const Racer = preload("res://sim/racer.gd")
 const Builds = preload("res://sim/builds.gd")
@@ -38,6 +39,9 @@ func _init() -> void:
 	_random(int(args.get("builds", "40")))
 	_crowd()
 	_countryside()
+	# The phone's track maps (packages/shared/src/track-maps) must match the courses.
+	for p in TrackMaps.stale():
+		fails.append("track map %s; run bun run maps:export" % p)
 	if fails.is_empty():
 		print("LAP CHECKS PASSED")
 		quit(0)
