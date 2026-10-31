@@ -240,6 +240,12 @@ const ROAD_PIECES := [
 	["pond_bridge_deck", "pond_bridge", "deck_in", "deck_out", "road_planks", 0.45],
 	["pond_bridge_out", "pond_bridge", "deck_out", -1, "road_asphalt_detour", -1.0],
 	["mill", "mill", -1, -1, "road_asphalt", -1.0],
+	["farm", "farm", -1, -1, "road_dirt_detour", -1.0],
+	["cobbles", "cobbles", -1, -1, "road_ford", -1.0],
+	["ridge", "ridge", -1, -1, "road_asphalt", -1.0],
+	["alpbach_in", "alpbach", -1, "water_in", "road_asphalt", -1.0],
+	["alpbach_ford", "alpbach", "water_in", "water_out", "road_ford", -1.0],
+	["alpbach_out", "alpbach", "water_out", -1, "road_asphalt", -1.0],
 	["cross_exposed_in", "cross_exposed", -1, "causeway_in", "road_planks", -1.0],
 	["cross_exposed", "cross_exposed", "causeway_in", "causeway_out", "road_planks", 0.35],
 	["cross_exposed_out", "cross_exposed", "causeway_out", -1, "road_planks", -1.0],
@@ -493,6 +499,30 @@ func _bake_water() -> void:
 	mb.ribbon(right, left)
 	_mesh_node(node, "Brook", mb.commit(water), false)
 	print("bake: water (pond %d tris, brook %d m)" % [idx.size() / 3, pts.size()])
+	# Alpbach: a ribbon following its channel, at the ford's level where it crosses the road.
+	var apts: Array[Vector2] = []
+	for i in plan.alp_stream.size() - 1:
+		var a := plan.alp_stream[i]
+		var b := plan.alp_stream[i + 1]
+		var n := maxi(1, int(a.distance_to(b)))
+		for k in n:
+			apts.append(a.lerp(b, float(k) / n))
+	apts.append(plan.alp_stream[plan.alp_stream.size() - 1])
+	var al := PackedVector3Array()
+	var ar := PackedVector3Array()
+	var alevel := INF
+	var ahw := VillagePlan.ALP_HALF_WIDTH + 0.6
+	for i in apts.size():
+		var p := apts[i]
+		var dir := (apts[mini(i + 1, apts.size() - 1)] - apts[maxi(i - 1, 0)]).normalized()
+		var nrm := Vector2(-dir.y, dir.x)
+		var on_road := shape.road_edge_at(p.x, p.y) < 0.5
+		alevel = plan.alp_level if on_road else shape.height_at(p.x, p.y) + 0.45
+		al.append(Vector3(p.x + nrm.x * ahw, alevel, p.y + nrm.y * ahw))
+		ar.append(Vector3(p.x - nrm.x * ahw, alevel, p.y - nrm.y * ahw))
+	var amb := MeshBatch.new(8.0)
+	amb.ribbon(ar, al)
+	_mesh_node(node, "Alpbach", amb.commit(water), false)
 
 
 # ---------------------------------------------------------------- structures
@@ -715,7 +745,8 @@ func _bake_props() -> void:
 		placed[m[0]].append(m[1])
 	_instanced(node, kit, placed)
 	_flags(node, swiss["flags"])
-	_signs(node, swiss["signs"])
+	_signs(node, swiss["signs"], swiss["boards"])
+	_labels(node, swiss["labels"])
 	print("bake: %d props, %d types, %d flags, %d signs" % [props.size(), placed.size(), swiss["flags"].size(), swiss["signs"].size()])
 
 
@@ -753,10 +784,29 @@ func _flags(parent: Node, at: Array) -> void:
 	_mesh_node(parent, "SwissFlags", st.commit())
 
 
+## Text on the ability signs, shops and factory (Label3D, readable from the camera).
+func _labels(parent: Node, labels: Array) -> void:
+	for l in labels:
+		var lb := Label3D.new()
+		lb.name = "Label_%s" % String(l[0]).validate_node_name().replace(" ", "")
+		lb.text = l[0]
+		lb.transform = l[1]
+		lb.font_size = int(l[2])
+		lb.pixel_size = 0.006
+		lb.outline_size = 14
+		lb.modulate = Color(0.12, 0.1, 0.08)
+		lb.outline_modulate = Color(1.0, 0.95, 0.75)
+		lb.double_sided = true
+		_mark(lb)
+		parent.add_child(lb)
+
+
 ## Yellow hiking signpost boards (Swiss Wanderweg style): a pointed yellow board per arrow.
-func _signs(parent: Node, at: Array) -> void:
+func _signs(parent: Node, at: Array, boards: Array) -> void:
 	var yellow := _std_material("wanderweg_yellow", "", Color(0.98, 0.78, 0.05), 0.6)
 	var mb := MeshBatch.new(1.0)
+	for xf: Transform3D in boards:
+		mb.box(xf, Vector3(2.6, 0.7, 0.06))
 	for xf: Transform3D in at:
 		mb.box(Transform3D(xf.basis, xf.origin + xf.basis.x * 0.55), Vector3(1.0, 0.3, 0.05))
 		mb.box(Transform3D(xf.basis * Basis(Vector3.BACK, PI * 0.25), xf.origin + xf.basis.x * 1.05), Vector3(0.21, 0.21, 0.05))

@@ -278,7 +278,8 @@ func step(sim) -> void:
 		_replan_lane(sim)
 
 	# ---- autopilot target speed
-	var rain_true := 1.0 - Tuning.RAIN_GRIP_LOSS * rain
+	# Loose surfaces (a segment's "grip", e.g. the muddy farm track) cut grip like rain does.
+	var rain_true := (1.0 - Tuning.RAIN_GRIP_LOSS * rain) * float(seg.get("grip", 1.0))
 	var rain_seen := 1.0 - float(Tuning.RAIN_PERCEIVED_LOSS[style]) * rain
 	var boost_grip := Tuning.BOOST_WEAK_GRIP if weak_grip_t > 0.0 else 1.0
 	plan_t -= 1

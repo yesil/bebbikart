@@ -18,7 +18,7 @@ const STUB := 3.0
 const FORK_ANGLE := 15.0
 const FORK_PROBE := 12.0
 const END_ZONE := 8.0              # metres from a shared junction where adjacent roads may touch
-const LAP_RANGE := Vector2(380.0, 600.0)
+const LAP_RANGE := Vector2(380.0, 850.0)
 const SCALE := 3.0                 # SVG px per metre
 const MARGIN := 40.0               # metres round the course in the drawing
 
@@ -28,6 +28,7 @@ const SECTION_COLORS := {
 const KIND_COLORS := {
 	"inn": "#8a4b2a", "chalet": "#6b3f22", "arcade": "#7d5a3c", "bakery": "#9c5a2c",
 	"church": "#f2efe6", "mill": "#7b6a55", "barn": "#8e3b2f", "school": "#c9b48a",
+	"factory": "#d9c7a0", "shop": "#e0a43a", "farmhouse": "#6b3f22",
 }
 
 var course: VillageCourse
@@ -478,7 +479,7 @@ func _svg() -> String:
 			o.append('<circle cx="%s" cy="%s" r="%.1f" fill="#f2efe6" stroke="#3a2a1c" stroke-width="1.5"/>' % [c[0], c[1], 3.0 * SCALE])
 		if bd["label"] != "":
 			var c := _p(bd["pos"]).split(",")
-			o.append('<text x="%s" y="%s" font-size="13" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">%s</text>' % [c[0], c[1], bd["label"]])
+			o.append('<text x="%s" y="%s" font-size="13" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">%s</text>' % [c[0], c[1], String(bd["label"]).xml_escape()])
 	# Fountain and lime tree
 	var fc := _p(plan.fountain).split(",")
 	o.append('<circle cx="%s" cy="%s" r="%.1f" fill="#9fc9e6" stroke="#777" stroke-width="2"/>' % [fc[0], fc[1], 2.5 * SCALE])
@@ -514,7 +515,7 @@ func _span(id: String, s0: float, s1: float, col: String, width: float) -> Strin
 
 func _label(at: Vector2, t: String) -> String:
 	var c := _p(at).split(",")
-	return '<text x="%s" y="%s" font-size="14" font-weight="bold" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">%s</text>' % [c[0], c[1], t]
+	return '<text x="%s" y="%s" font-size="14" font-weight="bold" text-anchor="middle" fill="#222" stroke="#fff" stroke-width="3" paint-order="stroke">%s</text>' % [c[0], c[1], t.xml_escape()]
 
 
 func _panel(x0: float) -> String:

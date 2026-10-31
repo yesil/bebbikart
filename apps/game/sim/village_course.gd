@@ -34,7 +34,8 @@ const ROUNDABOUT_TURN := 120.0
 ## Racers sometimes miss the exit and go round once more (sim/racer.gd "miss"): base chance per
 ## pass, scaled by driving style, boosting and rain there.
 const MISS_EXIT_CHANCE := 0.07
-const MISS_BEFORE_EXIT := 3.0      # metres before the exit where the racer commits or not
+const MISS_BEFORE_EXIT := 3.0
+const RIDGE_R := 24.0              # hairpin round the alp top      # metres before the exit where the racer commits or not
 
 var segments := {}
 var ordered_ids: Array[String] = []
@@ -118,13 +119,31 @@ func _build(hill: float, north: float) -> void:
 		[[0.0, 0.4], [12.0, 0.4], [20.0, -0.2], [ford_len - 20.0, -0.2], [ford_len - 12.0, 0.4], [ford_len, 0.4]]), 4.0,
 		{"water": [[13.0, ford_len - 13.0]]})
 	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true})
-	# Past the mill and right onto the south edge.
-	p = _draw_ops(_end("pond_water"), _heading("pond_water"), [["S", 5.0], ["A", 16.0, LEG_SOUTH - LEG_BROOK], ["S", 5.0]], [[0.0, 0.4]])
+	# Past the mill and out of the village to the south, onto the alp: each stretch tests one
+	# ability (a sign at its start says which).
+	p = _draw_ops(_end("pond_water"), _heading("pond_water"), [["S", 14.0]], [[0.0, 0.4]])
 	_add("mill", "pond", "", "", p, 4.0, {})
+	# Farm track (grip): a muddy S through the fields, climbing gently.
+	p = _draw_ops(_end("mill"), _heading("mill"), [["S", 4.0], ["A", 16.0, 30.0], ["A", 16.0, -60.0], ["A", 16.0, 30.0], ["S", 4.0]],
+		[[0.0, 0.4], [44.0, 2.2]])
+	_add("farm", "crossing", "", "", p, 3.5, {"exposure": 0.3, "grip": 0.85})
+	# Cobbled lane (bounce): straight on over cobbles and humps, still climbing.
+	p = _draw_ops(_end("farm"), _heading("farm"), [["S", 28.0]], [[0.0, 2.2], [28.0, 4.0]])
+	_add("cobbles", "crossing", "", "", p, 3.5, {"exposure": 0.3, "bumps": [5.0, 11.0, 17.0, 23.0]})
+	# Ridge (stability): a wide hairpin round the alp top and back down, open to the wind.
+	var ridge_l := deg_to_rad(180.0) * RIDGE_R + 16.0
+	p = _draw_ops(_end("cobbles"), _heading("cobbles"), [["A", RIDGE_R, 180.0], ["S", 16.0]],
+		[[0.0, 4.0], [ridge_l * 0.45, 6.5], [ridge_l, 3.4]])
+	_add("ridge", "crossing", "", "", p, 3.2, {"exposure": 1.0})
+	# Alpbach (water): down through a stream, then left back into the village.
+	var turn_in := LEG_SOUTH - LEG_BROOK - 180.0
+	p = _draw_ops(_end("ridge"), _heading("ridge"), [["S", 30.0], ["A", 16.0, turn_in], ["S", 14.0]],
+		[[0.0, 3.4], [11.0, 2.3], [13.5, 2.0], [20.0, 2.0], [26.0, 1.6], [30.0 + deg_to_rad(absf(turn_in)) * 16.0, 0.4]])
+	_add("alpbach", "crossing", "", "", p, 3.5, {"exposure": 0.4, "water": [[12.5, 19.5]]})
 	# Crossing fork. Sheltered: the arcade lane loops right in among the houses. Exposed: a low
 	# causeway straight over the open meadow, facing the mountains.
-	var j4 := _end("mill")
-	var h4 := _heading("mill")
+	var j4 := _end("alpbach")
+	var h4 := _heading("alpbach")
 	var shelter_ops := [["S", 3.0], ["A", 14.0, 62.0], ["A", 14.0, -62.0], ["S", 6.0], ["A", 14.0, -62.0], ["A", 14.0, 62.0], ["S", 3.0]]
 	var shelter_pts := _draw_ops(j4, h4, shelter_ops, [[0.0, 0.4]])
 	var xl := _along(shelter_pts, h4)
@@ -200,7 +219,7 @@ func path_for(routes: Dictionary) -> Array[String]:
 	var ramp := "ramp_jump" if routes.get("ramp", "around") == "jump" else "ramp_around"
 	var pond := "pond_water" if routes.get("pond", "bridge") == "water" else "pond_bridge"
 	var cross := "cross_exposed" if routes.get("crossing", "sheltered") == "exposed" else "cross_sheltered"
-	var p: Array[String] = ["start", "hills1", ramp, "hills2", pond, "mill", cross, "bends"]
+	var p: Array[String] = ["start", "hills1", ramp, "hills2", pond, "mill", "farm", "cobbles", "ridge", "alpbach", cross, "bends"]
 	return p
 
 

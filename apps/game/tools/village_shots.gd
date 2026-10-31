@@ -102,6 +102,12 @@ static func viewpoints(c: VillageCourse, plan: VillagePlan) -> Array:
 		["signpost", r.call("hills2").pos_at(r.call("hills2").length - 16.0) + up * 3.0, pw.pos_at(10.0) + up * 1.5],
 		["fountain", f + Vector3(10, 5, -10), f + up],
 		["roundabout", f + Vector3(-22, 16, -26), f],
+		["farm_track", r.call("farm").pos_at(0.0) + up * 4.0 + r.call("farm").normal_at(0.0) * 6.0, r.call("farm").pos_at(30.0) + up],
+		["factory", r.call("cobbles").pos_at(4.0) + up * 3.0 + r.call("cobbles").normal_at(4.0) * 5.0, r.call("cobbles").pos_at(14.0) + r.call("cobbles").normal_at(14.0) * -12.0 + up * 3.0],
+		["ridge", r.call("ridge").pos_at(r.call("ridge").length * 0.5) + up * 12.0 + (r.call("ridge").pos_at(r.call("ridge").length * 0.5) - r.call("ridge").pos_at(0.0)) * 0.6, r.call("ridge").pos_at(0.0)],
+		["alpbach", r.call("alpbach").pos_at(4.0) + up * 4.0 + r.call("alpbach").normal_at(4.0) * 7.0, r.call("alpbach").pos_at(17.0)],
+		["shops", s0.pos_at(16.0) + up * 3.0 + s0.normal_at(16.0) * 0.5, s0.pos_at(0.0) + up * 1.5],
 		["overview", centre + Vector3(-60, 70, -110), centre, 55.0],
+		["detour_overview", r.call("ridge").pos_at(0.0) + Vector3(-40, 80, -90), r.call("cobbles").pos_at(10.0), 55.0],
 		["mountains", centre + Vector3(0, 30, 60), centre + Vector3(0, 20, -300), 60.0],
 	]

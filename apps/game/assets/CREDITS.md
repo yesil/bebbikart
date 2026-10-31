@@ -8,6 +8,7 @@ Every third-party asset in this folder is CC0 1.0 (public domain). Sizes were re
 | `village/kenney_fantasy_town/` (walls, roofs, balconies, chimneys, fountain, fences, lanterns, benches, stalls, banners, water wheel, cart; GLB + colour map) | [Fantasy Town Kit 2.0](https://kenney.nl/assets/fantasy-town-kit) (mirror: [OpenGameArt](https://opengameart.org/content/fantasy-town-kit)) | Kenney | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (see `village/kenney_fantasy_town/License_Kenney.txt`) |
 | `village/quaternius_cow/Cow.glb` | [Cow](https://poly.pizza/m/5XSc2Fka3F) | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (see `village/quaternius_cow/LICENSE.txt`) |
 | `village/swiss_flag/Flag_of_Switzerland.svg` | [Flag of Switzerland (Pantone)](https://commons.wikimedia.org/wiki/File:Flag_of_Switzerland_(Pantone).svg) | Wikimedia Commons | Public domain (see `village/swiss_flag/LICENSE.txt`) |
+| `village/poly_pizza/` (Swiss cow, sheep, cheese block and cut, chocolate bar and wrapper) | [Poly Pizza](https://poly.pizza) (links in `village/poly_pizza/LICENSE.txt`) | Quaternius, Kenney | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `textures/terrain/grass_*` | [Grass004](https://ambientcg.com/view?id=Grass004) | ambientCG | CC0 1.0 |
 | `textures/terrain/grass_dirt_*` | [Ground037](https://ambientcg.com/view?id=Ground037) | ambientCG | CC0 1.0 |
 | `textures/terrain/dirt_*` | [Ground054](https://ambientcg.com/view?id=Ground054) | ambientCG | CC0 1.0 |

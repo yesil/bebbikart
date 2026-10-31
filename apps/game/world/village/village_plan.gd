@@ -16,7 +16,7 @@ const CLEAR := 1.5                 # metres between a building footprint and a r
 const BUILDING_GAP := 1.5          # metres between two footprints
 const BROOK_HALF_WIDTH := 1.8
 const MAX_SETBACK := 14.0          # a landmark that needs more extra setback than this is an error
-const BRIDGE_HALF_LENGTH := 7.0    # covered bridge deck either side of the hump
+const BRIDGE_HALF_LENGTH := 8.5    # covered bridge deck either side of the hump
 
 ## Rows of buildings along a road: [segment, side (+1 left / -1 right of travel), s from, s to,
 ## kind, extra setback]. Footprints face the road; each house goes at the first spot from its
@@ -46,7 +46,12 @@ const KINDS := {
 	"mill": [9.0, 8.0, 8.0],
 	"barn": [12.0, 9.0, 8.0],
 	"school": [16.0, 10.0, 10.0],
+	"factory": [20.0, 11.0, 10.0],
+	"shop": [9.0, 7.0, 8.0],
+	"farmhouse": [12.0, 9.0, 9.0],
 }
+## The alp detour (sim/village_course.gd): the village core stays out of it; it is farmland.
+const DETOUR := ["farm", "cobbles", "ridge", "alpbach"]
 
 var course: VillageCourse
 ## {kind, pos: Vector2, yaw (radians, the front faces this way), size: Vector2 (width, depth), height, label}
@@ -74,6 +79,18 @@ var hay_yaw := 0.0
 var orchard: Array[Vector2] = []    # fruit tree spots in the middle of the loop
 var kicker := {}                    # {from: Vector3, to: Vector3} wooden ski-jump ramp on ramp_jump
 var errors: PackedStringArray = []
+var detour_poly := PackedVector2Array()  # inside the alp detour's tongue (farm and pastures)
+## Alpbach: a mountain stream crossing the detour's last stretch where it fords (its "water").
+var alp_stream: Array[Vector2] = []
+var alp_level := 0.0               # water surface height at the ford
+const ALP_HALF_WIDTH := 2.6
+## Ability signs at the start of each detour stretch: [segment, side, ability, text]
+const STAT_SIGNS := [
+	["farm", 1, "grip", "GRIP · Feldweg"],
+	["cobbles", 1, "bounce", "BOUNCE · Pflaster"],
+	["ridge", 1, "stability", "STABILITY · Grat"],
+	["alpbach", 1, "water", "WATER · Alpbach"],
+]
 var _road: Array = []               # [Vector2, half width, id] every metre of every road
 
 
@@ -87,7 +104,14 @@ func _init(p_course: VillageCourse) -> void:
 			_road.append([Vector2(p.x, p.z), hw(id), id])
 			s += 1.0
 	_roundabout()
+	for id in DETOUR:
+		var r := route(id)
+		var s := 0.0
+		while s < r.length:
+			detour_poly.append(at(id, s, 0.0))
+			s += 2.0
 	_water()
+	_alp_stream()
 	_square()
 	_landmarks()
 	for row in ROWS:
@@ -204,6 +228,18 @@ func _roundabout() -> void:
 			k += 1.0
 
 
+func _alp_stream() -> void:
+	var seg: Dictionary = course.segments["alpbach"]
+	var wr: Array = seg["water"][0]
+	var mid := (float(wr[0]) + float(wr[1])) * 0.5
+	var r := route("alpbach")
+	alp_level = r.pos_at(mid).y + 0.25
+	# Straight across the road, a gentle bend either side; it runs on out of the tongue to
+	# the west and comes down from the mountains to the east.
+	for d: float in [70.0, 40.0, 18.0, 0.0, -18.0, -40.0]:
+		alp_stream.append(at("alpbach", mid + sin(d * 0.05) * 4.0, d))
+
+
 func _square() -> void:
 	# The fountain stands in the middle of the roundabout island with the lime tree beside it;
 	# the island is paved.
@@ -237,6 +273,14 @@ func _landmarks() -> void:
 	_fit("mill", "mill", 3.0, -1, 0.0, "Mühle")
 	_fit("school", "hills2", 3.0, -1, 0.0, "Schulhaus")
 	_fit("bakery", "bends", 2.0, -1, 0.0, "Bäckerei")
+	# Cheese shop and chocolate shop facing each other across the main street by the start.
+	_fit("shop", "hills1", 5.0, 1, 0.0, "Käse")
+	_fit("shop", "start", 7.0, -1, 0.0, "Schoggi")
+	# The farm on the alp: the farmhouse by the farm track, the cheese and chocolate
+	# factory on the cobbled lane, a hay barn inside the ridge hairpin.
+	_fit("farmhouse", "farm", 16.0, -1, 0.0, "Bauernhof")
+	_fit("factory", "cobbles", 14.0, -1, 0.0, "Käserei & Schoggifabrik")
+	_fit("barn", "ridge", route("ridge").length * 0.35, -1, 2.0, "Heustall")
 	# Open meadow south of the causeway.
 	var cr := route("cross_exposed")
 	var outward := at("cross_exposed", cr.length * 0.5, 30.0)
@@ -275,6 +319,8 @@ func _clear(poly: PackedVector2Array) -> bool:
 		if float(road_edge(p)[0]) < CLEAR:
 			return false
 		if Geometry2D.is_point_in_polygon(p, pond) or polyline_dist(p, brook) < BROOK_HALF_WIDTH + 1.5:
+			return false
+		if not alp_stream.is_empty() and polyline_dist(p, alp_stream) < ALP_HALF_WIDTH + 1.5:
 			return false
 		if not square.is_empty() and Geometry2D.is_point_in_polygon(p, square):
 			return false
@@ -317,6 +363,8 @@ func _infill() -> void:
 			var e := road_edge(p)
 			if not _inside_loop(p) or float(e[0]) < INFILL_BAND.x or float(e[0]) > INFILL_BAND.y:
 				continue
+			if Geometry2D.is_point_in_polygon(p, detour_poly) or String(e[1]) in DETOUR:
+				continue
 			var to_road := _nearest_road_point(p) - p
 			var yaw := atan2(to_road.x, to_road.y) + rng.randf_range(-0.15, 0.15)
 			var b := {"kind": "chalet", "pos": p, "yaw": yaw, "size": Vector2(KINDS["chalet"][0], KINDS["chalet"][1]),
@@ -343,7 +391,7 @@ func _orchard() -> void:
 		while z <= hi.y:
 			var p := Vector2(x, z) + Vector2(rng.randf_range(-1.5, 1.5), rng.randf_range(-1.5, 1.5))
 			z += 9.0
-			if not _inside_loop(p) or float(road_edge(p)[0]) < 6.0:
+			if not _inside_loop(p) or float(road_edge(p)[0]) < 6.0 or Geometry2D.is_point_in_polygon(p, detour_poly):
 				continue
 			var free := true
 			for poly in _polys:

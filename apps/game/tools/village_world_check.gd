@@ -20,6 +20,7 @@ const PARTS := ["Terrain", "Roads", "Water/Pond", "Water/Brook", "Structures/Kic
 ## Props that belong at the roadside (their origin may sit this close to a road edge).
 const ROADSIDE := {"Lantern": 0.5, "Fence": 0.3}
 const PROP_GROUND := 0.35          # props may sit this far off the ground
+const ON_STALLS := ["CheeseBlock", "ChocolateBar"]   # shop goods on the market stalls
 
 var fails: PackedStringArray = []
 var notes: PackedStringArray = []
@@ -121,7 +122,7 @@ func _check_models(world: Node, course: VillageCourse, plan: VillagePlan, shape:
 					if float(e[0]) < clear:
 						fails.append("prop %s at (%.1f, %.1f) is %.2f m from %s" % [n.name, o.x, o.z, e[0], e[1]])
 					var g := shape.height_at(o.x, o.z)
-					if absf(o.y - g) > PROP_GROUND and not String(n.name).begins_with("Fountain"):
+					if absf(o.y - g) > PROP_GROUND and not String(n.name) in ON_STALLS and not String(n.name).begins_with("Fountain"):
 						fails.append("prop %s at (%.1f, %.1f) is %.2f m off the ground" % [n.name, o.x, o.z, o.y - g])
 	notes.append("%d building modules, %d props" % [counts.get("Buildings", 0), counts.get("Props", 0)])
 	# Buildings: the floor is at or below the ground everywhere under the footprint (no gaps) and

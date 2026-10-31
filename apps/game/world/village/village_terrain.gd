@@ -352,6 +352,12 @@ func natural_at(p: Vector2, dist: float) -> float:
 	var md := p.distance_to(Vector2(mh.x, mh.y)) / mh.z
 	if md < 1.0:
 		y -= mh.w * (0.5 + 0.5 * cos(PI * md))
+	# Alpbach channel across the detour's ford.
+	var ad := VillagePlan.polyline_dist(p, plan.alp_stream)
+	var aw := VillagePlan.ALP_HALF_WIDTH
+	if ad < aw + 6.0:
+		var abed := minf(y - 0.9, plan.alp_level - 0.6) if ad > aw else y - 0.9
+		y = lerpf(abed, y, smoothstep(aw * 0.5, aw + 6.0, ad))
 	# Brook channel down to the pond.
 	var sd := VillagePlan.polyline_dist(p, plan.brook)
 	var sw := VillagePlan.BROOK_HALF_WIDTH

@@ -1,0 +1,10 @@
+Models from Poly Pizza (https://poly.pizza), all CC0 1.0 Universal (public domain dedication),
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Sheep_1.glb           Sheep by Quaternius          https://poly.pizza/m/C39AUXUUes
+Sheep_2.glb           Sheep by Quaternius          https://poly.pizza/m/rgJXF570ZK
+Cow_2.glb             Cow by Quaternius            https://poly.pizza/m/26zM1outCr
+CheeseCut.glb         Cheese Cut by Kenney         https://poly.pizza/m/Z4BmZzAdcv
+CheeseBlock.glb       Cheese Block by Quaternius   https://poly.pizza/m/lUAEwQ0XFU
+ChocolateBar.glb      Chocolate Bar by Quaternius  https://poly.pizza/m/vJsJ1EIiOO
+ChocolateWrapper.glb  Chocolate Wrapper by Kenney  https://poly.pizza/m/7IPEo5wlOx

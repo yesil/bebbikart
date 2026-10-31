@@ -196,6 +196,12 @@ func building(kind: String, size: Vector2, seed_: int) -> Variant:
 			return _barn(size, rng)
 		"school":
 			return _school(size, rng)
+		"factory":
+			return _factory(size, rng)
+		"shop":
+			return _shop(size, rng)
+		"farmhouse":
+			return _farmhouse(size, rng)
 	errors.append("unknown building kind '%s'" % kind)
 	return null
 
@@ -329,6 +335,65 @@ func _mill(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
 
 
 ## Hay barn: dark timber with cross-braced boards, wide low roof.
+## Cheese and chocolate factory: a long plaster hall with big windows, timber upper floor and
+## two tall chimneys.
+func _factory(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
+	var nx := _cells(size.x, 2.5, true)
+	var nz := _cells(size.y)
+	var sx := size.x / nx
+	var sz := size.y / nz
+	var out: Array = []
+	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H * 1.2, func(side, i, n):
+		if side == "front" and i == n / 2:
+			return "wall-doorway-square-wide"
+		return "wall-window-glass")
+	_walls(out, nx, nz, sx, sz, FLOOR_H * 1.2, FLOOR_H, func(side, i, n):
+		return "wall-wood-window-shutters" if side == "front" or side == "back" else "wall-wood")
+	var top := FLOOR_H * 2.2
+	var ridge := _roof(out, nx, nz, sx, sz, top, 0.5, 0.3, 0.3)
+	for x: float in [-size.x * 0.3, size.x * 0.3]:
+		out.append(["chimney", Transform3D(Basis().scaled_local(Vector3(2.6, 6.0, 2.6)), Vector3(x, top, -sz * 0.6))])
+	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
+
+
+## Village shop (cheese or chocolate): a small chalet with a big shop window and a striped
+## awning stall in front.
+func _shop(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
+	var nx := _cells(size.x, CELL, true)
+	var nz := _cells(size.y)
+	var sx := size.x / nx
+	var sz := size.y / nz
+	var out: Array = []
+	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
+		if side == "front":
+			return "wall-door" if i == 0 else "wall-window-glass"
+		return "wall")
+	_walls(out, nx, nz, sx, sz, FLOOR_H, FLOOR_H, func(side, i, n):
+		return "wall-wood-window-shutters" if side == "front" else "wall-wood")
+	var top := 2 * FLOOR_H
+	var ridge := _roof(out, nx, nz, sx, sz, top, 0.55, 0.6, 0.3)
+	out.append(["stall-red", Transform3D(Basis(Vector3.UP, PI * 0.5).scaled_local(Vector3(2.0, 2.0, 2.0)), Vector3(sx * 0.5, 0, nz * sz * 0.5 + 0.4))])
+	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
+
+
+## Farmhouse: a big Emmental farmhouse, timber on a stone base, a huge low roof.
+func _farmhouse(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
+	var nx := _cells(size.x, CELL, true)
+	var nz := _cells(size.y)
+	var sx := size.x / nx
+	var sz := size.y / nz
+	var out: Array = []
+	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
+		if side == "front" and i == 1:
+			return "wall-door"
+		return "wall-window-shutters" if side == "front" else "wall")
+	_walls(out, nx, nz, sx, sz, FLOOR_H, FLOOR_H, func(side, i, n):
+		return "wall-wood-window-shutters" if side == "front" else "wall-wood-detail-cross")
+	var top := 2 * FLOOR_H
+	var ridge := _roof(out, nx, nz, sx, sz, top, 0.5, 0.9, 0.6)
+	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
+
+
 func _barn(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
 	var nx := _cells(size.x, CELL, true)
 	var nz := _cells(size.y)
@@ -485,6 +550,10 @@ func props(course, plan, shape) -> Array:
 
 
 const COW := "res://assets/village/quaternius_cow/Cow.glb"
+const COW_2 := "res://assets/village/poly_pizza/Cow_2.glb"
+const SHEEP := "res://assets/village/poly_pizza/Sheep_2.glb"
+const CHEESE := "res://assets/village/poly_pizza/CheeseBlock.glb"
+const CHOCOLATE := "res://assets/village/poly_pizza/ChocolateBar.glb"
 
 
 ## Swiss details: flag poles (Kenney wooden pillars) and their flags, yellow hiking signposts
@@ -525,15 +594,21 @@ func swiss_details(course, plan, shape) -> Dictionary:
 	var sq: Vector2 = plan.fountain + (plan.lime_tree - plan.fountain).rotated(PI * 0.6)
 	pole.call(sq, 7.0, 0.0)
 	# Yellow hiking signposts on the outside of each fork's run-in, arrows down both branches.
-	for fk in [["hills1", "ramp_around"], ["hills2", "pond_bridge"], ["mill", "cross_sheltered"]]:
+	for fk in [["hills1", "ramp_around"], ["hills2", "pond_bridge"], ["alpbach", "cross_sheltered"]]:
 		var r = course.segments[fk[0]]["route"]
 		var fhw: float = course.segments[fk[0]]["half_width"]
-		var s: float = r.length - 7.0
 		var detour = course.segments[fk[1]]["route"]
 		# The detour peels off to the side its curvature first turns away from.
 		var side := -signf(detour.curv_at(8.0)) if absf(detour.curv_at(8.0)) > 0.001 else 1.0
-		var q: Vector3 = r.world_at(s, side * (fhw + 1.5))
-		var p := Vector2(q.x, q.z)
+		# The first clear spot in the last 20 m before the fork.
+		var s: float = r.length - 6.0
+		var p := Vector2.ZERO
+		while s > r.length - 20.0:
+			var q: Vector3 = r.world_at(s, side * (fhw + 1.5))
+			p = Vector2(q.x, q.z)
+			if _free(plan, p, 0.4):
+				break
+			s -= 1.0
 		if not _free(plan, p, 0.4):
 			errors.append("no room for the signpost before the %s fork" % fk[1])
 			continue
@@ -556,7 +631,72 @@ func swiss_details(course, plan, shape) -> Dictionary:
 			continue
 		out.append([COW, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.26, 0.26, 0.26)), Vector3(p.x, y, p.y))])
 		cows += 1
-	return {"modules": out, "flags": flags, "signs": signs}
+	# The farm's herd inside the alp detour: cows and sheep grazing between the farm track and
+	# the ridge, kept clear of the roads and the farm buildings.
+	var labels: Array = []
+	var boards: Array = []
+	var herd := 0
+	tries = 0
+	var box := Rect2(plan.detour_poly[0], Vector2.ZERO)
+	for q in plan.detour_poly:
+		box = box.expand(q)
+	while herd < 26 and tries < 4000:
+		tries += 1
+		var p := Vector2(rng.randf_range(box.position.x, box.end.x), rng.randf_range(box.position.y, box.end.y))
+		if not Geometry2D.is_point_in_polygon(p, plan.detour_poly) or not _free(plan, p, 3.0):
+			continue
+		var y: float = ground.call(p)
+		var model := COW_2 if herd % 3 == 0 else (SHEEP if herd % 3 == 1 else COW)
+		var sc := 0.28 if model == COW_2 else (0.55 if model == SHEEP else 0.26)
+		out.append([model, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc, sc)), Vector3(p.x, y, p.y))])
+		herd += 1
+	# Sheep on the slopes round the alp.
+	var flock := 0
+	tries = 0
+	while flock < 18 and tries < 4000:
+		tries += 1
+		var c: Vector2 = plan.detour_poly[plan.detour_poly.size() / 2]
+		var p := c + Vector2(rng.randf_range(-70.0, 70.0), rng.randf_range(-60.0, 30.0))
+		if Geometry2D.is_point_in_polygon(p, plan.detour_poly) or not _free(plan, p, 3.0):
+			continue
+		var y: float = ground.call(p)
+		out.append([SHEEP, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.55, 0.55, 0.55)), Vector3(p.x, y, p.y))])
+		flock += 1
+	# Ability signs: a yellow board on a post at the start of each detour stretch, with its name.
+	for st in plan.STAT_SIGNS:
+		var r = course.segments[st[0]]["route"]
+		var shw: float = course.segments[st[0]]["half_width"]
+		var q: Vector3 = r.world_at(2.0, int(st[1]) * (shw + 1.6))
+		var p := Vector2(q.x, q.z)
+		if not _free(plan, p, 0.4):
+			errors.append("no room for the %s sign" % st[2])
+			continue
+		var y: float = ground.call(p)
+		out.append(["pillar-wood", Transform3D(Basis().scaled(Vector3(0.8, 2.6, 0.8)), Vector3(p.x, y, p.y))])
+		# Board faces the oncoming racers.
+		var face := Basis(Vector3.UP, r.heading_at(2.0) + PI)
+		boards.append(Transform3D(face, Vector3(p.x, y + 2.95, p.y)))
+		labels.append([st[3], Transform3D(face, Vector3(p.x, y + 2.95, p.y) + face.z * 0.05), 64])
+	# Shop goods on the stalls, and the shop and factory names.
+	for b in plan.buildings:
+		if not b["kind"] in ["shop", "factory", "farmhouse"]:
+			continue
+		var fwd := Vector2(sin(b["yaw"]), cos(b["yaw"]))
+		var face := Basis(Vector3.UP, b["yaw"])
+		var front: Vector2 = b["pos"] + fwd * (b["size"].y * 0.5 + 0.05)
+		var gy: float = ground.call(front)
+		labels.append([b["label"], Transform3D(face, Vector3(front.x, gy + FLOOR_H + 0.4, front.y)), 96])
+		if b["kind"] == "shop":
+			var rgt := Vector2(fwd.y, -fwd.x)
+			var stall: Vector2 = b["pos"] + fwd * (b["size"].y * 0.5 + 0.4) + rgt * (b["size"].x / _cells(b["size"].x, CELL, true) * 0.5)
+			var cheese: bool = String(b["label"]).begins_with("K")
+			for k in 3:
+				var at3 := Vector3(stall.x, ground.call(stall) + 0.78, stall.y) + face * Vector3((k - 1) * 0.45, 0, 0)
+				if cheese:
+					out.append([CHEESE, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.18, 0.18, 0.18)), at3)])
+				else:
+					out.append([CHOCOLATE, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.5, 0.5, 0.5)), at3)])
+	return {"modules": out, "flags": flags, "signs": signs, "labels": labels, "boards": boards}
 
 
 ## p keeps `clear` metres from every road edge, building, the pond and the brook.
