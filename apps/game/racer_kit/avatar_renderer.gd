@@ -75,11 +75,7 @@ func render_all(spec: Dictionary, player_id: String, drawing: Texture2D = null) 
 	var out := {}
 
 	racer.snap_pose("happy")
-	var box := RacerBuilder._aabb(racer, Transform3D.IDENTITY)
-	var c := box.get_center()
-	var radius := box.size.length() * 0.5
-	var dir3 := Vector3(-0.62, 0.38, -0.69).normalized()  # 3/4 view from front-right-ish
-	_cam.look_at_from_position(c + dir3 * radius / tan(deg_to_rad(_cam.fov * 0.5)) * 1.05, c)
+	_frame_hero(racer)
 	var img := await _shot(HERO_SIZE)
 	if img:
 		out.hero = _save(img, dir, "hero")
@@ -96,6 +92,39 @@ func render_all(spec: Dictionary, player_id: String, drawing: Texture2D = null) 
 			out[k] = _save(img, dir, k)
 	racer.queue_free()
 	return out
+
+
+## Renders only the hero image of a spec to `png_path`. Returns the absolute path, or "" on failure.
+func render_hero(spec: Dictionary, png_path: String, drawing: Texture2D = null) -> String:
+	if not can_render():
+		push_error("AvatarRenderer: cannot render on a headless display")
+		return ""
+	if _vp == null:
+		await ready
+	var racer := RacerBuilder.build(spec, drawing)
+	if racer == null:
+		return ""
+	racer.show_name_tag(false)
+	racer.set_process(false)
+	_vp.add_child(racer)
+	racer.snap_pose("happy")
+	_frame_hero(racer)
+	var img := await _shot(HERO_SIZE)
+	racer.queue_free()
+	if img == null:
+		push_error("AvatarRenderer: hero render returned no image")
+		return ""
+	var path := ProjectSettings.globalize_path(png_path)
+	img.save_png(path)
+	return path
+
+
+func _frame_hero(racer: ToyRacer) -> void:
+	var box := RacerBuilder._aabb(racer, Transform3D.IDENTITY)
+	var c := box.get_center()
+	var radius := box.size.length() * 0.5
+	var dir3 := Vector3(-0.62, 0.38, -0.69).normalized()  # 3/4 view from front-right-ish
+	_cam.look_at_from_position(c + dir3 * radius / tan(deg_to_rad(_cam.fov * 0.5)) * 1.05, c)
 
 
 func _shot(size: int) -> Image:
