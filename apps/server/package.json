@@ -9,6 +9,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@bebbikart/shared": "workspace:*"
+    "@bebbikart/shared": "workspace:*",
+    "@bebbikart/asset-pipeline": "workspace:*"
   }
 }

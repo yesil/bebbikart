@@ -12,6 +12,7 @@
       "name": "@bebbikart/server",
       "version": "0.1.0",
       "dependencies": {
+        "@bebbikart/asset-pipeline": "workspace:*",
         "@bebbikart/shared": "workspace:*",
       },
     },
