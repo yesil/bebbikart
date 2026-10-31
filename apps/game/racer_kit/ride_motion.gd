@@ -9,7 +9,10 @@ extends RefCounted
 ##   - wings (birds, or drawn on any ride) flap hard on jumps and fold on landing;
 ##   - boats rock and bob; rockets wobble, and their flame flares on boost;
 ##   - blobs wobble far more (landing, bends, boost), the rider bouncing on top;
-##   - ride extras (antennae, flags, horns), tails and the boat's pennant swing on hair springs.
+##   - ride extras (antennae, flags, horns), tails and the boat's pennant swing on hair springs;
+##   - idles and weather: tails swish now and then, animals flick their ears, a sailboat's sail
+##     swings out to the wind and the boat heels, rockets sputter when slow, water splashes up on
+##     entering the pond, rain drops splash on the ride.
 ## Start grid (race_reactions.gd): crouch() while the lights count down, go() on green, fidget().
 ## ToyRacer owns one (`ride`): update() each frame before it builds its rig transform from
 ## pitch / roll / yaw / lift / scale; land(), finish(), fail() on those events; reset() for the
@@ -30,6 +33,14 @@ const EXTRA_SWING := {"capsule": [0.6, 0.45], "cylinder": [0.6, 0.45], "cone": [
 	"flame": [0.3, 0.2], "lightning": [0.3, 0.18], "moon": [0.3, 0.18], "cloud": [0.25, 0.15],
 	"diamond": [0.25, 0.15], "drop": [0.3, 0.18], "bowtie": [0.3, 0.18], "cape": [0.5, 0.35]}
 const BOAT_FLAG_AT := Vector3(0, 0.94, 0.62)  # kit_rides.gd _boat(): the pennant on its little pole
+const SAIL_AT := Vector3(0, 0.5, 0.45)        # kit_rides.gd _sailboat(): the sail beside the mast
+const MAST_Z := 0.42
+const EAR_AT := Vector3(0.12, 0.18, 0.02)     # kit_rides.gd _animal4(): the ears on RideHead (x mirrored)
+const EAR_HALF := 0.08                        # half the ear capsule: its root is this far down
+const SWISH_S := 0.6
+const FLICK_S := 0.25
+const SPUTTER_S := 0.12
+const WATER := Color(0.75, 0.9, 1.0, 0.75)
 
 var ok := false
 var error := ""
@@ -102,6 +113,23 @@ var _crouch_s := 0.0
 var _fidget_t := 0.0
 var _fidget_k := 0
 var _rock_k := 0.0                # extra boat rocking after a splash
+var _ears: Array[Node3D] = []     # ear pivots (animals)
+var _ear_side := PackedFloat32Array()
+var _sail: Node3D = null          # sail pivot on the mast (sailboat)
+var _sail_s := 0.0                # sail swing (rad) and its speed
+var _sail_v := 0.0
+var _heel := 0.0                  # the sailboat heeling away from the wind (rad, added to roll)
+var _swish_t := 0.0               # tail swish left (s), time to the next one
+var _swish_next := 2.0
+var _flick_t := 0.0               # ear flick left, which ear, time to the next one
+var _flick_i := 0
+var _flick_next := 1.5
+var _sputter_t := 0.0             # rocket sputter left, time to the next one
+var _sputter_next := 1.0
+var _was_water := false
+var _splash: CPUParticles3D = null  # water thrown up entering the pond
+var _drops: CPUParticles3D = null   # rain drops bursting on the ride
+var _rng := RandomNumberGenerator.new()
 var _d_spring := Vector3.ZERO
 var _v_spring := Vector3.ZERO
 var _d_soft := Vector3.ZERO
@@ -148,6 +176,43 @@ func setup(racer: ToyRacer) -> bool:
 			return _fail("%s: the boat's pennant is not at %s on RideBody (kit_rides.gd _boat changed?)" % [title, BOAT_FLAG_AT])
 		var piv := Gestures._pivot_at(flag, flag.position)
 		_add_swing(piv, Vector3(0, 0, 1), 0.9, 0.6, true)  # it points back from the pole
+	if base == "sailboat":
+		var sail: Node3D = null
+		for c in body.get_children():
+			if c is MeshInstance3D and (c as Node3D).position.is_equal_approx(SAIL_AT):
+				sail = c
+		if sail == null:
+			return _fail("%s: the sail is not at %s on RideBody (kit_rides.gd _sailboat changed?)" % [title, SAIL_AT])
+		_sail = Gestures._pivot_at(sail, Vector3(0.0, SAIL_AT.y, MAST_Z))
+	if base == "animal4":
+		if _head == null:
+			return _fail("%s: an animal ride without its RideHead" % title)
+		for s in [-1.0, 1.0]:
+			var ear: Node3D = null
+			for c in _head.get_children():
+				if c is MeshInstance3D and (c as Node3D).position.is_equal_approx(Vector3(EAR_AT.x * s, EAR_AT.y, EAR_AT.z)):
+					ear = c
+			if ear == null:
+				return _fail("%s: no ear at %s on RideHead (kit_rides.gd _animal4 changed?)" % [title, EAR_AT])
+			_ears.append(Gestures._pivot_at(ear, ear.position + ear.basis * Vector3(0.0, -EAR_HALF, 0.0)))
+			_ear_side.append(s)
+	_rng.seed = hash(title) ^ randi()
+	_splash = _particles(40, 0.85, 0.075)
+	_splash.one_shot = true
+	_splash.explosiveness = 0.95
+	_splash.direction = Vector3.UP
+	_splash.spread = 40.0
+	_splash.initial_velocity_min = 3.0
+	_splash.initial_velocity_max = 6.0
+	_splash.emission_box_extents = Vector3(0.6, 0.05, 0.8)
+	_drops = _particles(20, 0.3, 0.04)
+	_drops.direction = Vector3.UP
+	_drops.spread = 70.0
+	_drops.initial_velocity_min = 0.8
+	_drops.initial_velocity_max = 1.6
+	var box := RacerBuilder._aabb(r.model, Transform3D.IDENTITY)
+	_drops.position = box.get_center() + Vector3(0.0, box.size.y * 0.3, 0.0)
+	_drops.emission_box_extents = box.size * Vector3(0.4, 0.2, 0.4)
 	if base in WHEELED:
 		_setup_sway(body)
 		rig_squash = 0.3
@@ -159,6 +224,33 @@ func setup(racer: ToyRacer) -> bool:
 	ok = true
 	reset()
 	return true
+
+
+## Water droplets (small light-blue balls under gravity), not emitting; parented to the Model.
+func _particles(n: int, life: float, size: float) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.name = "Water"
+	p.amount = n
+	p.lifetime = life
+	p.emitting = false
+	p.local_coords = false
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	p.gravity = Vector3(0.0, -9.8, 0.0)
+	p.scale_amount_min = 0.6
+	p.scale_amount_max = 1.2
+	var m := SphereMesh.new()
+	m.radius = size
+	m.height = size * 2.0
+	m.radial_segments = 6
+	m.rings = 3
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = WATER
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.material = mat
+	p.mesh = m
+	r.model.add_child(p)
+	return p
 
 
 func _fail(msg: String) -> bool:
@@ -324,6 +416,9 @@ func nodes() -> Array:
 	out.append_array(_tails)
 	out.append_array(_flames)
 	out.append_array(_ext)
+	out.append_array(_ears)
+	if _sail:
+		out.append(_sail)
 	return out
 
 
@@ -352,6 +447,19 @@ func reset() -> void:
 		_jelly.transform = _jelly_rest
 	for j in _ext.size():
 		_ext[j].rotation = _ext_base[j]
+	for e in _ears:
+		e.rotation = Vector3.ZERO
+	if _sail:
+		_sail.rotation = Vector3.ZERO
+	for v in ["_sail_s", "_sail_v", "_heel", "_swish_t", "_flick_t", "_sputter_t"]:
+		set(v, 0.0)
+	_swish_next = 1.0  # the first idle swish, flick and sputter come soon after the built pose
+	_flick_next = 0.8
+	_sputter_next = 0.6
+	_was_water = false
+	if _splash:
+		_splash.emitting = false
+		_drops.emitting = false
 
 
 # --- per frame ---
@@ -378,6 +486,7 @@ func update(dt: float) -> void:
 	_go_t = maxf(0.0, _go_t - dt)
 	_fidget_t = maxf(0.0, _fidget_t - dt)
 	_rock_k = maxf(0.0, _rock_k - dt * 0.7)
+	_idles(dt, sdt)
 	_crouch_s = lerpf(_crouch_s, _crouch, minf(1.0, dt * 6.0))
 	pitch = 0.0
 	roll = 0.0
@@ -475,7 +584,7 @@ func _boat(rear: float, moving: float) -> void:
 	var rock := (0.04 + 0.03 * moving) * (1.0 + 2.0 * _rock_k + 2.5 * rear)
 	if r.in_water:
 		rock *= 1.4
-	roll = sin(_t * 1.6) * rock + sin(_t * 2.7 + 1.3) * rock * 0.4 + _roll_s
+	roll = sin(_t * 1.6) * rock + sin(_t * 2.7 + 1.3) * rock * 0.4 + _roll_s + _heel
 	roll += 0.09 * rear * sin((REAR_S - _rear_t) * 6.0)  # a happy rock side to side at the finish
 	pitch = sin(_t * 1.2 + 0.7) * 0.03 + 0.05 * moving - 0.12 * _rock_k * sin(_rock_k * PI) + _pitch_s * 0.5
 	lift = (0.5 + 0.5 * sin(_t * 2.2)) * (0.03 + 0.05 * rear)
@@ -553,9 +662,56 @@ func _parts(dt: float, moving: float, rear: float) -> void:
 		_flare += _flare_v * minf(dt, 1.0 / 30.0)
 		_flare = clampf(_flare, 0.2, 3.0)
 		var puff := 0.8 * (_fidget_t / FIDGET_S) if base == "rocket" else 0.0
-		var f := (_flare + puff) * (1.0 + 0.15 * sin(_t * 31.0) + 0.1 * sin(_t * 17.0))
+		var sputter := 1.0 - 0.75 * sin(_sputter_t / SPUTTER_S * PI) if _sputter_t > 0.0 else 1.0
+		var f := (_flare + puff) * sputter * (1.0 + 0.15 * sin(_t * 31.0) + 0.1 * sin(_t * 17.0))
 		for n in _flames:
 			n.scale = Vector3(1.0, 1.0, f) * (0.9 + 0.1 * f)
+
+
+## Idles and weather: tail swishes, ear flicks, sputters (timed at random per racer), the sail to
+## the wind, splashes entering water, raindrops bursting on the ride.
+func _idles(dt: float, sdt: float) -> void:
+	var slow := r.speed < 6.0
+	if not _tails.is_empty():
+		_swish_t = maxf(0.0, _swish_t - dt)
+		_swish_next -= dt
+		if _swish_next <= 0.0:
+			_swish_next = _rng.randf_range(1.5, 4.0) if slow else _rng.randf_range(4.0, 8.0)
+			_swish_t = SWISH_S
+	if not _ears.is_empty():
+		_flick_t = maxf(0.0, _flick_t - dt)
+		_flick_next -= dt
+		if _flick_next <= 0.0:
+			_flick_next = _rng.randf_range(0.8, 2.6)
+			_flick_t = FLICK_S
+			_flick_i = _rng.randi() % _ears.size()
+		for i in _ears.size():
+			var k := sin(_flick_t / FLICK_S * PI) if _flick_t > 0.0 and i == _flick_i else 0.0
+			# Back and out, then home; pinned back while galloping fast.
+			_ears[i].rotation = Vector3(-0.6 * k - 0.35 * clampf(r.speed / 15.0, 0.0, 1.0), 0.0, -_ear_side[i] * 0.5 * k)
+	if not _flames.is_empty():
+		_sputter_t = maxf(0.0, _sputter_t - dt)
+		_sputter_next -= dt
+		if _sputter_next <= 0.0:
+			_sputter_next = _rng.randf_range(0.6, 2.2) if slow else _rng.randf_range(3.0, 6.0)
+			_sputter_t = SPUTTER_S
+			if base == "rocket":
+				_kick = maxf(_kick, 0.25)  # a cough shakes it
+	if _sail:
+		# The boom swings out to leeward with the wind across the boat; more wind, more heel.
+		var w_local := r.global_basis.inverse() * r.wind if r.is_inside_tree() else r.wind
+		var want := clampf(w_local.x * 1.1, -0.9, 0.9)
+		_sail_v += (16.0 * (want - _sail_s) - 2.0 * 0.3 * 4.0 * _sail_v) * sdt
+		_sail_s += _sail_v * sdt
+		_sail.rotation = Vector3(0.0, _sail_s, 0.0)
+		_heel = -clampf(w_local.x * 0.12, -0.12, 0.12)
+	if _splash:
+		if r.in_water and not _was_water:
+			_splash.restart()
+			_splash.emitting = true
+			_rock_k = 1.0
+		_was_water = r.in_water
+		_drops.emitting = r.rain > 0.35
 
 
 ## Extras, tails and the boat's pennant: springs in ride space driven like the hair's
@@ -590,6 +746,9 @@ func _swing(dt: float, sdt: float) -> void:
 		_ext[j].rotation = _ext_base[j] + th
 	var moving := clampf(r.speed / 10.0, 0.0, 1.0)
 	var wag := sin(_t * (5.0 + r.speed * 0.5)) * (0.25 + 0.2 * moving + 0.3 * _rear_t / REAR_S)
+	if _swish_t > 0.0:
+		# A big swish: one and a half sweeps, peaking mid-way.
+		wag = lerpf(wag, sin((SWISH_S - _swish_t) / SWISH_S * TAU * 1.5) * 0.8, sin(_swish_t / SWISH_S * PI))
 	var th2 := Vector3(0, 0, 1).cross(_d_soft) * 1.0
 	th2 = th2.limit_length(0.5)
 	for n in _tails:

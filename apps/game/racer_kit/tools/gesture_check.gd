@@ -30,7 +30,7 @@ const EVENTS := ["wave", "cheer", "fist_pump", "glance_back", "slump", "dizzy", 
 	"taunt", "whoop", "flinch", "high_five", "shake_fist",
 	"state:rain", "state:wind", "state:air", "state:slip", "state:water", "state:boost",
 	"bump", "land", "fail", "celebrate", "finish", "look", "drive", "grid", "signature",
-	"mood:grumpy", "mood:cocky"]
+	"mood:grumpy", "mood:cocky", "idle"]
 ## In-game face expressions each event must show at some point (RacerFace.EXPRESSIONS).
 const FACE := {"flinch": "eek", "surprised": "eek", "taunt": "smug", "shake_fist": "smug",
 	"mood:grumpy": "grumpy", "mood:cocky": "smug"}
@@ -155,6 +155,8 @@ func _fire(r: ToyRacer, ev: String, on: bool) -> void:
 	if ev.begins_with("mood:"):
 		r.gestures.mood_mem = (-1.0 if ev == "mood:grumpy" else 1.0) if on else 0.0
 		return
+	if ev == "idle":
+		return  # standing still: the ride's idles (swishes, flicks, sputters)
 	if ev.begins_with("state:") or ev == "drive" or ev == "grid":
 		match ev:
 			"state:rain": r.rain = 1.0 if on else 0.0
@@ -269,6 +271,17 @@ func _ride_extremes(r: ToyRacer, e: Dictionary) -> void:
 		_mx(e, "wing_flap", absf(w.rotation.z))
 	for f in m._flames:
 		_mx(e, "flame", f.scale.z)
+		_mx(e, "-flame", -f.scale.z)
+	for n in m._tails:
+		_mx(e, "swish", absf(n.rotation.y))
+	for n in m._ears:
+		_mx(e, "flick", absf(n.rotation.x))
+	if m._sail:
+		_mx(e, "sail", absf(m._sail.rotation.y))
+	if m._splash and m._splash.emitting:
+		_mx(e, "splash", 1.0)
+	if m._drops and m._drops.emitting:
+		_mx(e, "drops", 1.0)
 
 
 static func _mx(e: Dictionary, k: String, v: float) -> void:
@@ -314,6 +327,20 @@ func _ride_expect(r: ToyRacer, ev: String) -> Array:
 				out.append(["-sway_sy", -0.96, "crouches on its wheels"])
 			if m.base == "animal4":
 				out.append(["-pitch", 0.05, "crouches"])
+		"idle":
+			if not m._tails.is_empty() and m._tails[0].has_meta("tail_wag"):
+				out.append(["swish", 0.6, "swishes its tail"])
+			if not m._ears.is_empty():
+				out.append(["flick", 0.3, "flicks an ear"])
+			if not m._flames.is_empty():
+				out.append(["-flame", -0.45, "sputters"])
+		"state:wind":
+			if m._sail:
+				out.append(["sail", 0.2, "swings its sail out to the wind"])
+		"state:water":
+			out.append(["splash", 1.0, "splashes"])
+		"state:rain":
+			out.append(["drops", 1.0, "gets rain drops bursting on it"])
 		"state:air":
 			if not m._wings.is_empty():
 				out.append(["wing_flap", 0.9, "flaps hard"])

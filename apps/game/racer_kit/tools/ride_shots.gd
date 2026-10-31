@@ -8,7 +8,7 @@ extends SceneTree
 ##
 ## Needs a window (headless has no renderer); exits 1 if a spec is missing or a scene is unknown.
 
-const SCENES := ["rest", "grid", "green", "jump", "land", "bend", "boost", "finish"]
+const SCENES := ["rest", "grid", "green", "jump", "land", "bend", "boost", "finish", "idle", "wind", "water", "rain"]
 const DEFAULT := [
 	"res://racer_kit/samples/monster_kart.json",
 	"../../packages/asset-pipeline/out-v6/girl-car.spec.json",
@@ -172,6 +172,17 @@ func _fire(r: ToyRacer, scene: String) -> float:
 			r.speed = 12.0
 			r.boost = true
 			return 0.22
+		"idle":
+			return 1.3  # standing: the first tail swish peaks, an ear has flicked, a rocket has coughed
+		"wind":
+			r.wind = Vector3(-0.9, 0.0, 0.2)  # from the racer's right: the sail swings out to its left
+			return 1.4
+		"water":
+			r.in_water = true  # into the pond: the splash is up
+			return 0.18
+		"rain":
+			r.rain = 1.0
+			return 0.8
 	push_error("ride_shots: unknown scene " + scene)
 	quit(1)
 	return 0.0
