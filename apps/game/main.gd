@@ -733,6 +733,9 @@ func _handle(msg: Dictionary) -> void:
 				print("language: server has %s, the big screen %s; sending it" % [server_lang, I18n.language])
 				language_sent = I18n.language
 				net.send("game.config.set", {"language": I18n.language})
+			# The game owns the weather: a server that just met it (its start, a reconnect) gets the
+			# weather now, not at the next phase change; a forced --weather reaches the phones too.
+			net.send(Messages.GAME_WEATHER, sim.weather.state())
 		"config.updated":
 			var lang := String(pl.get("language", ""))
 			if language_sent != "":
