@@ -30,7 +30,8 @@ run against my own server (port 8090, its own data folder) and the real Godot ga
 | Big screen | 60 fps (min 54) with 8 kit racers at 1920x1080, Godot 53 % of one core (max 78 %), 720 MB. Server < 1 % CPU. |
 | Messages | ~180 KB per phone for 2 races; boost tap → seen median 89 ms. No errors. |
 
-Screens: the lights panel names the racers on the grid with the karts parked in the four slots;
+Screens ([countdown](screens/multiplayer-round2-countdown.jpg), [mid-race](screens/multiplayer-round2-midrace.jpg),
+[results](screens/multiplayer-round2-results.jpg)): the lights panel names the racers on the grid with the karts parked in the four slots;
 GO! as they leave; place tags over every kart; the race board turns into the results as they
 finish. Polished after this round: tags that slide under a HUD panel are hidden; compact standings
 rows fit 20 racers above the camera's name tag.
