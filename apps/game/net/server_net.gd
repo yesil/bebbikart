@@ -5,6 +5,7 @@ extends RefCounted
 ##   send(type, payload)  for game -> server messages
 ## Reconnects on its own. `welcome` is unpacked into roster.updated + run.start messages, and
 ## config updates are merged into the shared config dictionary (the sim holds the same one).
+## welcome (its config only) and config.updated are passed on too: main.gd syncs the language.
 
 const Messages = preload("res://net/messages.gd")
 
@@ -112,6 +113,7 @@ func _receive(text: String) -> void:
 	match type:
 		Messages.WELCOME:
 			cfg.merge(pl.get("config", {}), true)
+			_inbox.append(Messages.make_msg(Messages.WELCOME, {"config": pl.get("config", {})}))
 			_inbox.append(Messages.make_msg(Messages.ROSTER_UPDATED, pl.get("roster", [])))
 			for rs in pl.get("activeRuns", []):
 				_active[rs["runId"]] = true
@@ -120,6 +122,7 @@ func _receive(text: String) -> void:
 			print("ServerNet: welcome, %d racers, session %s" % [(pl.get("roster", []) as Array).size(), pl.get("session", {}).get("status", "?")])
 		"config.updated":
 			cfg.merge(pl, true)
+			_inbox.append(msg)
 		"session.updated":
 			session_status = String(pl.get("status", "?"))
 			_inbox.append(msg)

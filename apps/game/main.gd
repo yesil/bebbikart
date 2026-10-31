@@ -9,10 +9,12 @@
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
 #   --track=countryside|village (mock mode; with --server the session config picks the track),
 #   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full,
-#   --quality=low|medium|high (default: last pick in the options menu, else medium)
+#   --quality=low|medium|high (default: last pick in the options menu, else medium),
+#   --language=en|de (default: last pick in the options menu, else config.language; server mode
+#   sends it to the server so every phone follows it)
 # Keys: C camera mode, Tab next racer, F next fork shot, R/W start next rain/wind phase,
 #   K toggle forced calm, B boost the followed racer, H hide overlay,
-#   Esc or ⌘, options menu (fullscreen, track, quit), ⌃⌘F or F11 fullscreen, ⌘Q quit.
+#   Esc or ⌘, options menu (fullscreen, language, track, quit), ⌃⌘F or F11 fullscreen, ⌘Q quit.
 extends Node3D
 
 const Course = preload("res://sim/course.gd")
@@ -34,6 +36,7 @@ const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
 const OptionsMenu = preload("res://ui/options_menu.gd")
+const I18n = preload("res://ui/i18n.gd")
 const AudioDirector = preload("res://audio/audio_director.gd")
 
 ## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
@@ -58,6 +61,7 @@ var track := ""            # TrackId of the loaded course and world
 static var next_track := ""
 ## The "Options…" item is added to the macOS app menu once; it outlives scene reloads.
 static var native_menu_added := false
+static var native_menu_idx := -1
 var config: Dictionary
 var sim: Sim
 var net                    # net/mock_net.gd or net/server_net.gd (same interface)
@@ -66,12 +70,6 @@ var views := {}            # runId -> RacerView
 var colors := {}           # playerId -> Color
 var nicks := {}            # playerId -> nickname
 var making := {}           # playerId -> design stage last shown (roster stage)
-const MAKING_LINES := {
-	"looking": "studying the drawing",
-	"designing": "building the racer",
-	"critiquing": "checking it against the drawing",
-	"refining": "adding the finishing touches",
-}
 var results: Array = []    # recent finished/failed lines
 var camera: CameraRig
 var fx: WeatherFx
@@ -87,6 +85,8 @@ var menu: OptionsMenu
 var quitting := false
 var quality := ""
 var audio: AudioDirector
+## Language sent to the server and not yet echoed in config.updated (other updates are stale).
+var language_sent := ""
 
 
 func _ready() -> void:
@@ -102,6 +102,15 @@ func _ready() -> void:
 	Engine.physics_ticks_per_second = int(Protocol.SIM_TICK_HZ * speed)
 	Engine.max_physics_steps_per_frame = maxi(8, int(8 * speed))
 	config = Messages.default_config()
+	# Big-screen language: --language, else the last pick in the options menu, else the default.
+	var lang_err := I18n.set_language(String(config["language"]))
+	if lang_err == "":
+		lang_err = I18n.set_language(String(args.get("language", _saved_setting("ui", "language", config["language"]))))
+	if lang_err != "":
+		push_error("language: " + lang_err)
+		get_tree().quit(1)
+		return
+	print("language: ", I18n.language)
 	track = next_track if next_track != "" else String(args.get("track", config["track"]))
 	config["track"] = track
 	course = _make_course(track)
@@ -120,7 +129,7 @@ func _ready() -> void:
 		assets.game_key = key
 		add_child(assets)
 		assets.racer_ready.connect(_on_racer_ready)
-		assets.problem.connect(func(text: String): _result("ERROR " + text))
+		assets.problem.connect(func(text: String): _result(I18n.f("log.error", [text])))
 		print("BebbiKart server mode: %s (protocol v%d)" % [url, Protocol.PROTOCOL_VERSION])
 	else:
 		net = MockNet.new(config, n_racers, seed_)
@@ -172,7 +181,7 @@ func _build_scene() -> void:
 		return assets.spec_for(pid).get("sound", {}) if assets != null else net.sound_of(pid)
 	add_child(audio)
 	if not audio.setup(sim, track, camera, args.has("mute")):
-		_result("ERROR audio failed to load, see the log")
+		_result(I18n.t("log.audio_failed"))
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var panel := PanelContainer.new()
@@ -187,44 +196,91 @@ func _build_scene() -> void:
 	overlay.add_theme_font_override("font", SystemFont.new())
 	(overlay.get_theme_font("font") as SystemFont).font_names = PackedStringArray(["Menlo", "Monaco", "monospace"])
 	panel.add_child(overlay)
-	menu = OptionsMenu.new()
-	add_child(menu)
-	menu.setup(track, assets != null)
-	menu.fullscreen_toggled.connect(_toggle_fullscreen)
-	menu.track_chosen.connect(_switch_track)
-	menu.quit_pressed.connect(_quit)
+	_make_menu()
 	_add_native_menu()
-	var q: String = args.get("quality", _saved_quality())
+	var q: String = args.get("quality", _saved_setting("graphics", "quality", DEFAULT_QUALITY))
 	if not QUALITY.has(q):
 		push_error("unknown quality \"%s\" (known: %s)" % [q, ", ".join(QUALITY.keys())])
 		get_tree().quit(1)
 		return
 	apply_quality(q)
 	get_viewport().size_changed.connect(_apply_render_scale)
-	menu.quality_chosen.connect(func(id: String): apply_quality(id); _save_quality(id))
 	Engine.max_fps = FPS_CAP
 
 
-func _saved_quality() -> String:
+## The options menu, (re)built in the current language.
+func _make_menu() -> void:
+	if menu != null:
+		menu.queue_free()
+	menu = OptionsMenu.new()
+	add_child(menu)
+	menu.setup(track, assets != null)
+	menu.fullscreen_toggled.connect(_toggle_fullscreen)
+	menu.track_chosen.connect(_switch_track)
+	menu.quit_pressed.connect(_quit)
+	menu.quality_chosen.connect(func(id: String): apply_quality(id); _save_setting("graphics", "quality", id))
+	menu.language_chosen.connect(_choose_language)
+	if quality != "":
+		menu.set_quality(quality)
+	if assets != null:
+		menu.set_session(net.session_status)
+
+
+## A setting from user://settings.cfg (the options menu's picks), or `default` if never saved.
+func _saved_setting(section: String, key: String, default: Variant) -> Variant:
 	var cfg := ConfigFile.new()
 	var err := cfg.load(SETTINGS_PATH)
 	if err == ERR_FILE_NOT_FOUND:
-		return DEFAULT_QUALITY
+		return default
 	if err != OK:
-		push_error("could not read %s (%s); using the default quality" % [SETTINGS_PATH, error_string(err)])
-		_result("ERROR settings unreadable: %s" % error_string(err))
-		return DEFAULT_QUALITY
-	return String(cfg.get_value("graphics", "quality", DEFAULT_QUALITY))
+		push_error("could not read %s (%s); using the default %s" % [SETTINGS_PATH, error_string(err), key])
+		_result(I18n.f("log.settings_unreadable", [error_string(err)]))
+		return default
+	return cfg.get_value(section, key, default)
 
 
-func _save_quality(id: String) -> void:
+func _save_setting(section: String, key: String, value: Variant) -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)
-	cfg.set_value("graphics", "quality", id)
+	cfg.set_value(section, key, value)
 	var err := cfg.save(SETTINGS_PATH)
 	if err != OK:
 		push_error("could not save %s: %s" % [SETTINGS_PATH, error_string(err)])
-		menu.show_error("Could not save the quality setting: %s" % error_string(err))
+		menu.show_error(I18n.f("error.save_setting", [error_string(err)]))
+
+
+## Language picked in the options menu: the big screen switches now; in server mode the server
+## gets it too, and every phone follows (config.updated).
+func _choose_language(id: String) -> void:
+	if not _apply_language(id):
+		return
+	_save_setting("ui", "language", id)
+	if assets == null:
+		return
+	if net.status != "online":
+		# The welcome after the reconnect sends it (see _handle).
+		push_error("language: server is %s; phones switch once it reconnects" % net.status)
+		menu.show_error(I18n.f("error.offline_language", [I18n.t("net." + net.status)]))
+		return
+	language_sent = id
+	net.send("game.config.set", {"language": id})
+
+
+## Switches every big-screen string to `id` and rebuilds the menu. False (shown) if it can't.
+func _apply_language(id: String) -> bool:
+	var err := I18n.set_language(id)
+	if err != "":
+		_result(I18n.f("log.error", [err]))
+		menu.show_error(err)
+		return false
+	print("language: ", id)
+	var was_open := menu.is_open()
+	_make_menu()
+	if native_menu_idx >= 0:
+		NativeMenu.set_item_text(NativeMenu.get_system_menu(NativeMenu.APPLICATION_MENU_ID), native_menu_idx, I18n.t("menu.native_item"))
+	if was_open:
+		open_menu()
+	return true
 
 
 ## Applies a QUALITY preset to the viewport, sun, environment and vegetation.
@@ -276,7 +332,7 @@ static func _add_native_menu() -> void:
 		return
 	native_menu_added = true
 	var app_menu := NativeMenu.get_system_menu(NativeMenu.APPLICATION_MENU_ID)
-	NativeMenu.add_item(app_menu, "Options…", _open_options_from_menu, Callable(), null, KEY_MASK_META | KEY_COMMA)
+	native_menu_idx = NativeMenu.add_item(app_menu, I18n.t("menu.native_item"), _open_options_from_menu, Callable(), null, KEY_MASK_META | KEY_COMMA)
 
 
 static func _open_options_from_menu(_tag) -> void:
@@ -299,7 +355,7 @@ func open_menu() -> void:
 func _switch_track(id: String) -> void:
 	if not Protocol.TRACK_IDS.has(id):
 		push_error("track switch: unknown track \"%s\"" % id)
-		menu.show_error("Unknown track \"%s\"." % id)
+		menu.show_error(I18n.f("error.unknown_track", [id]))
 		return
 	if assets == null:
 		print("track change (options menu): %s -> %s, reloading" % [track, id])
@@ -308,7 +364,7 @@ func _switch_track(id: String) -> void:
 		return
 	if net.status != "online":
 		push_error("track switch: server is %s" % net.status)
-		menu.show_error("Not connected to the server (%s); the track was not changed." % net.status)
+		menu.show_error(I18n.f("error.offline_track", [I18n.t("net." + net.status)]))
 		return
 	print("track change (options menu): asking the server for %s (session %s)" % [id, net.session_status])
 	if net.session_status == "running":
@@ -408,7 +464,7 @@ func _check_track() -> void:
 		return
 	if not Protocol.TRACK_IDS.has(String(config["track"])):
 		push_error("config.track \"%s\" is not a known track" % config["track"])
-		_result("ERROR unknown track %s" % config["track"])
+		_result(I18n.f("log.unknown_track", [config["track"]]))
 		config["track"] = track
 		return
 	print("track change: %s -> %s, reloading" % [track, config["track"]])
@@ -440,13 +496,13 @@ func _handle(msg: Dictionary) -> void:
 				var spec: Dictionary = assets.spec_for(pl["playerId"])
 				if spec.is_empty():
 					# No fallback racer: say so loudly and don't race a stand-in.
-					var err := "ERROR run %s: no RacerSpec for player %s (%s) in the roster" % [pl["runId"], pl["playerId"], nicks.get(pl["playerId"], "?")]
+					var err := I18n.f("log.no_spec", [pl["runId"], pl["playerId"], nicks.get(pl["playerId"], "?")])
 					push_error(err)
 					_result(err)
 					return
 				var checked: Dictionary = RacerSpec.validate(spec)
 				if not (checked["errors"] as PackedStringArray).is_empty():
-					var err := "ERROR run %s: invalid RacerSpec for %s: %s" % [pl["runId"], nicks.get(pl["playerId"], "?"), "; ".join(checked["errors"])]
+					var err := I18n.f("log.invalid_spec", [pl["runId"], nicks.get(pl["playerId"], "?"), "; ".join(checked["errors"])])
 					push_error(err)
 					_result(err.left(160))
 					return
@@ -471,11 +527,29 @@ func _handle(msg: Dictionary) -> void:
 			_on_roster(pl)
 		"session.updated":
 			menu.set_session(String(pl.get("status", "?")))
+		Messages.WELCOME:
+			# The big screen's language wins: a fresh server (or one an admin changed) gets ours.
+			var server_lang := String(pl.get("config", {}).get("language", ""))
+			if server_lang != I18n.language:
+				print("language: server has %s, the big screen %s; sending it" % [server_lang, I18n.language])
+				language_sent = I18n.language
+				net.send("game.config.set", {"language": I18n.language})
+		"config.updated":
+			var lang := String(pl.get("language", ""))
+			if language_sent != "":
+				if lang == language_sent:
+					language_sent = ""
+				return  # an update from before ours
+			if lang != I18n.language:
+				print("language: the server switched to %s" % lang)
+				if _apply_language(lang):
+					_save_setting("ui", "language", lang)
 		"error":
 			# Refusals of what the game sent, e.g. track_locked for a track change.
-			var err := "ERROR server refused: %s: %s" % [pl.get("code", "?"), pl.get("message", "")]
+			language_sent = ""
+			var err := I18n.f("log.server_refused", [pl.get("code", "?"), pl.get("message", "")])
 			_result(err)
-			menu.show_error("Server refused: %s" % pl.get("message", pl.get("code", "?")))
+			menu.show_error(I18n.f("error.server_refused", [pl.get("message", pl.get("code", "?"))]))
 
 
 ## Server roster: names and colours for racers, and their kit assets (spec, drawing, renders).
@@ -486,7 +560,7 @@ func _on_roster(roster: Array) -> void:
 		still[String(e["playerId"])] = true
 	for pid in nicks.keys():
 		if not still.has(pid):
-			_result("LEFT  %s" % nicks[pid])
+			_result(I18n.f("log.left", [nicks[pid]]))
 			nicks.erase(pid)
 			making.erase(pid)
 	# Racers being made: one line per design step (looking, designing, critiquing, refining).
@@ -494,7 +568,7 @@ func _on_roster(roster: Array) -> void:
 		var mpid := String(e["playerId"])
 		var stage := String(e.get("stage", ""))
 		if stage != "" and making.get(mpid, "") != stage:
-			_result("MAKING  %s · %s" % [e["nickname"], MAKING_LINES.get(stage, stage)])
+			_result(I18n.f("log.making", [e["nickname"], I18n.t("making." + stage)]))
 		making[mpid] = stage
 	for e in roster:
 		var pid: String = e["playerId"]
@@ -507,7 +581,7 @@ func _on_roster(roster: Array) -> void:
 
 func _on_racer_ready(player_id: String) -> void:
 	var title: String = assets.spec_for(player_id).get("title", "")
-	_result("NEW  %s · %s" % [assets.nickname(player_id), title])
+	_result(I18n.f("log.new", [assets.nickname(player_id), title]))
 
 
 func _outgoing(type: String, pl: Dictionary) -> void:
@@ -526,13 +600,13 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 			return
 		Messages.GAME_RUN_FINISHED:
 			if pl.has("bestLapMs"):
-				_result("%-6s best lap %6.2f s (%d laps)" % [_nick_of(pl["runId"]), int(pl["bestLapMs"]) / 1000.0, (pl["laps"] as Array).size()])
+				_result(I18n.f("log.finished_laps", [_nick_of(pl["runId"]), int(pl["bestLapMs"]) / 1000.0, (pl["laps"] as Array).size()]))
 			else:
-				_result("%-6s %6.2f s" % [_nick_of(pl["runId"]), int(pl["elapsedMs"]) / 1000.0])
+				_result(I18n.f("log.finished", [_nick_of(pl["runId"]), int(pl["elapsedMs"]) / 1000.0]))
 		Messages.GAME_RUN_LAP:
-			_result("%-6s lap %d %6.2f s%s" % [_nick_of(pl["runId"]), pl["lap"], int(pl["lapMs"]) / 1000.0, " *" if pl["isBest"] else ""])
+			_result(I18n.f("log.lap", [_nick_of(pl["runId"]), pl["lap"], int(pl["lapMs"]) / 1000.0, " *" if pl["isBest"] else ""]))
 		Messages.GAME_RUN_FAILED:
-			_result("%-6s FAIL %s @%s" % [_nick_of(pl["runId"]), pl["reason"], pl["section"]])
+			_result(I18n.f("log.failed", [_nick_of(pl["runId"]), I18n.t("fail." + String(pl["reason"])), I18n.t("section." + String(pl["section"]))]))
 	net.send(type, pl)
 
 
@@ -575,29 +649,28 @@ func _update_overlay(racing: Array) -> void:
 		return
 	var w := sim.weather
 	var lines: PackedStringArray = []
-	var mode := "MOCK" if assets == null else "SERVER %s · %d racers" % [net.status, assets.entries.size()]
-	lines.append("BebbiKart · %s · %s · t %5.1f s · tick %d" % [mode, track, sim.tick / 60.0, sim.tick])
-	lines.append("rain %-8s %.2f   wind %-8s %.2f → %d°%s" % [w.phase("rain"), w.rain_intensity(), w.phase("wind"),
-		w.wind_strength(), int(w.wind["dir_deg"]), "  (forced)" if w.forced else ""])
-	lines.append("racing %d · queued %d · done %d · failed %d" % [sim.racers.size(), sim.queue.size(), net.finished, net.failed])
+	var mode := I18n.t("overlay.mock") if assets == null else I18n.f("overlay.server", [I18n.t("net." + net.status), assets.entries.size()])
+	lines.append("BebbiKart · %s · %s · t %5.1f s · tick %d" % [mode, I18n.t("track." + track), sim.tick / 60.0, sim.tick])
+	lines.append(I18n.f("overlay.weather", [I18n.t("weather." + w.phase("rain")), w.rain_intensity(), I18n.t("weather." + w.phase("wind")),
+		w.wind_strength(), int(w.wind["dir_deg"]), I18n.t("overlay.forced") if w.forced else ""]))
+	lines.append(I18n.f("overlay.counts", [sim.racers.size(), sim.queue.size(), net.finished, net.failed]))
 	lines.append("")
 	for i in mini(10, racing.size()):
 		var r: Racer = racing[i]
 		var mark := "▶" if r.run_id == follow_run else " "
 		var timing := "%5.1f s" % (r.elapsed_ms() / 1000.0)
 		if r.looping:
-			timing = "L%d %5.1f s%s" % [r.lap + 1, r.lap_ms() / 1000.0,
-				"  best %5.2f" % (r.best_lap_ms() / 1000.0) if r.best_lap >= 0 else ""]
-		lines.append("%s%-6s %-8s %s  %3d%%  %4.1f m/s  ⚡%d%s%s" % [mark, _nick_of(r.run_id), r.section, timing,
-			int(r.progress() * 100), r.v, r.boosts_left, "  BOOST" if r.boost_t > 0 else "", "  PIT" if r.pit_requested else ""])
+			timing = I18n.f("overlay.lap", [r.lap + 1, r.lap_ms() / 1000.0,
+				I18n.f("overlay.best", [r.best_lap_ms() / 1000.0]) if r.best_lap >= 0 else ""])
+		lines.append("%s%-6s %-8s %s  %3d%%  %4.1f m/s  ⚡%d%s%s" % [mark, _nick_of(r.run_id), I18n.t("section." + r.section), timing,
+			int(r.progress() * 100), r.v, r.boosts_left, I18n.t("overlay.boost") if r.boost_t > 0 else "", I18n.t("overlay.pit") if r.pit_requested else ""])
 	if not results.is_empty():
 		lines.append("")
-		lines.append("recent:")
+		lines.append(I18n.t("overlay.recent"))
 		for l in results:
 			lines.append("  " + l)
 	lines.append("")
-	lines.append("C cam  Tab racer  F fork  R rain  W wind  K calm  B boost  H hide  " +
-		("Esc/⌘, options  ⌃⌘F fullscreen  ⌘Q quit" if OS.get_name() == "macOS" else "Esc options  F11 fullscreen"))
+	lines.append(I18n.t("overlay.keys") + I18n.t("overlay.keys_mac" if OS.get_name() == "macOS" else "overlay.keys_other"))
 	overlay.text = "\n".join(lines)
 
 

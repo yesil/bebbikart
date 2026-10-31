@@ -1,16 +1,19 @@
-# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, sound, track and quit.
+# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, sound, language, track and quit.
 # The game manager sets the game options here, on the big screen; phones only join and quit.
 # It does not pause the sim: in server mode phones keep racing while it is open.
 # In server mode a track change during a running session ends that session (fresh
 # leaderboard), so the first click asks for a second click to confirm.
+# Every string comes from ui/i18n.gd; main.gd rebuilds the menu when the language changes.
 extends CanvasLayer
 
 const AudioSettings = preload("res://audio/audio_settings.gd")
+const I18n = preload("res://ui/i18n.gd")
 
 signal fullscreen_toggled
 signal track_chosen(id: String)
 signal quit_pressed
 signal quality_chosen(id: String)
+signal language_chosen(id: String)
 
 const MAC := "macOS"
 
@@ -51,22 +54,22 @@ func setup(current_track: String, server_mode: bool) -> void:
 	box.add_theme_constant_override("separation", 14)
 	_panel.add_child(box)
 
-	box.add_child(_label("Options", 30))
+	box.add_child(_label(I18n.t("menu.title"), 30))
 
 	_fullscreen = CheckButton.new()
-	_fullscreen.text = "Fullscreen    " + ("⌃⌘F" if _is_mac() else "F11")
+	_fullscreen.text = I18n.t("menu.fullscreen") + "    " + ("⌃⌘F" if _is_mac() else "F11")
 	_fullscreen.add_theme_font_size_override("font_size", 20)
 	_fullscreen.toggled.connect(func(_on: bool): fullscreen_toggled.emit())
 	box.add_child(_fullscreen)
 
-	box.add_child(_label("Graphics", 20))
+	box.add_child(_label(I18n.t("menu.graphics"), 20))
 	var qrow := HBoxContainer.new()
 	qrow.add_theme_constant_override("separation", 10)
 	box.add_child(qrow)
 	var group := ButtonGroup.new()
 	for id in ["low", "medium", "high"]:
 		var b := Button.new()
-		b.text = id.capitalize()
+		b.text = I18n.t("quality." + id)
 		b.toggle_mode = true
 		b.button_group = group
 		b.custom_minimum_size = Vector2(110, 40)
@@ -74,17 +77,17 @@ func setup(current_track: String, server_mode: bool) -> void:
 		b.pressed.connect(func(): quality_chosen.emit(id))
 		qrow.add_child(b)
 		_qualities[id] = b
-	var qnote := _label("Low keeps the Mac coolest; High is full resolution with all effects.", 15)
+	var qnote := _label(I18n.t("menu.quality_note"), 15)
 	qnote.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(qnote)
 
-	box.add_child(_label("Sound", 20))
+	box.add_child(_label(I18n.t("menu.sound"), 20))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 16)
 	box.add_child(grid)
 	for bus in AudioSettings.BUSES:
-		grid.add_child(_label({"Master": "Volume", "Sfx": "Effects"}.get(bus, bus), 17))
+		grid.add_child(_label(I18n.t("bus." + bus), 17))
 		var sl := HSlider.new()
 		sl.min_value = 0.0
 		sl.max_value = 1.0
@@ -95,13 +98,32 @@ func setup(current_track: String, server_mode: bool) -> void:
 		grid.add_child(sl)
 		_volumes[bus] = sl
 
-	box.add_child(_label("Track", 20))
+	box.add_child(_label(I18n.t("menu.language"), 20))
+	var lrow := HBoxContainer.new()
+	lrow.add_theme_constant_override("separation", 10)
+	box.add_child(lrow)
+	var lgroup := ButtonGroup.new()
+	for id in Protocol.LANGUAGES:
+		var b := Button.new()
+		b.text = I18n.t("lang." + id)
+		b.toggle_mode = true
+		b.button_group = lgroup
+		b.button_pressed = id == I18n.language
+		b.custom_minimum_size = Vector2(150, 40)
+		b.add_theme_font_size_override("font_size", 18)
+		b.pressed.connect(func(): if id != I18n.language: language_chosen.emit(id))
+		lrow.add_child(b)
+	var lnote := _label(I18n.t("menu.language_note"), 15)
+	lnote.modulate = Color(1, 1, 1, 0.75)
+	box.add_child(lnote)
+
+	box.add_child(_label(I18n.t("menu.track"), 20))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	box.add_child(row)
 	for id in Protocol.TRACK_IDS:
 		var b := Button.new()
-		b.text = String(id).capitalize() + ("  ✓" if id == current_track else "")
+		b.text = _track_name(id) + ("  ✓" if id == current_track else "")
 		b.toggle_mode = true
 		b.button_pressed = id == current_track
 		b.disabled = id == current_track
@@ -117,9 +139,9 @@ func setup(current_track: String, server_mode: bool) -> void:
 	_set_track_note()
 
 	box.add_child(HSeparator.new())
-	_resume = _button("Resume    Esc", func(): close())
+	_resume = _button(I18n.t("menu.resume") + "    Esc", func(): close())
 	box.add_child(_resume)
-	box.add_child(_button("Quit    " + ("⌘Q" if _is_mac() else ""), func(): quit_pressed.emit()))
+	box.add_child(_button(I18n.t("menu.quit") + "    " + ("⌘Q" if _is_mac() else ""), func(): quit_pressed.emit()))
 	visible = false
 
 
@@ -167,24 +189,22 @@ func _on_track(id: String) -> void:
 	if _server and _session == "running" and _confirm != id:
 		_cancel_confirm()
 		_confirm = id
-		_tracks[id].text = "End session → %s" % id.capitalize()
+		_tracks[id].text = I18n.f("menu.end_session_to", [_track_name(id)])
 		_tracks[id].set_pressed_no_signal(false)
 		_track_note.modulate = Color(1.0, 0.85, 0.4)
-		_track_note.text = ("A session is running. Switching to %s ends it for everyone on the track and "
-			+ "starts a new session with an empty leaderboard. Click again to confirm.") % id.capitalize()
+		_track_note.text = I18n.f("menu.confirm_switch", [_track_name(id)])
 		return
 	_confirm = ""
 	for k in _tracks:
 		_tracks[k].disabled = true
 	_track_note.modulate = Color(1, 1, 1, 0.75)
-	_track_note.text = ("Asking the server for %s… the course reloads once the racers are off the track." if _server
-		else "Loading %s…") % id.capitalize()
+	_track_note.text = I18n.f("menu.asking_server" if _server else "menu.loading", [_track_name(id)])
 	track_chosen.emit(id)
 
 
 func _cancel_confirm() -> void:
 	if _confirm != "":
-		_tracks[_confirm].text = _confirm.capitalize()
+		_tracks[_confirm].text = _track_name(_confirm)
 		_confirm = ""
 	_set_track_note()
 
@@ -192,11 +212,15 @@ func _cancel_confirm() -> void:
 func _set_track_note() -> void:
 	_track_note.modulate = Color(1, 1, 1, 0.75)
 	if not _server:
-		_track_note.text = "Switching reloads the course and restarts the mock race."
+		_track_note.text = I18n.t("menu.note_mock")
 	elif _session == "running":
-		_track_note.text = "Session running on %s. Switching ends it and starts a new one." % _current_track.capitalize()
+		_track_note.text = I18n.f("menu.note_running", [_track_name(_current_track)])
 	else:
-		_track_note.text = "Session %s. Picking a track starts a new session on it." % _session
+		_track_note.text = I18n.f("menu.note_session", [I18n.t("session." + (_session if _session != "?" else "unknown"))])
+
+
+func _track_name(id: String) -> String:
+	return I18n.t("track." + id)
 
 
 func _is_fullscreen() -> bool:

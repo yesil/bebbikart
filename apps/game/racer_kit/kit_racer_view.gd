@@ -2,6 +2,8 @@ extends Node3D
 ## A racer on the track built from its RacerSpec with the racer kit (drop-in for the placeholder
 ## world/racer_view.gd: same setup/sync/nickname). Pose comes from the sim racer every frame.
 
+const I18n = preload("res://ui/i18n.gd")
+
 var racer = null   # sim/racer.gd
 var nickname := ""
 var toy: ToyRacer
@@ -20,7 +22,7 @@ func setup(p_racer, spec: Dictionary, drawing: Texture2D, p_nickname: String) ->
 	if toy == null:
 		# Invalid spec: no stand-in racer. Show the problems where the racer would be.
 		var l := Label3D.new()
-		l.text = "INVALID RACER SPEC (%s)\n%s" % [nickname, "\n".join(RacerBuilder.last_errors.slice(0, 4))]
+		l.text = I18n.f("racer.invalid_spec", [nickname]) + "\n" + "\n".join(RacerBuilder.last_errors.slice(0, 4))
 		l.modulate = Color(1.0, 0.25, 0.2)
 		l.outline_size = 12
 		l.font_size = 40

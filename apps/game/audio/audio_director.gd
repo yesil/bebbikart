@@ -12,6 +12,7 @@
 extends Node
 
 const AudioSettings = preload("res://audio/audio_settings.gd")
+const I18n = preload("res://ui/i18n.gd")
 const Racer = preload("res://sim/racer.gd")
 
 const DIR := "res://assets/audio/"
@@ -425,7 +426,7 @@ func _show_errors(problems: Array[String]) -> void:
 	layer.layer = 20
 	add_child(layer)
 	_banner = Label.new()
-	_banner.text = "AUDIO ERROR\n" + "\n".join(problems)
+	_banner.text = I18n.t("audio.error") + "\n" + "\n".join(problems)
 	_banner.add_theme_font_size_override("font_size", 28)
 	_banner.add_theme_color_override("font_color", Color(1, 0.25, 0.2))
 	_banner.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)

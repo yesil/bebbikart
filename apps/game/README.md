@@ -40,7 +40,7 @@ Keys:
 | R / W | Advance the rain / wind phase |
 | K | Toggle forced calm |
 | H | Hide the overlay |
-| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, sound, track, quit |
+| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, sound, language, track, quit |
 | Ctrl+Cmd+F, or F11 | Toggle fullscreen (on a Mac keyboard F11 may need fn) |
 | Cmd+Q, or closing the window | Quit (prints the run summary) |
 
@@ -51,6 +51,11 @@ join and quit). It does not pause the race.
   the server, then `game.session.start`; if a session is running the menu first asks for a
   second click and sends `game.session.end` (new session, empty leaderboard). The course reloads on `config.updated` once the racers are off the track.
   Refusals (`error`, e.g. `track_locked`) and a disconnected server show in red in the menu.
+- **Language** (English / Deutsch; `--language=en|de`, saved in `user://settings.cfg`): switches
+  every big-screen string at once (`data/strings.json`, read by `ui/i18n.gd`; same keys in each
+  language, checked by `bun test`). Server mode sends `game.config.set {language}`, also after
+  every `welcome` when the server says otherwise, and every phone follows via `config.updated`.
+  A missing key shows as `⚠ de:key` on screen and in the log, never as English.
 - **Graphics** (`--quality=low|medium|high`, saved in `user://settings.cfg`, default Medium):
   caps the 3D resolution (Low 720p, Medium 1080p, High native; MetalFX upscaling on Metal, FSR
   elsewhere) and scales shadows, SSAO, glow and vegetation range. On a 5K Retina screen in
