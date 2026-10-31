@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
 import { Avatar, GridCall, isLoop, Paddock, secs, useGridCall } from "./common.js";
+import { SetupCard } from "./setup-card.js";
 import { TrackMap } from "./track-map.js";
 
 const pick = (b) => ({ stars: { ...b.stars }, routes: { ...b.routes }, style: b.style });
@@ -206,13 +207,16 @@ export function WeatherStrip({ weather }) {
 
 export function Leaderboard({ ctx }) {
   const { s } = ctx;
+  const [open, setOpen] = useState(null); // the entry whose setup card is open
+  const loop = isLoop(s.config.track);
   return html`
     <section class="card">
       <h2>🏆 ${COPY.tabs.leaderboard.slice(3)}</h2>
-      ${s.leaderboard.length === 0 ? html`<p class="muted">${COPY.garage.noBest}</p>` : null}
+      ${s.leaderboard.length === 0 ? html`<p class="muted">${COPY.garage.noBest}</p>` : html`<p class="hint">${COPY.setup.tapHint}</p>`}
       <ol class="board">
         ${s.leaderboard.map(
-          (e) => html`<li key=${e.playerId} class=${e.playerId === s.me?.id ? "mine" : ""}>
+          (e) => html`<li key=${e.playerId} class=${`tap ${e.playerId === s.me?.id ? "mine" : ""}`}
+            role="button" tabindex="0" onClick=${() => setOpen(e)}>
             <span class="rank">${e.rank}</span>
             ${e.avatarUrl ? html`<img src=${e.avatarUrl} alt="" />` : html`<span class="ph">🏎️</span>`}
             <span class="who"><b>${e.nickname}</b><small>${e.racerTitle ?? ""}</small></span>
@@ -221,5 +225,18 @@ export function Leaderboard({ ctx }) {
         )}
       </ol>
     </section>
+    ${
+      open && s.me
+        ? html`<${SetupCard}
+            who=${{
+              nickname: open.nickname,
+              avatarUrl: open.avatarUrl,
+              timeMs: open.bestTimeMs,
+              timeLabel: loop ? COPY.setup.bestLap : COPY.setup.bestTime,
+            }}
+            setup=${open.setup} mine=${s.me.build} maxStars=${s.config.starsMaxPerAbility}
+            onClose=${() => setOpen(null)} />`
+        : null
+    }
   `;
 }

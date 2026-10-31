@@ -877,6 +877,151 @@ h2 {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* A racer's setup (screens/setup-card.js): a sheet over the page. */
+.sheet-back {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(43, 33, 64, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet {
+  width: 100%;
+  max-width: 520px;
+  max-height: 92vh;
+  overflow-y: auto;
+  margin: 0;
+  border-radius: 20px 20px 0 0;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sheet-head img,
+.sheet-head .ph {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--line);
+  display: grid;
+  place-items: center;
+  font-size: 2rem;
+}
+.sheet-head h2 {
+  margin: 0;
+}
+.sheet-head .grow {
+  flex: 1;
+  min-width: 0;
+}
+.sheet .close {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+.badge-weather {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef4ff;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.sheet .why {
+  margin: 12px 0 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff6cf;
+  font-weight: 800;
+}
+.setup-stars .legend,
+.setup-stars .srow {
+  display: grid;
+  grid-template-columns: 34px 1fr 3em;
+  align-items: center;
+  gap: 6px;
+}
+.setup-stars .legend {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-top: 8px;
+}
+.setup-stars .legend span:last-child,
+.setup-stars .mine {
+  text-align: center;
+}
+.setup-stars .srow {
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+}
+.setup-stars .srow.hl {
+  background: #fff1c2;
+  border-radius: 10px;
+}
+.setup-stars .icon {
+  font-size: 1.4rem;
+  text-align: center;
+}
+.setup-stars .stars i {
+  font-style: normal;
+  color: #e7dccb;
+  font-size: 1.1rem;
+}
+.setup-stars .stars i.on {
+  color: var(--accent-2);
+  text-shadow: 0 1px 0 #c9a21a;
+}
+.setup-stars .mine {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.setup-stars .mine.more {
+  color: var(--bad);
+}
+.setup-stars .mine.less {
+  color: var(--good);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--line);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.chip.diff {
+  background: #ffe7d6;
+  outline: 2px solid var(--accent);
+}
+.chip.hl {
+  animation: pulse 1s ease-in-out 4;
+}
+.board li.tap {
+  cursor: pointer;
+}
+.stretches .note.link {
+  justify-self: start;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: underline;
+  text-align: left;
+}
+
 /* Track map (screens/track-map.js): strokes in CSS pixels whatever the track's size. */
 .track-map {
   display: block;
