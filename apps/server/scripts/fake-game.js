@@ -1,7 +1,7 @@
 // Stand-in for the Godot game, for testing the phone flow without Godot:
 //   bun apps/server/scripts/fake-game.js [ws://localhost:8080/ws]
 // Connects as the game, prints the roster, and "races" every run.start in ~12 s with fake splits.
-import { LOOP_TRACKS, makeMsg, SECTION_IDS } from "@bebbikart/shared";
+import { LOOP_TRACKS, makeMsg, SECTION_IDS, TRACK_STRETCHES } from "@bebbikart/shared";
 
 const url = process.argv[2] ?? "ws://localhost:8080/ws";
 const gameKey = process.env.BK_GAME_KEY ?? "bebbikart-dev";
@@ -44,6 +44,25 @@ ws.onmessage = (e) => {
     runs.get(payload.runId)?.stop();
   }
 };
+
+/**
+ * Fake stretch times (contracts §2d) for a lap or run of `ms` on the build's route: every stretch
+ * of the track except the fork pieces it didn't take, sharing `ms` at random; they add up to it.
+ */
+function stretchesOf(build, ms) {
+  const list = TRACK_STRETCHES[config.track].filter(
+    (s) => !s.fork || build.routes[s.fork] === s.choice,
+  );
+  const weights = list.map(() => 0.6 + Math.random());
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const out = list.map((s, i) => ({
+    id: s.id,
+    ms: Math.floor((ms * weights[i]) / sum),
+    lostMs: 0,
+  }));
+  out[out.length - 1].ms += ms - out.reduce((a, s) => a + s.ms, 0);
+  return out;
+}
 
 function race(start) {
   if (LOOP_TRACKS.includes(config.track)) return raceLoop(start);
@@ -88,11 +107,20 @@ function race(start) {
         boostsUsed: r.boosts,
         weatherSeen: [],
       };
+      const stretches = stretchesOf(start.build, elapsedMs);
       if (fail)
-        send("game.run.failed", { ...common, elapsedMs, reason: "off_track", section: "bends" });
+        send("game.run.failed", {
+          ...common,
+          elapsedMs,
+          reason: "off_track",
+          section: "bends",
+          stretches: stretches.slice(0, -1),
+          stretch: stretches[stretches.length - 1].id,
+        });
       else
         send("game.run.finished", {
           ...common,
+          stretches,
           elapsedMs,
           trace: { runId: start.runId, hz: 10, samples: [0, 0, 0, 0, 0] },
         });
@@ -134,12 +162,15 @@ function raceLoop(start) {
     if (lapT < lapLen) return;
     const lapMs = lapT - r.boosts * 300;
     laps.push(lapMs);
+    const stretches = stretchesOf(start.build, lapMs);
+    if (lapMs === Math.min(...laps)) r.bestStretches = stretches;
     send("game.run.lap", {
       runId: start.runId,
       lap: laps.length,
       lapMs,
       elapsedMs: t,
       splits: splitsOf(lapMs),
+      stretches,
       isBest: lapMs === Math.min(...laps),
     });
     lapT = 0;
@@ -154,6 +185,7 @@ function raceLoop(start) {
         laps,
         bestLapMs: best,
         splits: splitsOf(best),
+        stretches: r.bestStretches,
         events: [],
         boostsUsed: 0,
         weatherSeen: [],

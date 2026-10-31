@@ -193,7 +193,15 @@ test("phone → drawings → racer on the big screen → race → result", async
     runId,
     elapsedMs: 32100,
     splits: { hills: 8000, pond: 8000, crossing: 8000, bends: 8100 },
-    events: [{ kind: "boost_perfect", section: "hills", atMs: 3000 }],
+    stretches: [
+      { id: "bumpy_road", ms: 5000, lostMs: 0 },
+      { id: "knoll_road", ms: 2000, lostMs: 0 },
+      { id: "hilltop", ms: 1000, lostMs: 0 },
+      { id: "stone_bridge", ms: 8000, lostMs: 0 },
+      { id: "hedge_lane", ms: 8000, lostMs: 0 },
+      { id: "rainbow_bends", ms: 8100, lostMs: 0 },
+    ],
+    events: [{ kind: "boost_perfect", section: "hills", stretch: "bumpy_road", atMs: 3000 }],
     boostsUsed: 1,
     weatherSeen: [],
     trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
@@ -202,6 +210,16 @@ test("phone → drawings → racer on the big screen → race → result", async
   expect(ended.payload.isPersonalBest).toBe(true);
   expect(ended.payload.rank).toBe(1);
   expect(ended.payload.coach.text.length).toBeGreaterThan(0);
+  // Its stretches come back with the star each tests; it is the session's fastest on all of them.
+  expect(ended.payload.stretches.map((s) => [s.id, s.ability, s.bestMs, s.fastestMs])).toEqual([
+    ["bumpy_road", "bounce", undefined, 5000],
+    ["knoll_road", null, undefined, 2000],
+    ["hilltop", "speed", undefined, 1000],
+    ["stone_bridge", null, undefined, 8000],
+    ["hedge_lane", null, undefined, 8000],
+    ["rainbow_bends", "grip", undefined, 8100],
+  ]);
+  expect(ended.payload.stretches[0].fastestNickname).toBe(player.nickname);
   const lb = await game.wait("leaderboard.updated", (l) => l.length === 1);
   expect(lb.payload[0].bestTimeMs).toBe(32100);
 
@@ -319,12 +337,19 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
   expect(queued.payload.run.track).toBe("village");
   game.send("gameToServer", "game.run.started", { runId });
   const splits = { hills: 5000, pond: 5000, crossing: 5000, bends: 5000 };
+  // Village stretches of a lap of `ms`: the farm takes `farm` of it.
+  const lapStretches = (ms, farm) => [
+    { id: "main_street", ms: ms - farm - 2000, lostMs: 0 },
+    { id: "farm", ms: farm, lostMs: 0 },
+    { id: "square", ms: 2000, lostMs: 0 },
+  ];
   game.send("gameToServer", "game.run.lap", {
     runId,
     lap: 1,
     lapMs: 20000,
     elapsedMs: 20000,
     splits,
+    stretches: lapStretches(20000, 4000),
     isBest: true,
   });
   const lap1 = await phone.wait("run.lap", (p) => p.lap === 1);
@@ -336,6 +361,7 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
     lapMs: 19000,
     elapsedMs: 39000,
     splits,
+    stretches: lapStretches(19000, 3500),
     isBest: true,
   });
   const lap2 = await phone.wait("run.lap", (p) => p.lap === 2);
@@ -350,12 +376,19 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
     laps: [20000, 19000, 21000],
     bestLapMs: 19000,
     splits,
+    stretches: lapStretches(19000, 3500),
     events: [],
     boostsUsed: 0,
     weatherSeen: [],
     trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
   });
   const ended = await phone.wait("run.ended", (p) => p.run.id === runId);
+  expect(ended.payload.run.lapStretches).toHaveLength(2); // the laps the game reported
+  expect(ended.payload.stretches.find((s) => s.id === "farm")).toMatchObject({
+    ms: 3500,
+    ability: "grip",
+    fastestMs: 3500,
+  });
   expect(ended.payload.run.laps).toEqual([20000, 19000, 21000]);
   expect(ended.payload.run.bestLapMs).toBe(19000);
   expect(ended.payload.isPersonalBest).toBe(true);
@@ -376,13 +409,30 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
     laps: [18000],
     bestLapMs: 18000,
     splits,
-    events: [],
+    stretches: [{ id: "main_street", ms: 12000, lostMs: 0 }],
+    stretch: "farm",
+    events: [{ kind: "slip", section: "crossing", stretch: "farm", atMs: 29000, timeLostMs: 900 }],
     boostsUsed: 0,
     weatherSeen: [],
   });
   const ended2 = await phone.wait("run.ended", (p) => p.run.id === start2.payload.runId);
   expect(ended2.payload.run.outcome).toBe("failed");
   expect(ended2.payload.isPersonalBest).toBe(true);
+  expect(ended2.payload.run.failStretch).toBe("farm");
+  expect(ended2.payload.coach).toMatchObject({ key: "fail_slip", stretch: "farm" });
+  // The player's best on main street comes from the earlier run's laps (19000 - 3500 - 2000).
+  expect(ended2.payload.stretches).toEqual([
+    {
+      id: "main_street",
+      ms: 12000,
+      lostMs: 0,
+      ability: "grip",
+      bestMs: 13500,
+      fastestMs: 13500,
+      fastestPlayerId: me.payload.id,
+      fastestNickname: "Lapper",
+    },
+  ]);
   await phone.wait("player.updated", (p) => p.bestTimeMs === 18000);
   game.ws.close();
   phone.ws.close();
@@ -701,7 +751,7 @@ test("a heat: racers who left together see each other's places on their phones, 
   expect([pa.payload.place, pa.payload.of]).toEqual([1, 2]);
   const pb = await b.phone.wait("run.progress", (p) => p.runId === runIds[1] && p.progress === 0.3);
   expect([pb.payload.place, pb.payload.of]).toEqual([2, 2]);
-  const result = { splits: {}, events: [], boostsUsed: 0, weatherSeen: [] };
+  const result = { splits: {}, stretches: [], events: [], boostsUsed: 0, weatherSeen: [] };
   game.send("gameToServer", "game.run.finished", {
     runId: runIds[1],
     elapsedMs: 31000,
@@ -722,6 +772,7 @@ test("a heat: racers who left together see each other's places on their phones, 
     elapsedMs: 8000,
     reason: "flipped",
     section: "hills",
+    stretch: "bumpy_road",
     ...result,
   });
   for (const r of [a, b]) {

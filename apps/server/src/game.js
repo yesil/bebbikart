@@ -9,6 +9,7 @@ import {
   newId,
   parseBuildInput,
   SECTION_IDS,
+  TRACK_STRETCHES,
   validateStars,
 } from "@bebbikart/shared";
 import { ApiError, cleanNickname } from "./errors.js";
@@ -26,10 +27,16 @@ function rankTime(run) {
   if (isLoop(run.track)) return run.bestLapMs;
   return run.outcome === "finished" ? run.elapsedMs : undefined;
 }
-/** coachTip compares elapsedMs; on loops that is the best lap. */
+/** Every complete pass of a run over its stretches: each lap on a loop, a finished point-to-point run. */
+function stretchPasses(run) {
+  if (isLoop(run.track)) return run.lapStretches ?? [];
+  return run.outcome === "finished" && run.stretches ? [run.stretches] : [];
+}
+/** coachTip compares elapsedMs; on loops that is the best lap (a run that failed after laps
+ * still gets the fail tip, naming where it ended). */
 function forCoach(run) {
   if (!run || !isLoop(run.track) || run.bestLapMs === undefined) return run;
-  return { ...run, elapsedMs: run.bestLapMs, outcome: "finished" };
+  return { ...run, elapsedMs: run.bestLapMs };
 }
 
 /**
@@ -485,6 +492,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
       run: done,
       isPersonalBest: false,
       coach: abortTip(config.language),
+      stretches: [],
     });
     pushPlayer(run.playerId);
     runGreen.delete(run.id);
@@ -574,6 +582,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
         run: done,
         isPersonalBest: false,
         coach: abortTip(config.language),
+        stretches: [],
       });
       pushPlayer(r.playerId);
       pushHeat(r.id);
@@ -653,6 +662,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
         );
         const bestBefore = prev.length ? Math.min(...prev) : undefined;
         r.liveLaps = [...(r.liveLaps ?? []), pl.lapMs];
+        r.liveLapStretches = [...(r.liveLapStretches ?? []), pl.stretches];
         r.liveSplits = {}; // section splits restart each lap
         const out = {
           runId: pl.runId,
@@ -688,7 +698,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function finishRun(ok, pl) {
     const r = gameRun(pl.runId);
     if (!r) return;
-    const { liveSplits, liveLaps, liveDist, ...base } = r;
+    const { liveSplits, liveLaps, liveLapStretches, liveDist, ...base } = r;
     const run = {
       ...base,
       status: "done",
@@ -696,12 +706,19 @@ export function createGame({ db, settings, hub, log = console.log }) {
       startedAt: r.startedAt ?? r.queuedAt,
       endedAt: now(),
       splits: pl.splits,
+      stretches: pl.stretches,
       events: pl.events,
       boostsUsed: pl.boostsUsed,
       weatherSeen: pl.weatherSeen,
     };
     if (ok) run.elapsedMs = pl.elapsedMs;
-    else Object.assign(run, { failReason: pl.reason, failSection: pl.section });
+    else
+      Object.assign(run, {
+        failReason: pl.reason,
+        failSection: pl.section,
+        failStretch: pl.stretch,
+      });
+    if (isLoop(run.track)) run.lapStretches = liveLapStretches ?? [];
     if (pl.laps) run.laps = pl.laps;
     if (pl.bestLapMs !== undefined) run.bestLapMs = pl.bestLapMs;
     if (isLoop(run.track) && run.laps?.length && run.bestLapMs === undefined)
@@ -723,14 +740,22 @@ export function createGame({ db, settings, hub, log = console.log }) {
       }
       savePlayer({ ...p, bestRunId: run.id, bestTimeMs: time });
     }
+    const stretches = stretchResults(run);
     const coach = coachTip(
       forCoach(run),
       builds.get(run.buildId),
       forCoach(prevBest),
       config.language,
+      stretches,
     );
     const rank = ranks().get(r.playerId);
-    hub.toPhone(r.playerId, "run.ended", { run, isPersonalBest, ...(rank ? { rank } : {}), coach });
+    hub.toPhone(r.playerId, "run.ended", {
+      run,
+      isPersonalBest,
+      ...(rank ? { rank } : {}),
+      coach,
+      stretches,
+    });
     pushHeat(run.id);
     pushPaddock();
     pushPlayer(r.playerId);
@@ -742,6 +767,45 @@ export function createGame({ db, settings, hub, log = console.log }) {
       `[run] ${run.id} ${run.outcome} "${p?.nickname}" ${ok ? `${(run.elapsedMs / 1000).toFixed(2)} s` : `${run.failReason} @${run.failSection}`}${run.laps ? ` laps ${run.laps.map((l) => (l / 1000).toFixed(2)).join("/")}` : ""}${isPersonalBest ? " (best)" : ""}`,
     );
   }
+  /**
+   * The run's stretches for its phone (contracts §2d): with the player's best on each from earlier
+   * runs and the session's fastest (any racer, this run included), over the session's runs on
+   * this track. A stretch the track doesn't know is a bug, so it throws.
+   */
+  function stretchResults(run) {
+    const known = TRACK_STRETCHES[run.track];
+    if (!known) throw new Error(`stretchResults: no stretches for track "${run.track}"`);
+    const since = session.startedAt ?? "";
+    const best = new Map(); // id -> ms, this player's earlier runs
+    const fastest = new Map(); // id -> { ms, playerId }
+    for (const other of runs.values()) {
+      if (other.status !== "done" || other.track !== run.track || other.queuedAt < since) continue;
+      for (const pass of stretchPasses(other)) {
+        for (const st of pass) {
+          const f = fastest.get(st.id);
+          if (!f || st.ms < f.ms) fastest.set(st.id, { ms: st.ms, playerId: other.playerId });
+          if (other.playerId === run.playerId && other.id !== run.id) {
+            best.set(st.id, Math.min(best.get(st.id) ?? Number.POSITIVE_INFINITY, st.ms));
+          }
+        }
+      }
+    }
+    return (run.stretches ?? []).map((st) => {
+      const meta = known.find((k) => k.id === st.id);
+      if (!meta) throw new Error(`stretchResults: "${st.id}" is not a ${run.track} stretch`);
+      const out = { ...st, ability: meta.ability };
+      if (best.has(st.id)) out.bestMs = best.get(st.id);
+      const f = fastest.get(st.id);
+      if (f) {
+        out.fastestMs = f.ms;
+        out.fastestPlayerId = f.playerId;
+        const who = players.get(f.playerId);
+        if (who) out.fastestNickname = who.nickname;
+      }
+      return out;
+    });
+  }
+
   // Runs the game never reports back on (e.g. it crashed mid-run).
   const capTimer = setInterval(() => {
     for (const r of runs.values()) {
