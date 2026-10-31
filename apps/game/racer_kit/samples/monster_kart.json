@@ -1,0 +1,103 @@
+{
+ "specVersion": 1,
+ "title": "Mega Mud",
+ "personality": [
+  "loud",
+  "speedy"
+ ],
+ "palette": [
+  "#ef5350",
+  "#212121",
+  "#fdd835",
+  "#a1887f"
+ ],
+ "character": {
+  "body": {
+   "shape": "tall",
+   "color": 3,
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "head": {
+   "shape": "wide",
+   "color": 3,
+   "size": 1.3
+  },
+  "face": {
+   "eyes": "dots",
+   "eyeColor": "#2b2140",
+   "mouth": "grin",
+   "brows": true
+  },
+  "arms": {
+   "color": 0
+  },
+  "extras": [],
+  "hair": {
+   "style": "mohawk",
+   "color": 2
+  }
+ },
+ "ride": {
+  "base": "kart",
+  "color": 0,
+  "accent": 2,
+  "scale": [
+   1.2,
+   1,
+   1.1
+  ],
+  "extras": [
+   {
+    "shape": "box",
+    "socket": "ride_back",
+    "offset": [
+     0,
+     0.25,
+     0
+    ],
+    "scale": [
+     0.9,
+     0.1,
+     0.25
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     0
+    ],
+    "color": 2
+   },
+   {
+    "shape": "cone",
+    "socket": "ride_bottom",
+    "offset": [
+     0,
+     0,
+     0.2
+    ],
+    "scale": [
+     0.12,
+     0.3,
+     0.12
+    ],
+    "rotationDeg": [
+     -90,
+     0,
+     0
+    ],
+    "color": 1
+   }
+  ],
+  "drawingSticker": false,
+  "wheels": {
+   "count": 4,
+   "style": "monster",
+   "color": 1,
+   "size": 1.5
+  }
+ }
+}

@@ -1,0 +1,89 @@
+{
+ "specVersion": 1,
+ "title": "Skate Rex",
+ "personality": [
+  "cool",
+  "wild"
+ ],
+ "palette": [
+  "#66bb6a",
+  "#ffee58",
+  "#ab47bc",
+  "#1b5e20"
+ ],
+ "character": {
+  "body": {
+   "shape": "bean",
+   "color": 0,
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "head": {
+   "shape": "drop",
+   "color": 0,
+   "size": 1.2
+  },
+  "face": {
+   "eyes": "googly",
+   "eyeColor": "#2b2140",
+   "mouth": "fangs",
+   "brows": true,
+   "cheeks": 1
+  },
+  "arms": {
+   "color": 0
+  },
+  "extras": [
+   {
+    "shape": "cone",
+    "socket": "body_back",
+    "offset": [
+     0,
+     0.1,
+     0
+    ],
+    "scale": [
+     0.25,
+     0.35,
+     0.25
+    ],
+    "rotationDeg": [
+     -90,
+     0,
+     0
+    ],
+    "color": 1
+   }
+  ],
+  "hat": {
+   "type": "cap",
+   "color": 2
+  }
+ },
+ "ride": {
+  "base": "board",
+  "color": 2,
+  "accent": 1,
+  "scale": [
+   1,
+   1,
+   1.1
+  ],
+  "extras": [],
+  "drawingSticker": true,
+  "wheels": {
+   "count": 4,
+   "style": "donut",
+   "color": 1,
+   "size": 0.8
+  },
+  "wings": {
+   "style": "bat",
+   "color": 2,
+   "size": 0.8
+  }
+ }
+}

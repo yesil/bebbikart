@@ -1,0 +1,106 @@
+{
+ "specVersion": 1,
+ "title": "Zippy Bunny",
+ "personality": [
+  "bouncy",
+  "speedy"
+ ],
+ "palette": [
+  "#ff8fb1",
+  "#ffffff",
+  "#7bdff2",
+  "#3a2f3a"
+ ],
+ "character": {
+  "body": {
+   "shape": "pear",
+   "color": 1,
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "head": {
+   "shape": "oval",
+   "color": 1,
+   "size": 1.1
+  },
+  "face": {
+   "eyes": "big_round",
+   "eyeColor": "#2b2140",
+   "mouth": "grin",
+   "brows": true,
+   "cheeks": 0
+  },
+  "arms": {
+   "color": 0
+  },
+  "extras": [
+   {
+    "shape": "capsule",
+    "socket": "head_top",
+    "offset": [
+     0.08,
+     0,
+     0
+    ],
+    "scale": [
+     0.35,
+     0.8,
+     0.25
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     15
+    ],
+    "color": 0,
+    "mirror": true
+   }
+  ],
+  "hat": {
+   "type": "helmet",
+   "color": 2
+  }
+ },
+ "ride": {
+  "base": "bike",
+  "color": 2,
+  "accent": 0,
+  "scale": [
+   1,
+   1,
+   1
+  ],
+  "extras": [
+   {
+    "shape": "star",
+    "socket": "ride_front",
+    "offset": [
+     0,
+     0.1,
+     0
+    ],
+    "scale": [
+     0.25,
+     0.25,
+     0.25
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     0
+    ],
+    "color": 1
+   }
+  ],
+  "drawingSticker": false,
+  "wheels": {
+   "count": 2,
+   "style": "spoked",
+   "color": 3,
+   "size": 1.1
+  }
+ }
+}

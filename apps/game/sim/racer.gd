@@ -1,0 +1,610 @@
+extends RefCounted
+## One racer's simulation state + per-tick physics/autopilot (game.md "Simulation (3b)").
+## Plain data; the owning Sim passes itself in to step(). No nodes.
+
+const Tuning = preload("res://sim/tuning.gd")
+const Course = preload("res://sim/course.gd")
+const Route = preload("res://sim/route.gd")
+
+var run_id := ""
+var player_id := ""
+var build: Dictionary
+var style := "balanced"
+var st := {}  # stars, int per ability
+
+var state := "queued"  # queued | racing | finished | failed | aborted
+var fail_reason := ""
+var rng := RandomNumberGenerator.new()
+
+# Route position
+var path: Array[String] = []
+var segs: Array = []           # segment dicts in path order
+var offsets := PackedFloat64Array()
+var total_len := 0.0
+var seg_idx := 0
+var seg: Dictionary
+var seg_id := "start"
+var ls := 0.0                  # metres along current segment
+var section := "hills"
+
+# Motion
+var v := 0.0
+var d := 0.0
+var vd := 0.0
+var y := 0.0
+var vy := 0.0
+var airborne := false
+var wobble := 0.0
+var jump_air := false          # airborne from a ramp (vs. a hop)
+var in_water := false
+var slipping := false
+var gust_phase := 0.0
+var wind_lat := 0.0            # lateral wind accel applied this tick
+var a_long := 0.0
+
+# Stats (derived)
+var top := 16.0
+var accel := 7.0
+var grip_f := 0.86
+var mass := 1.5
+
+# Autopilot
+var target_v := 0.0
+var ref_v := 0.0               # calm-weather undisturbed target (for time-loss accounting)
+var plan_t := 0
+var noise := 1.0
+var noise_t := 0.0
+var lane_home := 0.0
+var d_target := 0.0
+var replan_t := 0.0
+var follow_v := -1.0
+var pass_side := 0.0
+var lane := 0.0
+
+# Timers
+var ticks := 0
+var boosts_left := 3
+var boosts_used := 0
+var boost_t := 0.0
+var boost_amt := 0.0
+var weak_grip_t := 0.0
+var recover_t := 0.0
+var recover_mult := 1.0
+var bumped_t := 0.0
+var bumped_by := ""
+var bounce_t := 0.0
+
+# Bookkeeping
+var stuck_best := 0.0
+var stuck_t := 0.0
+var splits := {}
+var section_start_tick := 0
+var events: Array = []
+var episode := {}
+var weather_seen := {}
+var trace: Array = []
+var last_progress_tick := -999
+
+
+func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course: Course, cfg: Dictionary, seed_: int) -> void:
+	run_id = p_run_id
+	player_id = p_player_id
+	build = p_build
+	style = String(build.get("style", "balanced"))
+	var stars: Dictionary = build.get("stars", {})
+	for a in ["speed", "jump", "grip", "water", "stability", "bounce"]:
+		st[a] = int(stars.get(a, 0))
+	rng.seed = seed_
+	gust_phase = rng.randf_range(0.0, TAU)
+	path = course.path_for(build.get("routes", {}))
+	offsets.resize(path.size())
+	total_len = 0.0
+	for i in path.size():
+		var sg: Dictionary = course.segments[path[i]]
+		segs.append(sg)
+		offsets[i] = total_len
+		total_len += (sg["route"] as Route).length
+	seg = segs[0]
+	boosts_left = int(cfg.get("boostsPerRun", 3))
+	top = Tuning.TOP_SPEED_BASE + Tuning.TOP_SPEED_PER_STAR * st["speed"]
+	accel = Tuning.ACCEL_BASE * (1.0 - Tuning.ACCEL_STABILITY_PENALTY * st["stability"]) \
+		* (1.0 - Tuning.ACCEL_HIGH_SPEED_PENALTY * maxf(0.0, st["speed"] - 3))
+	grip_f = Tuning.GRIP_FACTOR_BASE + Tuning.GRIP_FACTOR_PER_STAR * st["grip"]
+	mass = 1.0 + Tuning.MASS_PER_STAB * st["stability"]
+	lane_home = rng.randf_range(-0.6, 0.6)
+
+
+func gs() -> float:
+	return offsets[seg_idx] + ls
+
+
+func progress() -> float:
+	return clampf(gs() / total_len, 0.0, 1.0)
+
+
+func elapsed_ms() -> int:
+	return int(round(ticks * 1000.0 / Tuning.HZ))
+
+
+func route() -> Route:
+	return seg["route"]
+
+
+func half_width() -> float:
+	return float(seg["half_width"])
+
+
+func is_active() -> bool:
+	return state == "racing"
+
+
+# ---------------------------------------------------------------- planning
+
+## Lowest speed the autopilot wants within its look-ahead window.
+## Returns [target, calm_reference]. corner_f scales corner speeds for the "perceived" target.
+func _plan(corner_f: float, decel: float) -> Array:
+	var horizon := v * v / (2.0 * decel) + 6.0
+	var best := top
+	var best_ref := top
+	var base_ref := grip_f * float(Tuning.STYLE_CORNER[style])
+	var i := seg_idx
+	var s0 := ls
+	var x := 0.0
+	while x <= horizon:
+		var r: Route = segs[i]["route"]
+		var s := s0 + x
+		while s > r.length and i < segs.size() - 1:
+			s0 -= r.length
+			s -= r.length
+			i += 1
+			r = segs[i]["route"]
+		if s > r.length:
+			break
+		var k := absf(r.curv_at(s))
+		if k > Tuning.CORNER_MIN_K:
+			var vc := sqrt(Tuning.CORNER_ACCEL / k)
+			var allowed := sqrt(pow(vc * corner_f, 2) + 2.0 * decel * x)
+			var allowed_ref := sqrt(pow(vc * base_ref, 2) + 2.0 * decel * x)
+			best = minf(best, allowed)
+			best_ref = minf(best_ref, allowed_ref)
+		x += 2.0
+	return [best, best_ref]
+
+
+func _replan_lane(sim) -> void:
+	follow_v = -1.0
+	var hw := half_width() - 0.7
+	var ahead = sim.racer_ahead(self, 4.0 + 0.6 * v, 2.0)
+	if ahead == null or ahead.v >= v - 0.3:
+		pass_side = 0.0
+		d_target = clampf(lane_home * hw, -hw, hw)
+		return
+	var off: float = Tuning.STYLE_PASS_OFFSET[style]
+	var best_side := 0.0
+	var best_free := -1.0
+	for side in [-1.0, 1.0]:
+		var cand: float = ahead.d + side * off
+		if absf(cand) > hw:
+			continue
+		var free: float = sim.lane_free(self, cand, 4.0 + 0.6 * v)
+		if free > best_free:
+			best_free = free
+			best_side = side
+	if best_side != 0.0 and rng.randf() < float(Tuning.STYLE_MISJUDGE[style]):
+		var other: float = ahead.d - best_side * off
+		if absf(other) <= hw + 0.6:
+			best_side = -best_side
+	if best_side == 0.0 or best_free < 1.0:
+		# No room: tuck in behind (daring keeps its foot down and may bump).
+		if style != "daring":
+			follow_v = ahead.v
+		d_target = ahead.d
+		return
+	pass_side = best_side
+	d_target = clampf(ahead.d + best_side * off, -hw - 0.5, hw + 0.5)
+
+
+# ---------------------------------------------------------------- step
+
+func step(sim) -> void:
+	var dt := Tuning.DT
+	ticks += 1
+	var weather = sim.weather
+	var rain: float = weather.rain_intensity()
+	if rain > 0.05:
+		weather_seen["rain"] = true
+	if weather.wind_strength() > 0.05:
+		weather_seen["wind"] = true
+
+	var r := route()
+	var k := r.curv_at(ls)
+	var n := r.normal_at(ls)
+	var hw := half_width()
+	var exposure: float = seg["exposure"]
+	in_water = not airborne and Course.in_ranges(seg["water"], ls)
+
+	# Timers
+	boost_t = maxf(0.0, boost_t - dt)
+	if boost_t <= 0.0:
+		boost_amt = 0.0
+	weak_grip_t = maxf(0.0, weak_grip_t - dt)
+	recover_t = maxf(0.0, recover_t - dt)
+	bumped_t = maxf(0.0, bumped_t - dt)
+	noise_t -= dt
+	if noise_t <= 0.0:
+		noise_t = 1.0
+		noise = 1.0 + rng.randfn(0.0, float(Tuning.STYLE_JUDGEMENT_NOISE[style]))
+	replan_t -= dt
+	if replan_t <= 0.0:
+		replan_t = 0.3 * rng.randf_range(0.7, 1.3)
+		_replan_lane(sim)
+
+	# ---- autopilot target speed
+	var rain_true := 1.0 - Tuning.RAIN_GRIP_LOSS * rain
+	var rain_seen := 1.0 - float(Tuning.RAIN_PERCEIVED_LOSS[style]) * rain
+	var boost_grip := Tuning.BOOST_WEAK_GRIP if weak_grip_t > 0.0 else 1.0
+	plan_t -= 1
+	if plan_t <= 0:
+		plan_t = 3
+		var corner_f := grip_f * float(Tuning.STYLE_CORNER[style]) * rain_seen * noise
+		var p := _plan(corner_f, float(Tuning.STYLE_PLAN_DECEL[style]))
+		target_v = p[0]
+		ref_v = p[1]
+	var amt := boost_amt
+	if weak_grip_t > 0.0 and target_v < top * 0.95:
+		# Autopilot only half-commits an off-zone boost into a corner (still slippy, rarely fatal).
+		amt *= 0.4
+	var tv := target_v * (1.0 + amt)
+	var cap := top * (1.0 + boost_amt)
+	tv = minf(tv, cap)
+	if in_water:
+		tv = minf(tv, top * (Tuning.WATER_BASE + Tuning.WATER_PER_STAR * st["water"]))
+	var wind_res: float = 1.0 - Tuning.WIND_RESIST_PER_STAB * st["stability"]
+	var wind_a: float = Tuning.WIND_ACCEL * weather.wind_vec().dot(n) * wind_res
+	if exposure > 0.0:
+		# Gusts on open ground; headwind/side drag slows light, unstable racers.
+		wind_a *= 1.0 + Tuning.WIND_GUST * sin(float(ticks) * 0.045 + gust_phase)
+		var drag: float = Tuning.WIND_DRAG * weather.wind_strength() * exposure * wind_res
+		tv *= 1.0 - drag
+	if exposure > 0.5 and absf(wind_a) > 0.5:
+		tv *= 1.0 - float(Tuning.STYLE_WIND_CAUTION[style]) * minf(1.0, absf(wind_a) / Tuning.WIND_ACCEL)
+	if recover_t > 0.0:
+		tv *= recover_mult
+	if follow_v >= 0.0:
+		tv = minf(tv, follow_v + 0.2)
+
+	# ---- longitudinal
+	if not airborne:
+		var acc := accel * (Tuning.BOOST_ACCEL_MULT if boost_t > 0.0 else 1.0)
+		if in_water:
+			acc *= 0.6
+		if v < tv:
+			v = minf(tv, v + acc * dt)
+		else:
+			var brk := Tuning.BRAKE * (2.0 if in_water else 1.0)
+			v = maxf(tv, v - brk * dt)
+
+	# ---- lateral
+	slipping = false
+	var exp_now := exposure
+	if airborne and exposure > 0.0:
+		exp_now = Tuning.WIND_EXPOSURE_AIR
+	wind_lat = wind_a * exp_now
+	vd += wind_lat * dt
+	if not airborne:
+		var corr_max: float = (Tuning.LAT_CORR_BASE + Tuning.LAT_CORR_PER_GRIP * st["grip"]) * rain_true * boost_grip
+		var ak := absf(k)
+		if ak > Tuning.CORNER_MIN_K:
+			var vlim := sqrt(Tuning.CORNER_ACCEL / ak) * grip_f * rain_true * boost_grip * Tuning.SLIP_MARGIN
+			if v > vlim:
+				slipping = true
+				var excess := v - vlim
+				vd += signf(k) * excess * Tuning.SLIP_DRIFT * dt
+				v -= excess * Tuning.SLIP_SCRUB * dt
+				corr_max *= 0.5
+		var want := clampf((d_target - d) * Tuning.LAT_P, -Tuning.LAT_VMAX, Tuning.LAT_VMAX)
+		var corr := clampf((want - vd) * Tuning.LAT_D, -corr_max, corr_max)
+		vd += corr * dt
+		# Bouncy racers wobble in tight bends.
+		if st["bounce"] >= Tuning.BOUNCE_WOBBLE_MIN_STARS and ak > Tuning.BOUNCE_WOBBLE_K and v > 6.0:
+			bounce_t += dt
+			vd += sin(bounce_t * 14.0) * (st["bounce"] - 3) * 2.0 * dt
+			v -= (st["bounce"] - 3) * 0.9 * dt
+			wobble += 0.15 * dt
+		else:
+			bounce_t = 0.0
+	else:
+		wobble += absf(wind_lat) * 0.12 * dt
+	d += vd * dt
+	if not airborne:
+		wobble = maxf(0.0, wobble - (0.5 + 0.1 * st["stability"]) * dt)
+
+	if bool(seg["rails"]):
+		var lim := hw - 0.45
+		if absf(d) > lim:
+			d = clampf(d, -lim, lim)
+			vd = 0.0
+			v *= 1.0 - 0.8 * dt
+	elif not airborne and absf(d) > hw + float(seg["edge"]):
+		_fail(sim, "off_track")
+		return
+
+	# ---- advance along the route
+	var prev_ls := ls
+	ls += v * dt
+	var was_water := in_water
+	while ls > route().length:
+		if seg_idx >= segs.size() - 1:
+			ls = route().length
+			_account(sim, dt, k, rain, exposure)
+			_finish(sim)
+			return
+		ls -= route().length
+		prev_ls = -1.0
+		seg_idx += 1
+		seg = segs[seg_idx]
+		seg_id = seg["id"]
+		var new_section: String = seg["section"]
+		if new_section != section:
+			_close_split(sim)
+			section = new_section
+		if absf(d) > half_width() - 0.3:
+			d = signf(d) * (half_width() - 0.3)
+	# Water entry splash
+	if not was_water and not airborne and Course.in_ranges(seg["water"], ls):
+		v *= 1.0 - maxf(0.0, Tuning.WATER_ENTRY_DRAG - 0.025 * st["water"])
+
+	# ---- vertical
+	var ground: float = sim.course.surface_y(seg, ls)
+	if airborne:
+		vy -= Tuning.GRAVITY * dt
+		y += vy * dt
+		if y <= ground:
+			y = ground
+			_land(sim)
+			if state != "racing":
+				return
+	else:
+		var ramp: Dictionary = seg["ramp"]
+		if not ramp.is_empty() and prev_ls < float(ramp["lip_s"]) and ls >= float(ramp["lip_s"]):
+			airborne = true
+			jump_air = true
+			y = ground
+			vy = Tuning.LAUNCH_VY_BASE + Tuning.LAUNCH_VY_PER_STAR * st["jump"]
+		else:
+			for b in seg["bumps"]:
+				if prev_ls < float(b) and ls >= float(b):
+					var loss := maxf(0.0, Tuning.BUMP_LOSS_BASE - Tuning.BUMP_LOSS_PER_JUMP * st["jump"])
+					v *= 1.0 - loss + Tuning.BOUNCE_KICK * st["bounce"]
+					airborne = true
+					jump_air = false
+					vy = 1.5 + 0.35 * st["bounce"]
+			y = ground
+
+	_account(sim, dt, k, rain, exposure)
+
+	# ---- fails
+	var g := gs()
+	if g > stuck_best + 1.0:
+		stuck_best = g
+		stuck_t = 0.0
+	else:
+		stuck_t += dt
+		if stuck_t * 1000.0 >= float(sim.config.get("stuckTimeoutMs", 3000)):
+			_fail(sim, "stuck")
+			return
+	if elapsed_ms() >= int(sim.config.get("runTimeCapMs", 90000)):
+		_fail(sim, "timeout")
+		return
+
+	# ---- outputs
+	if ticks % 6 == 0:
+		_trace_sample()
+	if ticks - last_progress_tick >= 12:
+		last_progress_tick = ticks
+		sim.emit("game.run.progress", {
+			"runId": run_id, "progress": snappedf(progress(), 0.001), "elapsedMs": elapsed_ms(),
+			"section": section, "boostsLeft": boosts_left,
+		})
+
+
+func _land(sim) -> void:
+	airborne = false
+	vy = 0.0
+	if absf(d) > half_width() + float(seg["edge"]) and not bool(seg["rails"]):
+		_fail(sim, "off_track")
+		return
+	if not jump_air:
+		return
+	jump_air = false
+	var ramp: Dictionary = seg["ramp"]
+	if not ramp.is_empty() and ls < float(ramp["land_s"]):
+		var short := float(ramp["land_s"]) - ls
+		v *= clampf(0.45 - 0.04 * short, 0.15, 0.45)
+		recover_t = Tuning.BAD_LANDING_RECOVER
+		recover_mult = 0.45
+		wobble += 0.35 + 0.06 * short
+		_episode_force("bad_landing")
+		if wobble > Tuning.FLIP_WOBBLE + 0.1 * st["stability"]:
+			_fail(sim, "flipped")
+	else:
+		v *= 1.0 + 0.01 * st["bounce"]
+		recover_t = Tuning.LANDING_RECOVER * (1.0 - 0.12 * st["bounce"])
+		recover_mult = 0.95
+		if wobble > Tuning.FLIP_WOBBLE + 0.6 + 0.1 * st["stability"]:
+			_fail(sim, "flipped")
+
+
+# ---------------------------------------------------------------- boost / bumps
+
+func boost(sim) -> void:
+	if state != "racing" or boosts_left <= 0:
+		return
+	boosts_left -= 1
+	boosts_used += 1
+	var perfect := Course.in_ranges(seg["boosts"], ls) and not airborne
+	if perfect:
+		boost_amt = Tuning.BOOST_PERFECT_AMT
+		boost_t = Tuning.BOOST_PERFECT_S
+		v *= 1.06
+	else:
+		boost_amt = Tuning.BOOST_WEAK_AMT
+		boost_t = Tuning.BOOST_WEAK_S
+		weak_grip_t = Tuning.BOOST_WEAK_S
+		v *= 1.03
+		if airborne:
+			wobble += 0.4
+	var kind := "boost_perfect" if perfect else "boost_weak"
+	_add_event({"kind": kind, "section": section, "atMs": elapsed_ms()})
+	sim.emit("sim.boost", {"runId": run_id, "kind": kind})
+
+
+func got_bumped(other_player: String) -> void:
+	bumped_t = Tuning.BUMPED_WINDOW_S
+	bumped_by = other_player
+	if not airborne:
+		airborne = true
+		jump_air = false
+		vy = 1.0 + 0.4 * st["bounce"]
+	wobble += 0.15
+	_episode_force("bumped")
+
+
+func bumped_other(other_player: String) -> void:
+	_add_event({"kind": "bumped_other", "section": section, "atMs": elapsed_ms(), "otherPlayerId": other_player})
+
+
+# ---------------------------------------------------------------- time-loss events
+
+func _cause(k: float, exposure: float) -> String:
+	if slipping:
+		return "slip"
+	if bumped_t > 0.0:
+		return "bumped"
+	if recover_t > 0.0 and recover_mult < 0.9:
+		return "bad_landing"
+	if absf(wind_lat) > 1.0 or (exposure > 0.5 and absf(wind_lat) > 0.5):
+		return "wind_push"
+	if in_water:
+		return "water_slow"
+	if bounce_t > 0.0:
+		return "bounce_wobble"
+	if absf(k) > Tuning.CORNER_MIN_K * 3.0 and target_v < top * 0.97:
+		return "slow_corner"
+	return ""
+
+
+func _account(sim, dt: float, k: float, rain: float, exposure: float) -> void:
+	var cause := _cause(k, exposure)
+	var loss := 0.0
+	if cause == "slow_corner":
+		# Compared to a reference driver with grip 3.75 and balanced style.
+		var refc := minf(top, ref_v / (grip_f * float(Tuning.STYLE_CORNER[style])))
+		loss = maxf(0.0, 1.0 - v / maxf(refc, 0.1))
+	elif cause != "":
+		loss = maxf(0.0, 1.0 - v / maxf(minf(ref_v, top), 0.1))
+	if cause != "" and not episode.is_empty() and episode["kind"] == cause:
+		episode["loss"] = float(episode["loss"]) + loss * dt
+		episode["idle"] = 0.0
+	elif cause != "":
+		_close_episode()
+		episode = {"kind": cause, "section": section, "atMs": elapsed_ms(), "loss": loss * dt, "idle": 0.0,
+			"other": bumped_by if cause == "bumped" else ""}
+	elif not episode.is_empty():
+		episode["idle"] = float(episode["idle"]) + dt
+		if float(episode["idle"]) >= Tuning.EVENT_IDLE_CLOSE_S:
+			_close_episode()
+
+
+func _episode_force(kind: String) -> void:
+	if not episode.is_empty() and episode["kind"] == kind:
+		return
+	_close_episode()
+	episode = {"kind": kind, "section": section, "atMs": elapsed_ms(), "loss": 0.0, "idle": 0.0,
+		"other": bumped_by if kind == "bumped" else ""}
+
+
+func _close_episode() -> void:
+	if episode.is_empty():
+		return
+	var ms := int(round(float(episode["loss"]) * 1000.0))
+	if ms >= Tuning.EVENT_MIN_LOSS_MS or episode["kind"] == "bumped" or episode["kind"] == "bad_landing":
+		var e := {"kind": episode["kind"], "section": episode["section"], "atMs": episode["atMs"], "timeLostMs": ms}
+		if String(episode["other"]) != "":
+			e["otherPlayerId"] = episode["other"]
+		_add_event(e)
+	episode = {}
+
+
+func _add_event(e: Dictionary) -> void:
+	if events.size() < Tuning.MAX_EVENTS:
+		events.append(e)
+
+
+# ---------------------------------------------------------------- splits / end
+
+func _close_split(sim) -> void:
+	var ms := elapsed_ms() - int(round(section_start_tick * 1000.0 / Tuning.HZ))
+	splits[section] = ms
+	section_start_tick = ticks
+	sim.emit("game.run.section", {"runId": run_id, "section": section, "splitMs": ms})
+
+
+func _trace_sample() -> void:
+	var p := world_pos()
+	trace.append_array([snappedf(p.x, 0.01), snappedf(p.y, 0.01), snappedf(p.z, 0.01),
+		snappedf(route().heading_at(ls), 0.01), snappedf(-route().pitch_at(ls), 0.01)])
+
+
+func _summary() -> Dictionary:
+	events.sort_custom(func(a, b): return int(a["atMs"]) < int(b["atMs"]))
+	return {
+		"runId": run_id, "section": section, "elapsedMs": elapsed_ms(), "splits": splits.duplicate(),
+		"events": events.duplicate(true), "boostsUsed": boosts_used, "weatherSeen": weather_seen.keys(),
+	}
+
+
+func _finish(sim) -> void:
+	_close_episode()
+	_close_split(sim)
+	_trace_sample()
+	state = "finished"
+	var p := _summary()
+	p.erase("section")
+	p["trace"] = {"runId": run_id, "hz": 10, "samples": trace}
+	sim.emit("game.run.finished", p)
+
+
+func _fail(sim, reason: String) -> void:
+	_close_episode()
+	state = "failed"
+	fail_reason = reason
+	var p := _summary()
+	p["reason"] = reason
+	sim.emit("game.run.failed", p)
+
+
+func abort() -> void:
+	state = "aborted"
+
+
+# ---------------------------------------------------------------- rendering helpers
+
+func world_pos() -> Vector3:
+	var p := route().world_at(ls, d)
+	p.y = y
+	return p
+
+
+func yaw() -> float:
+	return route().heading_at(ls) + clampf(vd * 0.08, -0.5, 0.5)
+
+
+func pitch() -> float:
+	if airborne:
+		return clampf(-vy * 0.04, -0.5, 0.5)
+	return -route().pitch_at(ls)
+
+
+func roll() -> float:
+	return sin(ticks * 0.4) * minf(wobble, 1.5) * 0.35 + (0.25 if slipping else 0.0) * signf(route().curv_at(ls))

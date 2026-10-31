@@ -1,0 +1,65 @@
+{
+ "specVersion": 1,
+ "title": "Hoot Hoot",
+ "personality": [
+  "wise",
+  "sleepy"
+ ],
+ "palette": [
+  "#6d4c41",
+  "#ffcc80",
+  "#4fc3f7",
+  "#fff8e1"
+ ],
+ "character": {
+  "body": {
+   "shape": "round",
+   "color": 0,
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "head": {
+   "shape": "wide",
+   "color": 1,
+   "size": 1
+  },
+  "face": {
+   "eyes": "sleepy",
+   "eyeColor": "#2b2140",
+   "mouth": "beak",
+   "brows": false
+  },
+  "arms": {
+   "color": 0
+  },
+  "extras": [],
+  "hair": {
+   "style": "tuft",
+   "color": 0
+  }
+ },
+ "ride": {
+  "base": "bird",
+  "color": 2,
+  "accent": 3,
+  "scale": [
+   1,
+   1,
+   1
+  ],
+  "extras": [],
+  "drawingSticker": false,
+  "wings": {
+   "style": "feather",
+   "color": 3,
+   "size": 1.2
+  },
+  "tail": {
+   "style": "feathers",
+   "color": 3
+  }
+ }
+}

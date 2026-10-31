@@ -1,0 +1,98 @@
+{
+ "specVersion": 1,
+ "title": "Captain Quack",
+ "personality": [
+  "cheerful",
+  "silly"
+ ],
+ "palette": [
+  "#ffeb3b",
+  "#ff9800",
+  "#1e88e5",
+  "#ffffff"
+ ],
+ "character": {
+  "body": {
+   "shape": "round",
+   "color": 0,
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "head": {
+   "shape": "round",
+   "color": 0,
+   "size": 1
+  },
+  "face": {
+   "eyes": "big_round",
+   "eyeColor": "#2b2140",
+   "mouth": "open",
+   "brows": true,
+   "cheeks": 1
+  },
+  "arms": {
+   "color": 0
+  },
+  "extras": [],
+  "hat": {
+   "type": "party",
+   "color": 2
+  }
+ },
+ "ride": {
+  "base": "boat",
+  "color": 2,
+  "accent": 3,
+  "scale": [
+   1,
+   1,
+   1
+  ],
+  "extras": [
+   {
+    "shape": "cylinder",
+    "socket": "ride_top",
+    "offset": [
+     0,
+     0.1,
+     0
+    ],
+    "scale": [
+     0.1,
+     0.9,
+     0.1
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     0
+    ],
+    "color": 3
+   },
+   {
+    "shape": "heart",
+    "socket": "ride_back",
+    "offset": [
+     0,
+     0.2,
+     0
+    ],
+    "scale": [
+     0.3,
+     0.3,
+     0.3
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     0
+    ],
+    "color": 1
+   }
+  ],
+  "drawingSticker": false
+ }
+}

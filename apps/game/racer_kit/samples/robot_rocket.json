@@ -1,0 +1,120 @@
+{
+ "specVersion": 1,
+ "title": "Bolt-9",
+ "personality": [
+  "zoomy",
+  "silly",
+  "loud"
+ ],
+ "palette": [
+  "#b0bec5",
+  "#ff7043",
+  "#26c6da",
+  "#37474f"
+ ],
+ "character": {
+  "body": {
+   "shape": "box",
+   "color": 0,
+   "scale": [
+    1.1,
+    1,
+    1
+   ]
+  },
+  "head": {
+   "shape": "square",
+   "color": 0,
+   "size": 1.1
+  },
+  "face": {
+   "eyes": "visor",
+   "eyeColor": "#26c6da",
+   "mouth": "none",
+   "brows": false
+  },
+  "arms": {
+   "color": 0
+  },
+  "extras": [
+   {
+    "shape": "sphere",
+    "socket": "head_top",
+    "offset": [
+     0,
+     0.18,
+     0
+    ],
+    "scale": [
+     0.15,
+     0.15,
+     0.15
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     0
+    ],
+    "color": 1
+   },
+   {
+    "shape": "cylinder",
+    "socket": "head_top",
+    "offset": [
+     0,
+     0.05,
+     0
+    ],
+    "scale": [
+     0.1,
+     0.3,
+     0.1
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     0
+    ],
+    "color": 3
+   }
+  ]
+ },
+ "ride": {
+  "base": "rocket",
+  "color": 1,
+  "accent": 2,
+  "scale": [
+   1,
+   1,
+   1
+  ],
+  "extras": [
+   {
+    "shape": "cone",
+    "socket": "ride_side",
+    "offset": [
+     0,
+     0,
+     0
+    ],
+    "scale": [
+     0.3,
+     0.4,
+     0.1
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     90
+    ],
+    "color": 3,
+    "mirror": true
+   }
+  ],
+  "drawingSticker": false,
+  "tail": {
+   "style": "flame",
+   "color": 1
+  }
+ }
+}

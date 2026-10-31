@@ -1,0 +1,82 @@
+{
+ "specVersion": 1,
+ "title": "Wobbly Wiz",
+ "personality": [
+  "playful",
+  "dreamy"
+ ],
+ "palette": [
+  "#ce93d8",
+  "#4a148c",
+  "#ffd54f",
+  "#80deea"
+ ],
+ "character": {
+  "body": {
+   "shape": "star",
+   "color": 2,
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "head": {
+   "shape": "round",
+   "color": 3,
+   "size": 0.9
+  },
+  "face": {
+   "eyes": "one_eye",
+   "eyeColor": "#2b2140",
+   "mouth": "smile",
+   "brows": true
+  },
+  "arms": {
+   "color": 0
+  },
+  "extras": [
+   {
+    "shape": "star",
+    "socket": "hand",
+    "offset": [
+     0,
+     0.12,
+     0
+    ],
+    "scale": [
+     0.3,
+     0.3,
+     0.3
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     0
+    ],
+    "color": 2
+   }
+  ],
+  "hat": {
+   "type": "wizard",
+   "color": 1
+  }
+ },
+ "ride": {
+  "base": "blob",
+  "color": 0,
+  "accent": 3,
+  "scale": [
+   1,
+   1,
+   1
+  ],
+  "extras": [],
+  "drawingSticker": false,
+  "wings": {
+   "style": "fairy",
+   "color": 3,
+   "size": 0.9
+  }
+ }
+}

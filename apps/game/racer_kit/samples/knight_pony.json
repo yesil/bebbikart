@@ -1,0 +1,107 @@
+{
+ "specVersion": 1,
+ "title": "Sir Gallop",
+ "personality": [
+  "brave",
+  "calm"
+ ],
+ "palette": [
+  "#8d6e63",
+  "#ffd54f",
+  "#90a4ae",
+  "#c62828",
+  "#ffe0bd"
+ ],
+ "character": {
+  "body": {
+   "shape": "box",
+   "color": 2,
+   "scale": [
+    1,
+    1,
+    1
+   ]
+  },
+  "head": {
+   "shape": "square",
+   "color": 4,
+   "size": 1
+  },
+  "face": {
+   "eyes": "dots",
+   "eyeColor": "#2b2140",
+   "mouth": "smile",
+   "brows": true
+  },
+  "arms": {
+   "color": 0
+  },
+  "extras": [
+   {
+    "shape": "cylinder",
+    "socket": "hand",
+    "offset": [
+     0,
+     0.15,
+     0
+    ],
+    "scale": [
+     0.1,
+     1.0,
+     0.1
+    ],
+    "rotationDeg": [
+     0,
+     0,
+     0
+    ],
+    "color": 2
+   }
+  ],
+  "hat": {
+   "type": "crown",
+   "color": 1
+  }
+ },
+ "ride": {
+  "base": "animal4",
+  "color": 0,
+  "accent": 1,
+  "scale": [
+   1,
+   1,
+   1
+  ],
+  "extras": [
+   {
+    "shape": "cone",
+    "socket": "ride_front",
+    "offset": [
+     0,
+     0.15,
+     -0.1
+    ],
+    "scale": [
+     0.12,
+     0.3,
+     0.12
+    ],
+    "rotationDeg": [
+     -30,
+     0,
+     0
+    ],
+    "color": 1
+   }
+  ],
+  "drawingSticker": false,
+  "legs": {
+   "style": "hooves",
+   "color": 0
+  },
+  "tail": {
+   "style": "fluffy",
+   "color": 1
+  }
+ }
+}
