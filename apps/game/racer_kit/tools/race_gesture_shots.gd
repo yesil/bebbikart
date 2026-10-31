@@ -1,8 +1,9 @@
 extends SceneTree
 ## Windowed: runs the mock race (main.tscn) and photographs the kit drivers' reactions close up:
-## the start grid (leaning in on the lights, a fidget, the whoop on green), overtakes, a rival
-## alongside (wave or taunt), a flinch at a crash, finishes (the signature gesture, then the
-## wave), two racers finishing together, and crashes (spin, slump). main.gd reads the same user
+## the start grid (leaning in on the lights, a fidget, a fist bump, the whoop on green),
+## overtakes, a revenge fist shake, a rival alongside (wave or taunt), a flinch at a crash,
+## finishes (the signature gesture, then the wave), two racers finishing together, a high five,
+## and crashes (spin, slump). main.gd reads the same user
 ## args, so pass --kit.
 ##
 ##   godot --path apps/game --resolution 1920x1080 --script res://racer_kit/tools/race_gesture_shots.gd \
@@ -15,7 +16,8 @@ extends SceneTree
 
 const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
 const DELAY := {"grid": 0.15, "fidget": 0.55, "go": 0.35, "overtake": 0.4, "alongside": 0.55, "flinch": 0.3,
-	"finished": 0.75, "finished_wave": 1.75, "together": 0.7, "failed": 1.0}
+	"finished": 0.75, "finished_wave": 1.75, "together": 0.7, "failed": 1.0, "high_five": 0.43,
+	"fist_bump": 0.36, "revenge": 0.55}
 const CLIP_S := 2.6
 
 var out_dir := ""
@@ -26,7 +28,7 @@ var clip_lines := PackedStringArray()
 var main: Node
 var cam: Camera3D
 var taken := {"grid": 0, "fidget": 0, "go": 0, "overtake": 0, "alongside": 0, "flinch": 0, "finished": 0,
-	"finished_wave": 0, "together": 0, "failed": 0}
+	"finished_wave": 0, "together": 0, "failed": 0, "high_five": 0, "fist_bump": 0, "revenge": 0}
 var seen := {}          # view -> kinds already photographed
 var cur := {}           # {view, other (or null), kind, at, until}
 var _hud_was := {}      # HUD node -> visible before the close-ups
@@ -154,9 +156,9 @@ func _done() -> bool:
 	return clip_path == "" or t > limit * 0.5
 
 
-## Crashes are rare (about one run in forty), so one is enough.
+## Crashes are rare (about one run in forty), so one is enough; a high five and a fist bump too.
 func _want(kind: String) -> int:
-	return 1 if kind in ["failed", "flinch"] else want
+	return 1 if kind in ["failed", "flinch", "high_five", "fist_bump"] else want
 
 
 func _pick() -> void:
@@ -179,6 +181,18 @@ func _pick() -> void:
 				"flinch":
 					if _free("flinch", e.view):
 						_start(e.view, null, "flinch")
+						return
+				"high_five":
+					if _free("high_five", e.views[0]):
+						_start(e.views[0], e.views[1], "high_five")
+						return
+				"fist_bump":
+					if _free("fist_bump", e.views[0]):
+						_start(e.views[0], e.views[1], "fist_bump")
+						return
+				"revenge":
+					if _free("revenge", e.passer):
+						_start(e.passer, null, "revenge")
 						return
 				"finish_together":
 					if _free("together", e.views[0]):

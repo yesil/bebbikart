@@ -30,6 +30,8 @@ var early_rivals := 0  # rival moments right after the grid (a group leaving tog
 var together := {}     # finisher -> joint cheers
 var overlaps := 0      # frames two finishers standing after their run were inside each other
 var pair_frames := {}  # pair -> those frames
+var arrived := {}      # finisher -> seen
+var arrived_inside := 0  # finishers already inside another racer on their first frame after the line
 
 
 func _initialize() -> void:
@@ -88,6 +90,14 @@ func _process(delta: float) -> bool:
 		var v = main.leaving[id]
 		if is_instance_valid(v) and v.leaving != "":
 			lv.append(v)
+	# Finishers that cross the line already inside another racer (the race's own overlap).
+	for v in lv:
+		if not arrived.has(v):
+			arrived[v] = true
+			for o in lv + main.views.values():
+				if o != v and o.get("toy") != null and is_instance_valid(o) and _overlap(v, o):
+					arrived_inside += 1
+					break
 	for i in lv.size():
 		for j in range(i + 1, lv.size()):
 			# Two racers can cross the line already touching (the sim keeps a smaller circle than a
@@ -173,8 +183,8 @@ func _report() -> void:
 		bad.append("two finishers inside each other for %d frames (limit %d)" % [worst, MAX_PAIR_FRAMES])
 	if off_road > 0:
 		bad.append("coasting finishers off the road for %d of %d frames" % [off_road, coast_frames])
-	print("race reactions in %.0f s: %s, leaning in on the grid: %d racers, coasting finishers on the road: %d frames, finishers inside each other: %d frames (%d pairs)%s" % [
-		limit, JSON.stringify(counts), ready_seen.size(), coast_frames, overlaps, pair_frames.size(),
+	print("race reactions in %.0f s: %s, leaning in on the grid: %d racers, coasting finishers on the road: %d frames, finishers inside each other: %d frames (%d pairs), crossed the line inside another: %d of %d%s" % [
+		limit, JSON.stringify(counts), ready_seen.size(), coast_frames, overlaps, pair_frames.size(), arrived_inside, arrived.size(),
 		"" if counts.flinch > 0 else " (no crash near a racer this run)"])
 	if not bad.is_empty():
 		push_error("race_reactions_check: " + "; ".join(bad))
