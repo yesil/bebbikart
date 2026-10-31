@@ -240,9 +240,13 @@ const ROAD_PIECES := [
 	["pond_bridge_deck", "pond_bridge", "deck_in", "deck_out", "road_planks", 0.45],
 	["pond_bridge_out", "pond_bridge", "deck_out", -1, "road_asphalt_detour", -1.0],
 	["mill", "mill", -1, -1, "road_asphalt", -1.0],
-	["cross_exposed", "cross_exposed", -1, -1, "road_planks", 0.35],
+	["cross_exposed_in", "cross_exposed", -1, "causeway_in", "road_planks", -1.0],
+	["cross_exposed", "cross_exposed", "causeway_in", "causeway_out", "road_planks", 0.35],
+	["cross_exposed_out", "cross_exposed", "causeway_out", -1, "road_planks", -1.0],
 	["cross_sheltered", "cross_sheltered", -1, -1, "road_ford", -1.0],
-	["bends", "bends", -1, -1, "road_asphalt", -1.0],
+	# The roundabout's circulating stretch is the ring itself (_roundabout), one surface.
+	["bends_in", "bends", -1, "ring_in", "road_asphalt", -1.0],
+	["bends_out", "bends", "ring_out", -1, "road_asphalt", -1.0],
 ]
 
 
@@ -282,6 +286,14 @@ func _piece_s(seg: Dictionary, key: String) -> float:
 			return plan.bridge_s - VillagePlan.BRIDGE_HALF_LENGTH
 		"deck_out":
 			return plan.bridge_s + VillagePlan.BRIDGE_HALF_LENGTH
+		"causeway_in":
+			return 12.0
+		"causeway_out":
+			return (seg["route"] as Route).length - 12.0
+		"ring_in":
+			return float(course.roundabout["s0"]) + 1.0
+		"ring_out":
+			return float(course.roundabout["s1"]) - 1.0
 	_fail("unknown road piece split '%s'" % key)
 	return 0.0
 
@@ -320,6 +332,9 @@ func _bake_roads() -> void:
 			rp.lane_width = 2.0 * road_hw(seg, s)
 			var sh := 0.45
 			if detour and (s < 16.0 or s > r.length - 16.0):
+				sh = 0.0
+			# Blend into the roundabout ring without a shoulder step.
+			if piece[1] == "bends" and (absf(s - float(course.roundabout["s0"])) < 8.0 or absf(s - float(course.roundabout["s1"])) < 8.0):
 				sh = 0.0
 			rp.shoulder_width_l = sh
 			rp.shoulder_width_r = sh

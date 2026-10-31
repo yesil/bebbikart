@@ -185,7 +185,9 @@ func corridor_target(seg: Dictionary, s: float) -> float:
 	# Causeway: a deck wherever it is raised clear of the meadow.
 	if id == "cross_exposed" and r.pos_at(s).y - r.pos_at(0.0).y > 0.5:
 		return NAN
-	return r.pos_at(s).y + Course.surface_offset(seg, s)
+	# The kicker is a wooden structure on the ground: never raise the terrain under it, only
+	# sink it for the landing pit.
+	return r.pos_at(s).y + minf(0.0, Course.surface_offset(seg, s))
 
 
 func _stamp_roads() -> void:

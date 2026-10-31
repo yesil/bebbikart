@@ -94,7 +94,7 @@ func _build(hill: float, north: float) -> void:
 	var around_pts := _draw_ops(j1, h1, around_ops, [[0.0, 3.0]])
 	var jump_len := _along(around_pts, h1)
 	_add("ramp_jump", "hills", "ramp", "jump", _draw_ops(j1, h1, [["S", jump_len]], [[0.0, 3.0]]), 3.0, {
-		"ramp": {"kick_a": 9.0, "lip_s": 15.0, "lip_h": 2.0, "land_s": 33.0, "pit_depth": 0.4},
+		"ramp": {"kick_a": 22.0, "lip_s": 28.0, "lip_h": 2.0, "land_s": 46.0, "pit_depth": 0.4},
 	})
 	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {})
 	# Over the hill top, then right and down to the brook.
@@ -115,8 +115,8 @@ func _build(hill: float, north: float) -> void:
 	bridge_pts = _draw_ops(j3, h3, bridge_ops, [[0.0, 0.4], [bl * 0.5 - 11.0, 0.4], [bl * 0.5, 1.5], [bl * 0.5 + 11.0, 0.4], [bl, 0.4]])
 	var ford_len := _along(bridge_pts, h3)
 	_add("pond_water", "pond", "pond", "water", _draw_ops(j3, h3, [["S", ford_len]],
-		[[0.0, 0.4], [8.0, 0.4], [16.0, -0.2], [ford_len - 16.0, -0.2], [ford_len - 8.0, 0.4], [ford_len, 0.4]]), 4.0,
-		{"water": [[9.0, ford_len - 9.0]]})
+		[[0.0, 0.4], [12.0, 0.4], [20.0, -0.2], [ford_len - 20.0, -0.2], [ford_len - 12.0, 0.4], [ford_len, 0.4]]), 4.0,
+		{"water": [[13.0, ford_len - 13.0]]})
 	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true})
 	# Past the mill and right onto the south edge.
 	p = _draw_ops(_end("pond_water"), _heading("pond_water"), [["S", 5.0], ["A", 16.0, LEG_SOUTH - LEG_BROOK], ["S", 5.0]], [[0.0, 0.4]])
@@ -129,7 +129,7 @@ func _build(hill: float, north: float) -> void:
 	var shelter_pts := _draw_ops(j4, h4, shelter_ops, [[0.0, 0.4]])
 	var xl := _along(shelter_pts, h4)
 	_add("cross_exposed", "crossing", "crossing", "exposed", _draw_ops(j4, h4, [["S", xl]],
-		[[0.0, 0.4], [3.0, 0.4], [13.0, 1.4], [xl - 13.0, 1.4], [xl - 3.0, 0.4], [xl, 0.4]]), 2.6,
+		[[0.0, 0.4], [12.0, 0.4], [22.0, 1.4], [xl - 22.0, 1.4], [xl - 12.0, 0.4], [xl, 0.4]]), 2.6,
 		{"exposure": 1.0, "edge": Tuning.OFF_TRACK_MARGIN_RAILS})
 	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
 	# Square: a chicane past the bakery, then the roundabout round the fountain turns the

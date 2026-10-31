@@ -234,7 +234,7 @@ func _chalet(size: Vector2, rng: RandomNumberGenerator, bakery: bool) -> Diction
 	if rng.randf() < 0.7:
 		out.append(["chimney", Transform3D(Basis().scaled_local(Vector3(1.6, 2.0, 1.6)), Vector3(sx * 0.6, top + (ridge - top) * 0.5, -sz * 0.4))])
 	if bakery:
-		out.append(["stall-red", Transform3D(Basis(Vector3.UP, PI * 0.5).scaled_local(Vector3(2.2, 2.2, 2.2)), Vector3(sx, 0, nz * sz * 0.5 + 1.0))])
+		out.append(["stall-red", Transform3D(Basis(Vector3.UP, PI * 0.5).scaled_local(Vector3(2.2, 2.2, 2.2)), Vector3(sx, 0, nz * sz * 0.5 + 0.45))])
 	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
 
 
@@ -295,7 +295,8 @@ func _church(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
 	var ridge := _roof(out, nx, nz, sx, sz, nave_h, 0.75, 0.15, 0.15, "roof-high")
 	# Tower: one cell wide, standing proud of the front.
 	var tw := 3.6
-	var tz := nz * sz * 0.5 + tw * 0.5 - 0.6
+	# Tower inside the footprint, flush with the front.
+	var tz := nz * sz * 0.5 - tw * 0.5
 	var storeys := 5
 	for f in storeys:
 		var y := f * FLOOR_H * 1.1
@@ -370,7 +371,7 @@ func covered_bridge(r, mid: float, half_len: float, road_hw: float) -> Dictionar
 	var out: Array = []
 	var cell := 2.0
 	var n := int(round(half_len * 2.0 / cell))
-	var w := road_hw * 2.0 + 0.8
+	var w := road_hw * 2.0 + 2.0
 	var h := 2.8
 	for k in n:
 		var s: float = mid - half_len + (k + 0.5) * half_len * 2.0 / n
@@ -426,8 +427,8 @@ func props(course, plan, shape) -> Array:
 	for id in ["pond_bridge", "ramp_around"]:
 		var r = course.segments[id]["route"]
 		var hw: float = course.segments[id]["half_width"]
-		var s := 16.0
-		while s < r.length - 16.0:
+		var s := 22.0
+		while s < r.length - 22.0:
 			if id == "pond_bridge" and absf(s - plan.bridge_s) < 9.0:
 				s += 2.0
 				continue
