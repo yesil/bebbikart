@@ -113,6 +113,14 @@ func _check_models(world: Node, course: VillageCourse, plan: VillagePlan, shape:
 				fails.append("%s/%s: %d transform floats" % [group, n.name, t.size()])
 				continue
 			counts[group] = int(counts.get(group, 0)) + t.size() / 12
+			# Wandering animals: every grazing spot stays off the roads.
+			var wd := im.wander
+			for k in range(0, wd.size(), 3):
+				var e: Array = plan.road_edge(Vector2(wd[k], wd[k + 2]))
+				if float(e[0]) < 2.0:
+					fails.append("%s wanders to (%.1f, %.1f), %.2f m from %s" % [n.name, wd[k], wd[k + 2], e[0], e[1]])
+			if im.wander_points > 0:
+				notes.append("%s: %d animals wander between %d spots each" % [n.name, t.size() / 12, im.wander_points])
 			for k in range(0, t.size(), 12):
 				var o := Vector3(t[k + 9], t[k + 10], t[k + 11])
 				var p := Vector2(o.x, o.z)

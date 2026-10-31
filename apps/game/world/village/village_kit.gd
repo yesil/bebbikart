@@ -553,6 +553,11 @@ const COW := "res://assets/village/quaternius_cow/Cow.glb"
 const COW_2 := "res://assets/village/poly_pizza/Cow_2.glb"
 const SHEEP := "res://assets/village/poly_pizza/Sheep_2.glb"
 const CHEESE := "res://assets/village/poly_pizza/CheeseBlock.glb"
+## Models that wander about their spot (world/village/instanced_model.gd "wander").
+const ANIMALS := [COW, COW_2, SHEEP]
+const WANDER_POINTS := 5
+const WANDER_RADIUS := 4.0
+const WANDER_CLEAR := 2.5          # metres every wander point keeps from roads, houses and water
 const CHOCOLATE := "res://assets/village/poly_pizza/ChocolateBar.glb"
 
 
@@ -697,6 +702,23 @@ func swiss_details(course, plan, shape) -> Dictionary:
 				else:
 					out.append([CHOCOLATE, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.5, 0.5, 0.5)), at3)])
 	return {"modules": out, "flags": flags, "signs": signs, "labels": labels, "boards": boards}
+
+
+## A small loop of grazing spots round an animal's home, each clear of roads, buildings and
+## water, as WANDER_POINTS x (x, y, z). The home itself is always the first spot.
+func wander_path(plan, shape, home: Vector3, rng: RandomNumberGenerator) -> PackedFloat32Array:
+	var out := PackedFloat32Array([home.x, home.y, home.z])
+	var tries := 0
+	while out.size() < WANDER_POINTS * 3 and tries < 200:
+		tries += 1
+		var a := rng.randf() * TAU
+		var p := Vector2(home.x, home.z) + Vector2(cos(a), sin(a)) * rng.randf_range(1.5, WANDER_RADIUS)
+		if not _free(plan, p, WANDER_CLEAR):
+			continue
+		out.append_array([p.x, shape.height_at(p.x, p.y), p.y])
+	if out.size() < WANDER_POINTS * 3:
+		errors.append("no room for an animal to wander at (%.0f, %.0f)" % [home.x, home.z])
+	return out
 
 
 ## p keeps `clear` metres from every road edge, building, the pond and the brook.

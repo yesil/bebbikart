@@ -778,6 +778,14 @@ func _instanced(parent: Node, kit: VillageKit, placed: Dictionary) -> void:
 		n.name = module.get_file().get_basename() if module.begins_with("res://") else module.replace("nature:", "").to_pascal_case()
 		n.model = VillageKit.model_path(module)
 		n.transforms = InstancedModel.pack(placed[module])
+		if module in VillageKit.ANIMALS:
+			var rng := RandomNumberGenerator.new()
+			rng.seed = hash(module)
+			var paths := PackedFloat32Array()
+			for xf: Transform3D in placed[module]:
+				paths.append_array(kit.wander_path(plan, shape, xf.origin, rng))
+			n.wander = paths
+			n.wander_points = VillageKit.WANDER_POINTS
 		if not module.begins_with("nature:") and not module.begins_with("res://"):
 			n.override = swiss
 		_mark(n)

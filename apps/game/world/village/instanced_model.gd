@@ -10,6 +10,20 @@ extends MultiMeshInstance3D
 @export var transforms := PackedFloat32Array()
 ## Overrides the model's own materials when set (the Swiss Kenney palette).
 @export var override: Material
+## Animals: wander_points grazing spots per copy (x, y, z each). A copy walks slowly from spot to
+## spot, turning to face the way it goes, and stops at each to graze with a gentle nod. Purely
+## visual: the race never sees it. Empty for still models.
+@export var wander := PackedFloat32Array()
+@export var wander_points := 0
+
+const WALK_SPEED := 0.45           # m/s
+const TURN_SPEED := 1.2            # rad/s
+const GRAZE_TIME := Vector2(3.0, 9.0)
+
+var _base: Array[Transform3D] = []   # placed transforms (scale, yaw) without the inner node
+var _inner := Transform3D()
+var _state: Array = []               # per copy: [pos: Vector3, yaw, target index, pause left, phase]
+var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
@@ -39,6 +53,58 @@ func _ready() -> void:
 			Vector3(t[k + 6], t[k + 7], t[k + 8]), Vector3(t[k + 9], t[k + 10], t[k + 11])) * inner)
 	multimesh = mm
 	material_override = override
+	_inner = inner
+	if wander_points > 0:
+		if wander.size() != n * wander_points * 3:
+			push_error("instanced_model %s: %d wander floats for %d copies of %d points" % [name, wander.size(), n, wander_points])
+			return
+		_rng.seed = hash(name)
+		for i in n:
+			var k := i * 12
+			var t := transforms
+			var b := Transform3D(Vector3(t[k], t[k + 1], t[k + 2]), Vector3(t[k + 3], t[k + 4], t[k + 5]),
+				Vector3(t[k + 6], t[k + 7], t[k + 8]), Vector3(t[k + 9], t[k + 10], t[k + 11]))
+			_base.append(b)
+			var yaw := atan2(b.basis.z.x, b.basis.z.z)
+			_state.append([b.origin, yaw, 1, _rng.randf_range(0.0, GRAZE_TIME.y), _rng.randf() * TAU])
+	set_process(wander_points > 0 and not Engine.is_editor_hint())
+
+
+func _process(delta: float) -> void:
+	if multimesh == null:
+		return
+	for i in _state.size():
+		var st: Array = _state[i]
+		var pos: Vector3 = st[0]
+		var yaw: float = st[1]
+		st[4] = float(st[4]) + delta
+		var nod := 0.0
+		if float(st[3]) > 0.0:
+			# Grazing: head down, a slow nod.
+			st[3] = float(st[3]) - delta
+			nod = 0.08 + 0.06 * sin(float(st[4]) * 1.7)
+		else:
+			var j: int = st[2]
+			var k := (i * wander_points + j) * 3
+			var target := Vector3(wander[k], wander[k + 1], wander[k + 2])
+			var to := target - pos
+			var flat := Vector2(to.x, to.z)
+			if flat.length() < 0.15:
+				st[2] = (j + 1) % wander_points
+				st[3] = _rng.randf_range(GRAZE_TIME.x, GRAZE_TIME.y)
+			else:
+				var want := atan2(to.x, to.z)
+				var turn := wrapf(want - yaw, -PI, PI)
+				yaw += clampf(turn, -TURN_SPEED * delta, TURN_SPEED * delta)
+				# Walk only once roughly facing the next spot.
+				if absf(turn) < 0.6:
+					pos += to.normalized() * minf(WALK_SPEED * delta, to.length())
+				st[0] = pos
+				st[1] = yaw
+		var scale := _base[i].basis.get_scale()
+		# The Quaternius animals face -z: turn them so they walk head first.
+		var basis := Basis(Vector3.UP, yaw + PI) * Basis(Vector3.RIGHT, nod)
+		multimesh.set_instance_transform(i, Transform3D(basis.scaled_local(scale), pos) * _inner)
 
 
 static func pack(xfs: Array) -> PackedFloat32Array:
