@@ -16,6 +16,7 @@ const NAME_TAG_LAYER := 1 << 19    # render layer 20: racer name tags, main came
 const INSET_SIZE := Vector2(576, 340)
 const MARGIN := 24.0
 const POP_S := 2.2
+const POP_BOTTOM := 36.0  # px from the bottom edge to the name pop
 const FACE_FOV := 36.0
 const SIDE_FOV := 42.0
 
@@ -229,10 +230,13 @@ func _build_pop(root: Control) -> void:
 	_pop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pop.anchor_left = 0.0
 	_pop.anchor_right = 1.0
-	_pop.anchor_top = 0.56
-	_pop.anchor_bottom = 0.56
-	_pop.offset_top = 0.0
-	_pop.offset_bottom = 0.0
+	# Bottom middle, growing up: clear of the kart in the chase shot, its race-HUD tag and the
+	# countdown lights, between the on-camera panel (left) and the inset (right).
+	_pop.anchor_top = 1.0
+	_pop.anchor_bottom = 1.0
+	_pop.offset_top = -POP_BOTTOM
+	_pop.offset_bottom = -POP_BOTTOM
+	_pop.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	root.add_child(_pop)
 	_pop_name = _label("", 88)
 	_pop_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
