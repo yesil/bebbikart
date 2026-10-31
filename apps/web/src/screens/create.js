@@ -1,7 +1,7 @@
 import { html } from "htm/preact";
 import { useEffect, useState } from "preact/hooks";
 import { api, uploadDrawings } from "../api.js";
-import { COPY } from "../copy.js";
+import { COPY, errorText } from "../copy.js";
 import { downscale } from "../image.js";
 
 // Photos survive a retake of just one image (rejected → retake the failing one).
@@ -68,7 +68,7 @@ export function Create({ ctx, only }) {
       if (st.me) dispatch({ type: "me", me: st.me });
       dispatch({ type: "redo", on: false });
     } catch (err) {
-      dispatch({ type: "toast", text: COPY.errors[err.code] ?? err.message });
+      dispatch({ type: "toast", text: errorText(err) });
     } finally {
       setProgress(null);
     }
@@ -83,7 +83,7 @@ export function Create({ ctx, only }) {
           ? html`<div class="error-box">
               <b>${COPY.making.failed}</b>
               <div>${COPY.making.failedHint}</div>
-              <code>${me.job.error ?? "unknown error"}</code>
+              <code>${me.job.error ?? COPY.making.unknownError}</code>
             </div>`
           : null
       }
@@ -153,7 +153,7 @@ export function Making({ ctx, review }) {
     ? [COPY.making.review]
     : job?.status === "queued"
       ? COPY.making.queuedLines
-      : (COPY.making.lines[stage] ?? COPY.making.lines.looking);
+      : COPY.making.lines[stage ?? "looking"];
   // A new line every ~2.8 s; the key restarts the pop-in animation.
   const n = Math.floor(now / 2800);
   const line = lines[n % lines.length];
@@ -200,7 +200,7 @@ export function Rejected({ ctx }) {
   return html`
     <div class="card center">
       <div class="big">🙈</div>
-      <p class="lead">${COPY.reject[job.rejectReason] ?? COPY.reject.unreadable}</p>
+      <p class="lead">${COPY.reject[job.rejectReason ?? "unreadable"]}</p>
     </div>
     <${Create} ctx=${ctx} only=${only} />
   `;
@@ -217,7 +217,7 @@ export function Reveal({ ctx }) {
     try {
       await api("POST", "/api/players/me/reroll");
     } catch (err) {
-      dispatch({ type: "toast", text: COPY.errors[err.code] ?? err.message });
+      dispatch({ type: "toast", text: errorText(err) });
     }
     setBusy(false);
   }

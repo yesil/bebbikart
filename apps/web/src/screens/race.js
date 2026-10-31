@@ -2,7 +2,7 @@ import { SECTION_IDS } from "@bebbikart/shared";
 import { html } from "htm/preact";
 import { useState } from "preact/hooks";
 import { api } from "../api.js";
-import { COPY } from "../copy.js";
+import { COPY, errorText } from "../copy.js";
 import { Avatar, delta, isLoop, secs } from "./common.js";
 
 export function Run({ ctx }) {
@@ -107,7 +107,7 @@ export function Result({ ctx }) {
     try {
       await api("POST", "/api/players/me/runs");
     } catch (err) {
-      dispatch({ type: "toast", text: COPY.errors[err.code] ?? err.message });
+      dispatch({ type: "toast", text: errorText(err) });
     }
   }
 
@@ -119,12 +119,12 @@ export function Result({ ctx }) {
           ? html`<h1>${r.isPersonalBest ? COPY.result.pb : ok ? COPY.result.finished : COPY.result.oops}</h1>
               <div class="muted">${COPY.result.bestLapTitle}</div>
               <div class="bigtime">${secs(run.bestLapMs)}</div>
-              ${!ok ? html`<p class="lead">${COPY.result.fail[run.failReason] ?? ""}</p>` : null}`
+              ${!ok ? html`<p class="lead">${run.failReason ? COPY.result.fail[run.failReason] : ""}</p>` : null}`
           : ok
             ? html`<h1>${r.isPersonalBest ? COPY.result.pb : COPY.result.finished}</h1>
               <div class="bigtime">${secs(run.elapsedMs)}</div>`
             : html`<h1>${COPY.result.oops}</h1>
-              <p class="lead">${run.outcome === "aborted" ? COPY.result.aborted : `${COPY.result.fail[run.failReason] ?? ""}${run.failSection ? ` · ${COPY.sections[run.failSection]}` : ""}`}</p>`
+              <p class="lead">${run.outcome === "aborted" ? COPY.result.aborted : `${run.failReason ? COPY.result.fail[run.failReason] : ""}${run.failSection ? ` · ${COPY.sections[run.failSection]}` : ""}`}</p>`
       }
       ${r.rank ? html`<p class="muted">${COPY.garage.rank} #${r.rank}</p>` : null}
     </div>

@@ -2,7 +2,7 @@ import { ABILITIES, FORK_CHOICES, starsLeft } from "@bebbikart/shared";
 import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
-import { COPY } from "../copy.js";
+import { COPY, errorText } from "../copy.js";
 import { Avatar, isLoop, secs } from "./common.js";
 
 const pick = (b) => ({ stars: { ...b.stars }, routes: { ...b.routes }, style: b.style });
@@ -32,7 +32,7 @@ export function Garage({ ctx }) {
     try {
       await api("PUT", "/api/players/me/build", b);
     } catch (err) {
-      dispatch({ type: "toast", text: err.message });
+      dispatch({ type: "toast", text: errorText(err) });
     }
     setSaving(false);
   }
@@ -67,7 +67,7 @@ export function Garage({ ctx }) {
       if (dirty) await api("PUT", "/api/players/me/build", build);
       await api("POST", "/api/players/me/runs");
     } catch (err) {
-      dispatch({ type: "toast", text: COPY.errors[err.code] ?? err.message });
+      dispatch({ type: "toast", text: errorText(err) });
     }
   }
 

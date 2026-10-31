@@ -1,9 +1,9 @@
 // BebbiKart phone site (WS4): create a racer from two drawings, then tune, Go! and Boost!.
 import { html } from "htm/preact";
 import { render } from "preact";
-import { useEffect, useReducer, useRef, useState } from "preact/hooks";
+import { useEffect, useErrorBoundary, useReducer, useRef, useState } from "preact/hooks";
 import { api, connectWs } from "./api.js";
-import { COPY } from "./copy.js";
+import { BOOT_COPY, COPY, errorText, setLanguage } from "./copy.js";
 import { Create, Making, Rejected, Reveal } from "./screens/create.js";
 import { Garage, Leaderboard } from "./screens/garage.js";
 import { Result, Run } from "./screens/race.js";
@@ -125,7 +125,7 @@ function onWs(s, type, p) {
         me: s.me ? { ...s.me, currentRun: undefined, lastRun: p.run } : s.me,
       };
     case "error":
-      return { ...s, toast: COPY.errors[p.code] ?? p.message };
+      return { ...s, toast: errorText(p) };
     default:
       return s;
   }
@@ -142,7 +142,7 @@ function App() {
         const st = await api("GET", "/api/state");
         dispatch({ type: "boot", ...st });
       } catch (err) {
-        dispatch({ type: "toast", text: `${COPY.errors.generic} (${err.message})` });
+        dispatch({ type: "toast", text: `${BOOT_COPY.failed} (${err.message})` });
       }
       ws.current = connectWs({
         onMessage: (msgType, payload) => dispatch({ type: "ws", msgType, payload }),
@@ -159,6 +159,16 @@ function App() {
   }, [s.toast]);
 
   const ctx = { s, dispatch, send: (type, payload) => ws.current?.send(type, payload) };
+  // The big screen's language (config.language): switching it re-renders every screen live.
+  if (s.config) setLanguage(s.config.language);
+  if (!s.config)
+    return html`
+      <div class="app">
+        <header class="top"><span class="logo">BebbiKart</span></header>
+        <main><div class="center muted">${BOOT_COPY.connecting}</div></main>
+        ${s.toast ? html`<div class="toast">${s.toast}</div>` : null}
+      </div>
+    `;
   return html`
     <div class="app">
       <header class="top">
@@ -204,7 +214,6 @@ function QuitBar({ s, dispatch }) {
 
 function screen(ctx) {
   const { s } = ctx;
-  if (!s.booted) return html`<div class="center muted">${COPY.connecting}</div>`;
   const me = s.me;
   if (!me) return html`<${Create} ctx=${ctx} />`;
   if (me.status === "processing") return html`<${Making} ctx=${ctx} />`;
@@ -228,4 +237,12 @@ function screen(ctx) {
   `;
 }
 
-render(html`<${App} />`, document.getElementById("app"));
+/** A missing translation (or any render bug) shows up big on the phone, never as a blank page. */
+function Crash() {
+  const [error] = useErrorBoundary((err) => console.error(err));
+  if (error)
+    return html`<div class="error-box crash"><b>BebbiKart error</b><code>${String(error.message ?? error)}</code></div>`;
+  return html`<${App} />`;
+}
+
+render(html`<${Crash} />`, document.getElementById("app"));

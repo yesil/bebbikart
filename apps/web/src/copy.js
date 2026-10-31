@@ -1,7 +1,10 @@
-// Every kid- and parent-facing string in one place (phone-app.md "Copy and tone").
-export const COPY = {
+// Every kid- and parent-facing string in one place (phone-app.md "Copy and tone"), in every
+// language the big screen can pick (config.language, contracts §2b). Both tables have exactly
+// the same keys (test/copy.test.js). German is Swiss-friendly: "ss", never "ß".
+import { LANGUAGES } from "@bebbikart/shared";
+
+const en = {
   appName: "BebbiKart",
-  connecting: "Connecting to the race…",
   offline: "Reconnecting…",
   create: {
     title: "Make your racer!",
@@ -55,6 +58,7 @@ export const COPY = {
     review: "A grown-up is checking it, one moment.",
     failed: "We couldn't make your racer from these drawings.",
     failedHint: "Tell a grown-up what it says, then try again:",
+    unknownError: "unknown error",
   },
   reject: {
     not_a_drawing: "That looks like a real photo. Please take a picture of the drawing!",
@@ -159,6 +163,251 @@ export const COPY = {
     game_offline: "The big screen isn't connected yet.",
     reroll_limit: "That's all the new looks for now.",
     server_full: "The track is full right now.",
+    invalid_build: "Set your stars again, they don't add up.",
+    player_exists: "This phone already has a racer.",
+    not_found: "Create your racer first.",
+    bad_request: "That didn't work. Try again!",
+    bad_message: "That didn't work. Try again!",
+    unauthorized: "This phone isn't allowed to do that.",
+    track_locked: "The track can't change during a race.",
     generic: "Something went wrong. Try again!",
   },
 };
+
+const de = {
+  appName: "BebbiKart",
+  offline: "Verbinde neu…",
+  create: {
+    title: "Bau deinen Rennfahrer!",
+    nameLabel: "Name des Rennfahrers",
+    namePlaceholder: "z.B. Mila",
+    driver: "Foto der Fahrer-Zeichnung",
+    ride: "Foto der Fahrzeug-Zeichnung",
+    retake: "Nochmal",
+    tip: "Papier flach hinlegen, Bild ganz ausfüllen, gutes Licht.",
+    submit: "Bau meinen Rennfahrer!",
+    uploading: "Deine Zeichnungen werden gesendet…",
+    needBoth: "Wir brauchen beide Zeichnungen.",
+    cancel: "Meinen Rennfahrer behalten",
+  },
+  making: {
+    queuedLines: [
+      "Warte in der Schlange…",
+      "Dein Rennfahrer ist als Nächstes in der Werkstatt!",
+      "Die Farbstifte wärmen sich auf…",
+    ],
+    // Rotating lines per design stage (AssetJob.stage): looking, designing, critiquing, refining.
+    lines: {
+      looking: [
+        "Wir bestaunen dein Meisterwerk…",
+        "Wir zählen jedes Schnurrhaar…",
+        "Wir mischen deine Farbstift-Farben…",
+        "Oh, schau dir diese Räder an…",
+        "Wir schauen ganz genau hin…",
+      ],
+      designing: [
+        "Wir bauen deinen Fahrer…",
+        "Wir schrauben die Räder an…",
+        "Dein Fahrer bekommt eine Persönlichkeit…",
+        "Wir suchen die perfekte Farbe aus…",
+        "Wir wählen eine lustige Hupe…",
+      ],
+      critiquing: [
+        "Wir vergleichen es mit deiner Zeichnung…",
+        "Wir kneifen die Augen ganz fest zusammen…",
+        "Sieht es aus wie deins? Hmm…",
+      ],
+      refining: [
+        "Der letzte Schliff…",
+        "Wir polieren den Lack…",
+        "Wir stimmen die Hupe…",
+        "Wir pumpen die Reifen auf…",
+      ],
+    },
+    stageNames: {
+      looking: "Schauen",
+      designing: "Bauen",
+      critiquing: "Prüfen",
+      refining: "Polieren",
+    },
+    slow: "Ein Rennfahrer braucht etwa eine Minute.",
+    review: "Ein Erwachsener schaut es kurz an, einen Moment.",
+    failed: "Aus diesen Zeichnungen konnten wir keinen Rennfahrer bauen.",
+    failedHint: "Sag einem Erwachsenen, was hier steht, und versuch es nochmal:",
+    unknownError: "unbekannter Fehler",
+  },
+  reject: {
+    not_a_drawing: "Das sieht aus wie ein echtes Foto. Bitte fotografiere die Zeichnung!",
+    real_person:
+      "Wir können nur Zeichnungen nehmen, keine Fotos von Menschen. Probier die Zeichnung!",
+    unreadable: "Das konnten wir nicht gut sehen. Probier ein näheres, helleres Foto!",
+    empty_page: "Die Seite sieht leer aus! Fotografiere deine Zeichnung.",
+    unsupported_file: "Wir konnten das Bild nicht öffnen. Mach das Foto nochmal.",
+    retakeDriver: "Fahrer-Foto nochmal machen",
+    retakeRide: "Fahrzeug-Foto nochmal machen",
+  },
+  reveal: {
+    lookUp: "Schau auf den grossen Bildschirm!",
+    another: "Anderen Look probieren",
+    go: "Los geht's!",
+  },
+  garage: {
+    stars: "Sterne",
+    starsLeft: (n) =>
+      n === 0 ? "Alle Sterne verteilt!" : n > 0 ? `Sterne übrig: ${n}` : `Zu viele Sterne: ${-n}`,
+    routes: "Wege",
+    style: "Fahrstil",
+    go: "Los!",
+    best: "Bestzeit",
+    bestLap: "Beste Runde",
+    rank: "Platz",
+    noBest: "Noch keine Zeit",
+    newDrawings: "Neue Zeichnungen",
+    lookFailed: "Dein neuer Look hat nicht geklappt:",
+    racing: (n) => (n === 1 ? "1 Rennfahrer auf der Strecke" : `${n} Rennfahrer auf der Strecke`),
+  },
+  abilities: {
+    speed: ["🚀", "Tempo", "schnell auf Geraden"],
+    jump: ["🦘", "Sprung", "flieg über die Rampe"],
+    grip: ["🧲", "Grip", "kleb an der Strasse"],
+    water: ["🌊", "Wasser", "flitz durch den Teich"],
+    stability: ["🪨", "Stabilität", "lass dich nicht wegwehen"],
+    bounce: ["🏀", "Federung", "spring nach Remplern zurück"],
+  },
+  forks: {
+    ramp: {
+      title: "Die Rampe",
+      jump: ["🦘 Springen", "braucht Sprung"],
+      around: ["↪️ Aussen herum", "sicher"],
+    },
+    pond: {
+      title: "Der Teich",
+      water: ["🌊 Wasser", "braucht Wasser"],
+      bridge: ["🌉 Brücke", "sicher"],
+    },
+    crossing: {
+      title: "Die Kreuzung",
+      exposed: ["🌬️ Windige Brücke", "schnell ohne Wind"],
+      sheltered: ["🌳 Heckenweg", "sicher bei Wind"],
+    },
+  },
+  styles: { careful: "🐢 Vorsichtig", balanced: "🙂 Ausgewogen", daring: "🔥 Mutig" },
+  weather: {
+    calm: "☀️ Sonnig",
+    rainWarn: "🌧️ Regen kommt!",
+    rain: "🌧️ Es regnet",
+    windWarn: "🌬️ Wind kommt!",
+    wind: "🌬️ Windig",
+  },
+  run: {
+    lap: (n, of) => `Runde ${n} von ${of}`,
+    lastLap: "Letzte Runde",
+    bestLap: "Beste Runde! 🎉",
+    pitIn: "🏁 Boxenstopp",
+    pitting: "Boxenstopp an der Ziellinie…",
+    queued: "Aufstellen am Start…",
+    boost: "BOOST!",
+    watch: "Schau auf den grossen Bildschirm!",
+  },
+  result: {
+    oops: "Hoppla!",
+    pb: "Neue Bestzeit! 🎉",
+    finished: "Im Ziel!",
+    again: "Nochmal fahren",
+    change: "Ändern & nochmal",
+    laps: "Runden",
+    bestLapTitle: "Beste Runde",
+    section: "Abschnitt",
+    time: "Zeit",
+    vsBest: "zur Bestzeit",
+    fail: {
+      off_track: "Von der Strasse abgekommen",
+      flipped: "Überschlagen",
+      stuck: "Stecken geblieben",
+      timeout: "Zeit abgelaufen",
+    },
+    aborted: "Das Rennen wurde gestoppt",
+  },
+  sections: { hills: "Hügel", pond: "Teich", crossing: "Kreuzung", bends: "Kurven" },
+  tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Rangliste" },
+  sessionEnded:
+    "Dieses Rennen ist vorbei! Danke fürs Mitfahren. Das nächste startet auf dem grossen Bildschirm.",
+  sessionIdle: "Das Rennen hat noch nicht angefangen.",
+  quit: {
+    button: "Aufhören",
+    ask: "Spiel verlassen? Dein Rennfahrer verschwindet vom grossen Bildschirm und aus der Rangliste.",
+    askRacing:
+      "Spiel verlassen? Dein Rennfahrer hört auf zu fahren und verschwindet vom grossen Bildschirm.",
+    stay: "Weiterspielen",
+    confirm: "Ja, aufhören",
+    failed: "Aufhören hat nicht geklappt, dein Rennfahrer ist noch im Spiel",
+  },
+  errors: {
+    cooldown: "Kurz verschnaufen! Gleich geht's weiter.",
+    run_in_progress: "Dein Rennfahrer ist noch auf der Strecke.",
+    session_not_running: "Das Rennen ist gerade nicht offen.",
+    not_ready: "Dein Rennfahrer ist noch nicht fertig.",
+    game_offline: "Der grosse Bildschirm ist noch nicht verbunden.",
+    reroll_limit: "Das waren alle neuen Looks für jetzt.",
+    server_full: "Die Strecke ist gerade voll.",
+    invalid_build: "Verteil deine Sterne nochmal, sie gehen nicht auf.",
+    player_exists: "Dieses Handy hat schon einen Rennfahrer.",
+    not_found: "Bau zuerst deinen Rennfahrer.",
+    bad_request: "Das hat nicht geklappt. Versuch es nochmal!",
+    bad_message: "Das hat nicht geklappt. Versuch es nochmal!",
+    unauthorized: "Dieses Handy darf das nicht.",
+    track_locked: "Die Strecke kann während eines Rennens nicht wechseln.",
+    generic: "Etwas ist schiefgelaufen. Versuch es nochmal!",
+  },
+};
+
+export const COPY_TABLES = { en, de };
+
+/** Shown before the server has said which language to speak, so in both. */
+export const BOOT_COPY = {
+  connecting: "Connecting to the race… · Verbinde mit dem Rennen…",
+  failed: "Couldn't reach the race · Keine Verbindung zum Rennen",
+};
+
+/**
+ * Wraps a table so a missing key throws instead of reading undefined: no silent gaps, and no
+ * English standing in for German. Arrays and functions are returned as they are.
+ */
+function strict(table, path) {
+  return new Proxy(table, {
+    get(target, key) {
+      if (typeof key === "symbol") return target[key];
+      if (!Object.hasOwn(target, key)) throw new Error(`copy: no text for "${path}.${key}"`);
+      const v = target[key];
+      return v && typeof v === "object" && !Array.isArray(v) ? strict(v, `${path}.${key}`) : v;
+    },
+  });
+}
+const STRICT = { en: strict(en, "en"), de: strict(de, "de") };
+const NOT_YET = new Proxy(
+  {},
+  {
+    get(_, key) {
+      throw new Error(`copy: "${String(key)}" read before the server sent the language`);
+    },
+  },
+);
+
+/** The table in use. A live binding: setLanguage swaps it and every screen reads the new one. */
+export let COPY = NOT_YET;
+export let language = null;
+
+/** Picks the table for config.language. An unknown language throws (no fallback). */
+export function setLanguage(lang) {
+  if (lang === language) return;
+  if (!LANGUAGES.includes(lang)) throw new Error(`copy: unknown language "${lang}"`);
+  language = lang;
+  COPY = STRICT[lang];
+  if (globalThis.document) document.documentElement.lang = lang;
+}
+
+/** Text for a REST or WS error: the translated line for its code, else the code and message. */
+export function errorText(err) {
+  if (Object.hasOwn(COPY_TABLES[language].errors, err.code)) return COPY.errors[err.code];
+  return `${COPY.errors.generic} (${err.code}: ${err.message})`;
+}
