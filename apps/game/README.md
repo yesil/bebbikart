@@ -76,6 +76,33 @@ Sweep flags:
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
 - `world/landscape.gd`: the terrain features each fork alternative is built around (pond, inflow stream, jump dip, knoll, valley, hills), anchored to the course.
 
+## Village circuit (second track)
+
+A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, up the main street to the church hill (fork: ski-jump kicker or round the churchyard), down to the brook (ford through the duck pond or the covered wooden bridge), past the mill, along the south edge (open causeway over the windy meadow or the sheltered Laubengasse), then round the fountain to the line. Same sections and forks as the countryside, so builds, splits and coach tips carry over. A run finishes after `lapsPerRun` laps (3) or at the next crossing after "Pit in" (`run.stop`); the best lap ranks. The facilitator picks the track in config (`track`); in mock mode use `--track=village`.
+
+| File | What |
+|---|---|
+| `sim/village_course.gd` | The loop (solves two straights so it closes exactly) |
+| `world/village/village_plan.gd` | Pond, brook, square, church, mill, school and every house, anchored to the course |
+| `world/village/village_terrain.gd` | Terrain heights and layers: village slope, mountain ring with snow |
+| `world/village/village_kit.gd` | Buildings and props from the Kenney Fantasy Town Kit (Swiss palette) and Quaternius plants |
+| `tools/village_map.gd` | `docs/village_map.svg` plus geometry checks (exit 1 on failure) |
+| `tools/village_laps.gd` | Headless lap test: routes x weather, random builds, a 20-racer crowd |
+| `tools/bake_village.gd` | Bakes `world/village/village_world.tscn` (stages terrain, roads, water, structures, buildings, props) |
+| `tools/village_world_check.gd` | Checks the baked world: parts present, terrain under the roads, nothing on the track, nothing floating |
+| `tools/village_shots.gd` | Fixed-viewpoint screenshots (windowed, `-- --track=village --out=DIR`) |
+
+After editing the village course or plan:
+
+```sh
+godot --headless --path . --script res://tools/village_map.gd
+godot --headless --path . --script res://tools/village_laps.gd
+godot --headless --path . --script res://tools/bake_village.gd
+godot --headless --path . --script res://tools/village_world_check.gd
+```
+
+`world/village/village_decor.tscn` (optional) is loaded on top for hand-placed extras; the bake never touches it.
+
 ## Balance snapshot
 
 Results from `sweep --builds=60 --seeds=2`, solo racers with perfect boosts, on the 2026-10-31 course redesign (arc-built routes, Y-split forks).
