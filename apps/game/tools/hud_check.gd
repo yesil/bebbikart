@@ -18,6 +18,7 @@ const VillageCourse = preload("res://sim/village_course.gd")
 const Sim = preload("res://sim/sim.gd")
 const Builds = preload("res://sim/builds.gd")
 const Messages = preload("res://net/messages.gd")
+const Tuning = preload("res://sim/tuning.gd")
 
 ## Just enough of sim/sim.gd for the HUD: nobody on the track.
 class FakeSim:
@@ -84,7 +85,7 @@ func _initialize() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3
 	for i in 16:
-		race.add_run("r%d" % i, "p%d" % i, Builds.random_build(rng))
+		race.add_run("r%d" % i, "p%d" % i, Builds.random_build(rng), Tuning.DEFAULT_SIZE)
 	for t in 60 * 6:
 		race.step()
 		race.outbox.clear()
@@ -102,7 +103,7 @@ func _initialize() -> void:
 	vcfg["lapsPerRun"] = 3
 	var loop := Sim.new(VillageCourse.new(), vcfg, 4)
 	for i in 3:
-		loop.add_run("v%d" % i, "p%d" % i, Builds.random_build(rng), 2)
+		loop.add_run("v%d" % i, "p%d" % i, Builds.random_build(rng), Tuning.DEFAULT_SIZE, 2)
 	for t in 60 * 4:
 		loop.step()
 		loop.outbox.clear()

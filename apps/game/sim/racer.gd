@@ -47,6 +47,8 @@ var a_long := 0.0
 # Stats (derived)
 var top := 16.0
 var accel := 7.0
+var radius := Tuning.RADIUS    # half width of its footprint (sim.gd _collide)
+var half_len := Tuning.RADIUS  # half length, nose or tail to the middle
 var grip_f := 0.86
 var mass := 1.5
 
@@ -111,8 +113,11 @@ var best_stretches: Array = [] # the best lap's (payload form)
 
 
 ## `course` is sim/course.gd or sim/village_course.gd (same segment interface; a loop track has `loop`).
-func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, cfg: Dictionary, seed_: int) -> void:
+## size: the built toy's half width and half length (Tuning.DEFAULT_SIZE for headless racers).
+func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, cfg: Dictionary, seed_: int, size: Vector2) -> void:
 	run_id = p_run_id
+	radius = clampf(size.x, Tuning.SIZE_HALF_WIDTH.x, Tuning.SIZE_HALF_WIDTH.y)
+	half_len = clampf(size.y, Tuning.SIZE_HALF_WIDTH.x, Tuning.SIZE_HALF_LENGTH_MAX)
 	player_id = p_player_id
 	build = p_build
 	style = String(build.get("style", "balanced"))
@@ -173,6 +178,12 @@ func best_lap_ms() -> int:
 
 func route() -> Route:
 	return seg["route"]
+
+
+## How much longer (per end) than a default-sized kart: the traffic queries measure gaps nose to
+## tail, so default karts see exactly the old centre distances.
+func extra_len() -> float:
+	return half_len - Tuning.RADIUS
 
 
 func half_width() -> float:

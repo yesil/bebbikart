@@ -63,7 +63,7 @@ func run_group(builds: Array, weather: String, seed_: int, collisions: bool, lau
 	var guard := 0
 	while results.size() < ids.size() and guard < 60 * 600:
 		if added < ids.size() and guard >= added * launch_gap_ticks:
-			sim.add_run(ids[added], "p%d" % added, builds[added])
+			sim.add_run(ids[added], "p%d" % added, builds[added], Tuning.DEFAULT_SIZE)
 			added += 1
 		guard += 1
 		for r in sim.racers:
@@ -211,7 +211,7 @@ func _countryside() -> void:
 			var w: Array = WEATHERS[wname]
 			var sim := Sim.new(c, cfg, 300 + i)
 			sim.weather.force(w[0], w[1], 45.0)
-			sim.add_run("c%d" % i, "p0", b)
+			sim.add_run("c%d" % i, "p0", b, Tuning.DEFAULT_SIZE)
 			for t in 60 * 120:
 				sim.step()
 				for m in sim.outbox:

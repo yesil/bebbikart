@@ -102,8 +102,13 @@ const BOOST_WEAK_DRIVE := 0.75    # share of its target speed the spinning kart 
 const BOOST_WEAK_KICK := 0.8      # m/s sideways fishtail, to the outside of a bend
 const BOOST_WEAK_WOBBLE := 0.3
 
-# Collisions (circles in (s, d) space)
-const RADIUS := 0.85
+# Collisions. Each racer is its footprint rectangle along its yaw, as wide and long as its built
+# toy (main.gd measures it). Sizes are clamped so a big hat or wings never make a racer a wall.
+# Headless tools and mock racers pass DEFAULT_SIZE.
+const RADIUS := 0.85               # the old fixed circle's radius; also the kart clearance of course.gd
+const DEFAULT_SIZE := Vector2(0.6, 0.85)       # half width, half length (m): a typical kart
+const SIZE_HALF_WIDTH := Vector2(0.45, 0.95)   # clamp (two of the widest still fit the 2 m start lanes)
+const SIZE_HALF_LENGTH_MAX := 1.3
 const RESTITUTION := 0.3
 const MASS_PER_STAB := 0.25
 const BUMP_LOG_IMPULSE := 1.2

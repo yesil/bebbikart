@@ -27,6 +27,7 @@ const VILLAGE_WORLD_SCENE := "res://world/village/village_world.tscn"
 const VILLAGE_DECOR_SCENE := "res://world/village/village_decor.tscn"
 const Sim = preload("res://sim/sim.gd")
 const Racer = preload("res://sim/racer.gd")
+const Tuning = preload("res://sim/tuning.gd")
 const Messages = preload("res://net/messages.gd")
 const MockNet = preload("res://net/mock_net.gd")
 const ServerNet = preload("res://net/server_net.gd")
@@ -38,6 +39,7 @@ const DECOR_SCENE := "res://world/decor.tscn"
 const LIGHTING_SCENE := "res://world/environment.tscn"
 const Viewpoints = preload("res://world/viewpoints.gd")
 const RacerView = preload("res://world/racer_view.gd")
+const ToyFootprint = preload("res://world/toy_footprint.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
 const CameraDirector = preload("res://world/camera_director.gd")
@@ -83,6 +85,7 @@ var making := {}           # playerId -> design stage last shown (roster stage)
 var results: Array = []    # recent finished/failed lines
 var camera: CameraRig
 var kit_specs: Array = []      # --kit: sample RacerSpecs for the fake racers
+var footprints := {}           # RacerSpec hash -> ToyFootprint result (the sim's size for that toy)
 var director: CameraDirector   # which racer the camera follows, and when it switches
 var cam_hud: CameraHud         # on-camera name, cut pop, picture-in-picture second camera
 var hud: RaceHud               # kart tags with places, race board, standings, banners, podium
@@ -517,6 +520,23 @@ func _load_countryside_world() -> bool:
 	return true
 
 
+## The sim's size for a racer (half width, half length): its built toy's footprint, measured once
+## per RacerSpec. A toy that can't be measured is an error on the big screen, never a default:
+## returns Vector2.ZERO after reporting it.
+func _footprint(pl: Dictionary, spec: Dictionary) -> Vector2:
+	var key := JSON.stringify(spec).hash()
+	if not footprints.has(key):
+		footprints[key] = ToyFootprint.of_spec(spec)
+	var fp: Dictionary = footprints[key]
+	if fp.has("error"):
+		var err := I18n.f("log.no_footprint", [pl["runId"], nicks.get(pl["playerId"], "?"), fp["error"]])
+		push_error(err)
+		_result(err.left(160))
+		hud.problem(err.left(300))
+		return Vector2.ZERO
+	return fp["size"]
+
+
 ## Course for a TrackId, or null after reporting an unknown track and quitting.
 func _make_course(id: String):
 	match id:
@@ -662,18 +682,26 @@ func _handle(msg: Dictionary) -> void:
 					_result(err.left(160))
 					hud.problem(err.left(300))
 					return
-				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], laps)
+				var size := _footprint(pl, spec)
+				if size == Vector2.ZERO:
+					return
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], size, laps)
 				v = KitRacerView.new()
 				add_child(v)
 				v.setup(r, spec, assets.drawing_for(pl["playerId"]), nicks.get(pl["playerId"], "?"))
 			elif not kit_specs.is_empty():
-				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], laps)
 				var i: int = net.players.map(func(p): return p["playerId"]).find(pl["playerId"])
+				var kspec: Dictionary = kit_specs[maxi(i, 0) % kit_specs.size()]
+				var size := _footprint(pl, kspec)
+				if size == Vector2.ZERO:
+					return
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], size, laps)
 				v = KitRacerView.new()
 				add_child(v)
-				v.setup(r, kit_specs[maxi(i, 0) % kit_specs.size()], null, nicks.get(pl["playerId"], "?"))
+				v.setup(r, kspec, null, nicks.get(pl["playerId"], "?"))
 			else:
-				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], laps)
+				# Mock placeholder boxes: the default kart size, on purpose.
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], Tuning.DEFAULT_SIZE, laps)
 				v = RacerView.new()
 				add_child(v)
 				v.setup(r, colors.get(pl["playerId"], Color.WHITE), nicks.get(pl["playerId"], "?"))

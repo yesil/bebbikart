@@ -118,7 +118,7 @@ func _drive(course, builds: Array, seed_: int, crowd: bool) -> Dictionary:
 	var trng := RandomNumberGenerator.new()
 	trng.seed = seed_ * 31 + builds.size()
 	for i in builds.size():
-		mine["r%d" % i] = sim.add_run("r%d" % i, "p%d" % i, builds[i])
+		mine["r%d" % i] = sim.add_run("r%d" % i, "p%d" % i, builds[i], Tuning.DEFAULT_SIZE)
 		taps["r%d" % i] = [int((1.5 + trng.randf() * 2.0) * Tuning.HZ), int((8.0 + trng.randf() * 2.0) * Tuning.HZ), int((14.0 + trng.randf() * 2.0) * Tuning.HZ)]
 	var out := {"early": 0, "early_bumped": 0, "bumps": 0, "start_bumps": 0, "start_loss": 0, "release_last": 0.0, "reasons": {}}
 	var released := 0
@@ -212,7 +212,7 @@ func _drive_one(course, build: Dictionary, seed_: int, weather: String, tap_at: 
 	var sim := Sim.new(course, cfg, seed_)
 	sim.emit_messages = false
 	sim.weather.force(float(ONETAP_WEATHER[weather]), 0.0, 600.0)
-	var r: Racer = sim.add_run("r0", "p0", build)
+	var r: Racer = sim.add_run("r0", "p0", build, Tuning.DEFAULT_SIZE)
 	var out := {"failed": "", "tapped": false, "slipped": false, "gs": 0.0, "v": 0.0}
 	for t in int(EARLY_S * Tuning.HZ):
 		if tap_at >= 0.0 and not out["tapped"] and r.is_active() and r.ticks >= int(tap_at * Tuning.HZ) \

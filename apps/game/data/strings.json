@@ -130,6 +130,7 @@
     "hud.best_lap": "best lap",
     "hud.secs_live": "%.1f s",
     "log.no_laps": "ERROR run %s (%s): no lap count from the server for this loop run",
+    "log.no_footprint": "ERROR run %s (%s): can't measure the racer's size: %s",
     "hud.laps_missing": "laps?"
   },
   "de": {
@@ -262,6 +263,7 @@
     "hud.best_lap": "beste Runde",
     "hud.secs_live": "%.1f s",
     "log.no_laps": "FEHLER Lauf %s (%s): keine Rundenzahl vom Server für diesen Rundkurs-Lauf",
+    "log.no_footprint": "FEHLER Lauf %s (%s): Grösse des Rennfahrers nicht messbar: %s",
     "hud.laps_missing": "Runden?"
   }
 }

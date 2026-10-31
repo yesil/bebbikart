@@ -44,14 +44,19 @@ func emit(type: String, payload: Dictionary) -> void:
 	outbox.append({"type": type, "payload": payload})
 
 
+## size: the racer's half width and half length from its built toy (Tuning.DEFAULT_SIZE for
+## headless and mock racers); a missing size is a bug, so the run is refused.
 ## laps: the laps this run races, from the server (run.start lapsPerRun); tools without a server
 ## pass none and the racer takes config.lapsPerRun.
-func add_run(run_id: String, player_id: String, build: Dictionary, laps := 0) -> Racer:
+func add_run(run_id: String, player_id: String, build: Dictionary, size: Vector2, laps := 0) -> Racer:
 	if not course.errors.is_empty():
 		push_error("sim: refusing run %s, course %s is broken: %s" % [run_id, course.NAME, "; ".join(course.errors)])
 		return null
+	if size.x <= 0.0 or size.y <= 0.0:
+		push_error("sim: refusing run %s: no footprint size (%s)" % [run_id, size])
+		return null
 	var r := Racer.new()
-	r.setup(run_id, player_id, build, course, config, rng.randi())
+	r.setup(run_id, player_id, build, course, config, rng.randi(), size)
 	if laps > 0:
 		r.laps_max = laps
 	by_run[run_id] = r
@@ -75,7 +80,7 @@ func _park_on_grid(r: Racer) -> void:
 		taken[grid_slot[id]] = true
 	var best := INF
 	for lane in Tuning.START_LANES:
-		if taken.has(lane) or _start_gap(lane) < Tuning.START_GAP + Tuning.RADIUS * 2.0:
+		if taken.has(lane) or _start_gap(lane, r) < Tuning.START_GAP:
 			continue
 		if absf(lane - home) < absf(best - home):
 			best = lane
@@ -157,7 +162,7 @@ func _release_from_queue() -> void:
 		var best_lane := 0.0
 		var best_miss := INF
 		for lane in Tuning.START_LANES:
-			if _start_gap(lane) < Tuning.START_GAP + Tuning.RADIUS * 2.0:
+			if _start_gap(lane, q) < Tuning.START_GAP:
 				continue
 			if absf(lane - home) < best_miss:
 				best_miss = absf(lane - home)
@@ -176,18 +181,19 @@ func _release_from_queue() -> void:
 		emit("game.run.started", {"runId": q.run_id})
 
 
-## Free metres ahead of a start slot (1000 when nobody is near it).
-func _start_gap(lane: float) -> float:
+## Free metres between racer q's nose in a start slot and the nearest kart there (1000 when
+## nobody is near it), each counted at its own size.
+func _start_gap(lane: float, q: Racer) -> float:
 	var gap := 1000.0
 	for o in racers:
 		var r: Racer = o
-		if absf(r.d - lane) >= Tuning.RADIUS * 2.0:
+		if absf(r.d - lane) >= r.radius + q.radius:
 			continue
 		if r.seg_idx == 0:
-			gap = minf(gap, r.ls)
+			gap = minf(gap, r.ls - r.half_len - q.half_len)
 		elif r.looping and r.seg_idx == r.segs.size() - 1:
 			# A lapping racer about to cross the line counts as close too.
-			gap = minf(gap, r.route().length - r.ls)
+			gap = minf(gap, r.route().length - r.ls - r.half_len - q.half_len)
 	return gap
 
 
@@ -201,8 +207,10 @@ func racer_ahead(me: Racer, dist: float, lat: float):
 		var r: Racer = o
 		if r == me or r.seg_id != me.seg_id:
 			continue
-		var ds := r.ls - me.ls
-		if ds > 0.0 and ds < best_ds and absf(r.d - me.d_target) < lat + 0.5 and absf(r.d - me.d) < lat + 1.0:
+		# Gaps nose to tail and side by side at each racer's own size (default karts: as before).
+		var ds := r.ls - me.ls - r.extra_len() - me.extra_len()
+		var wide := r.radius + me.radius - Tuning.RADIUS * 2.0
+		if ds > 0.0 and ds < best_ds and absf(r.d - me.d_target) < lat + 0.5 + wide and absf(r.d - me.d) < lat + 1.0 + wide:
 			best = r
 			best_ds = ds
 	return best
@@ -215,50 +223,52 @@ func lane_free(me: Racer, d: float, dist: float) -> float:
 		var r: Racer = o
 		if r == me or r.seg_id != me.seg_id:
 			continue
-		var ds := r.ls - me.ls
-		if ds > -1.5 and absf(r.d - d) < Tuning.RADIUS * 2.2:
+		var ds := r.ls - me.ls - r.extra_len() - me.extra_len()
+		if ds > -1.5 and absf(r.d - d) < (r.radius + me.radius) * 1.1:
 			free = minf(free, maxf(0.0, ds))
 	return free
 
 
 # ---------------------------------------------------------------- collisions
 
-## Racers are circles in the world's ground plane, not per road piece: where a fork splits or
-## merges, or the loop wraps, karts on different pieces are side by side and must not pass
-## through each other. Each push and impulse is split back into the racer's own (s, d) frame.
+## Racers are their footprint rectangles in the world's ground plane (the built toy's half width
+## and half length, along its yaw), not per road piece: where a fork splits or merges, or the loop
+## wraps, karts on different pieces are side by side and must not pass through each other. An
+## overlapping pair is pushed apart along the axis it overlaps least on (separating axes); each
+## push and impulse is split back into the racer's own (s, d) frame.
 func _collide() -> void:
 	var n := racers.size()
 	var pos := PackedVector3Array()
 	var tan := PackedVector3Array()
 	var nor := PackedVector3Array()
+	var fwd := PackedVector2Array()  # where the body points on the ground plane (its yaw)
 	pos.resize(n)
 	tan.resize(n)
 	nor.resize(n)
+	fwd.resize(n)
 	for i in n:
 		var r: Racer = racers[i]
 		var rt := r.route()
 		pos[i] = r.world_pos()
 		tan[i] = rt.tangent_at(r.ls)
 		nor[i] = rt.normal_at(r.ls)
-	var min_d := Tuning.RADIUS * 2.0
+		fwd[i] = Vector2(sin(r.yaw()), cos(r.yaw()))
 	for i in n:
 		for j in range(i + 1, n):
 			var a: Racer = racers[i]
 			var b: Racer = racers[j]
 			var dx := pos[j].x - pos[i].x
 			var dz := pos[j].z - pos[i].z
-			if absf(dx) >= min_d or absf(dz) >= min_d or absf(a.y - b.y) > 1.2:
+			var reach := a.half_len + a.radius + b.half_len + b.radius  # beyond any corner
+			if absf(dx) >= reach or absf(dz) >= reach or absf(a.y - b.y) > 1.2:
 				continue
-			var dist := sqrt(dx * dx + dz * dz)
-			if dist >= min_d:
+			var contact := _box_contact(Vector2(dx, dz), fwd[i], Vector2(a.radius, a.half_len), fwd[j], Vector2(b.radius, b.half_len))
+			if contact.is_empty():
 				continue
-			# World normal a -> b (along a's heading if they sit exactly on top of each other).
-			var nw := tan[i]
-			if dist > 0.0001:
-				nw = Vector3(dx / dist, 0.0, dz / dist)
+			var overlap: float = contact[0]
+			var nw: Vector3 = contact[1]  # world normal a -> b
 			var ima := 1.0 / a.mass
 			var imb := 1.0 / b.mass
-			var overlap := min_d - dist
 			var share_a := ima / (ima + imb)
 			var push_a := -nw * overlap * share_a
 			var push_b := nw * overlap * (1.0 - share_a)
@@ -267,9 +277,19 @@ func _collide() -> void:
 			if a.seg_id != b.seg_id:
 				# Two branches of a fork where they still overlap (split, merge, the loop's line):
 				# their lines converge, so the karts touch tick after tick. They only rub, and are
-				# never shoved off their own road by a kart driving another one.
-				a.d = _shove(a, push_a.dot(nor[i]))
-				b.d = _shove(b, push_b.dot(nor[j]))
+				# never shoved off their own road by a kart driving another one. What the road's edge
+				# keeps them from sliding apart sideways, they settle along the road: the one behind
+				# waits (two wide karts can't fit side by side where the lanes split).
+				var da := _shove(a, push_a.dot(nor[i]))
+				var db := _shove(b, push_b.dot(nor[j]))
+				var rest := overlap - absf(da - a.d) - absf(db - b.d)
+				a.d = da
+				b.d = db
+				if rest > 0.0:
+					var behind: Racer = a if Vector2(dx, dz).dot(Vector2(tan[i].x, tan[i].z)) >= 0.0 else b
+					var front: Racer = b if behind == a else a
+					behind.ls = maxf(0.0, behind.ls - rest)
+					behind.v = minf(behind.v, front.v)
 				continue
 			a.d += push_a.dot(nor[i])
 			b.d += push_b.dot(nor[j])
@@ -300,6 +320,28 @@ func _collide() -> void:
 			victim.got_bumped(hitter.player_id)
 			hitter.bumped_other(victim.player_id)
 			emit("sim.bump", {"hitter": hitter.run_id, "victim": victim.run_id, "pos": victim.world_pos()})
+
+
+## Two footprint rectangles, b's centre `d` from a's, each with its forward direction and half
+## size (x across, y along): [depth, world normal a -> b] along the axis they overlap least on,
+## or [] when apart.
+static func _box_contact(d: Vector2, fa: Vector2, ha: Vector2, fb: Vector2, hb: Vector2) -> Array:
+	var sa := Vector2(fa.y, -fa.x)
+	var sb := Vector2(fb.y, -fb.x)
+	var depth := INF
+	var axis := Vector2.ZERO
+	for ax in [fa, sa, fb, sb]:
+		var a: Vector2 = ax
+		var ra := ha.y * absf(fa.dot(a)) + ha.x * absf(sa.dot(a))
+		var rb := hb.y * absf(fb.dot(a)) + hb.x * absf(sb.dot(a))
+		var along := d.dot(a)
+		var o := ra + rb - absf(along)
+		if o <= 0.0:
+			return []
+		if o < depth:
+			depth = o
+			axis = a if along >= 0.0 else -a
+	return [depth, Vector3(axis.x, 0.0, axis.y)]
 
 
 ## Racer r's lateral position after a sideways push of dd, kept on the road (inside where a

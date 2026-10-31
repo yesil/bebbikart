@@ -15,6 +15,7 @@ const Sim = preload("res://sim/sim.gd")
 const Racer = preload("res://sim/racer.gd")
 const Builds = preload("res://sim/builds.gd")
 const Messages = preload("res://net/messages.gd")
+const Tuning = preload("res://sim/tuning.gd")
 
 const SCENES := {
 	"countryside": ["res://world/course_world.tscn", "res://world/decor.tscn"],
@@ -156,7 +157,7 @@ func _drive() -> void:
 	q2.shape = box
 	for t in ticks:
 		if sim.active_count() < racers and t % 30 == 0:
-			sim.add_run("r%d" % launched, "p%d" % launched, Builds.random_build(rng))
+			sim.add_run("r%d" % launched, "p%d" % launched, Builds.random_build(rng), Tuning.DEFAULT_SIZE)
 			launched += 1
 		for o in sim.racers:
 			var r: Racer = o

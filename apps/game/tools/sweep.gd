@@ -96,7 +96,7 @@ func run_group(builds: Array, weather: String, seed_: int, collisions: bool) -> 
 	for i in builds.size():
 		var id := "r%d" % i
 		ids.append(id)
-		sim.add_run(id, "p%d" % i, builds[i])
+		sim.add_run(id, "p%d" % i, builds[i], Tuning.DEFAULT_SIZE)
 	var results := {}
 	var racers := {}
 	for id in ids:
@@ -324,7 +324,7 @@ func _trace_one(spec: String) -> void:
 	var sim := Sim.new(course, cfg, 1017)
 	var w: Array = WEATHERS[weather]
 	sim.weather.force(w[0], w[1], 90.0)
-	sim.add_run("r0", "p0", b)
+	sim.add_run("r0", "p0", b, Tuning.DEFAULT_SIZE)
 	print(Builds.describe(b), "  weather ", weather)
 	for i in 60 * 120:
 		for r in sim.racers:
@@ -364,7 +364,7 @@ func vrun(build: Dictionary, weather: String, k: int) -> Dictionary:
 	var w: Array = WEATHERS[weather]
 	# Wind from evenly spread directions over the seeds, so every build meets the same gusts.
 	sim.weather.force(w[0], w[1], fposmod(40.0 + 360.0 * k / maxf(1.0, seeds), 360.0))
-	var r: Racer = sim.add_run("r0", "p0", build)
+	var r: Racer = sim.add_run("r0", "p0", build, Tuning.DEFAULT_SIZE)
 	if r == null:
 		push_error("sweep: the sim did not create a racer (script error above?)")
 		vbroken = true
