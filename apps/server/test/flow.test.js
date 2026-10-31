@@ -410,3 +410,37 @@ test("game manager sets track and laps from the big screen; a new session starts
   game.ws.close();
   phone.ws.close();
 });
+
+test("autostart: a session that runs out is followed by a new one, also across restarts", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "bk-session-"));
+  const mk = (over) => ({
+    ...settings,
+    port: 0,
+    dataDir: dir,
+    dbFile: join(dir, "db.sqlite"),
+    config: { ...settings.config, sessionMinutes: 0.003 }, // 180 ms
+    ...over,
+  });
+  const get = async (s) =>
+    (await (await fetch(`http://localhost:${s.server.port}/api/state`)).json()).session;
+
+  let s = startServer(mk({}), { log: () => {} });
+  const first = await get(s);
+  expect(first.status).toBe("running");
+  await Bun.sleep(400);
+  const next = await get(s);
+  expect(next.status).toBe("running");
+  expect(next.id).not.toBe(first.id);
+  s.stop();
+
+  // Manual mode: time runs out and the session stays ended.
+  s = startServer(mk({ autoStart: false }), { log: () => {} });
+  await Bun.sleep(400);
+  expect((await get(s)).status).toBe("ended");
+  s.stop();
+
+  // Back in autostart: the ended session is replaced at boot.
+  s = startServer(mk({ config: { ...settings.config } }), { log: () => {} });
+  expect((await get(s)).status).toBe("running");
+  s.stop();
+});

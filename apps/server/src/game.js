@@ -201,7 +201,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     clearTimeout(endTimer);
     if (session.status !== "running" || !session.endsAt) return;
     const ms = Date.parse(session.endsAt) - Date.now();
-    endTimer = setTimeout(endSession, Math.max(0, Math.min(ms, 2 ** 31 - 1)));
+    endTimer = setTimeout(timeUp, Math.max(0, Math.min(ms, 2 ** 31 - 1)));
   }
   // A session that ended is over: starting again opens a new session with a fresh
   // leaderboard (racers stay). Bests from another track or session never carry over.
@@ -236,6 +236,14 @@ export function createGame({ db, settings, hub, log = console.log }) {
     pushRoster();
     pushLeaderboard();
     for (const id of players.keys()) pushPlayer(id);
+  }
+  // The session's time ran out. With autostart (the default) the next session opens right
+  // away, so phones can always race; with BK_AUTOSTART=0 the facilitator starts the next one.
+  function timeUp() {
+    endSession();
+    log(`[session] ${session.id} time is up`);
+    if (settings.autoStart) startSession(config.sessionMinutes * 60_000);
+    else log("[session] waiting for the game manager or the admin to start the next session");
   }
   function endSession() {
     if (session.status === "ended") return session;
@@ -629,7 +637,10 @@ export function createGame({ db, settings, hub, log = console.log }) {
     }
   }
   if (!session) newSession();
-  if (settings.autoStart && session.status === "idle") startSession();
+  // Autostart: a session that ended (or ran out while the server was down) is followed by a
+  // new one at boot, never left ended.
+  if (settings.autoStart && session.status !== "running")
+    startSession(config.sessionMinutes * 60_000);
   else if (session.status === "running") scheduleEnd();
 
   return {

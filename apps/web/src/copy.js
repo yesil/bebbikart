@@ -116,7 +116,7 @@ export const COPY = {
   },
   sections: { hills: "Hills", pond: "Pond", crossing: "Crossing", bends: "Bends" },
   tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Leaderboard" },
-  sessionEnded: "The race is over! Thanks for racing.",
+  sessionEnded: "This race is over! Thanks for racing. The next one starts on the big screen.",
   sessionIdle: "The race hasn't started yet.",
   errors: {
     cooldown: "Catch your breath! Ready in a moment.",

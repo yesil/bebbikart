@@ -28,7 +28,7 @@ export function createHub({ settings, log = console.log }) {
     gameOnline: () => gameWs !== null,
     deviceOnline: (deviceId) => (phones.get(deviceId)?.size ?? 0) > 0,
     toPhone(playerId, type, payload) {
-      const deviceId = game.players.get(playerId)?.deviceId;
+      const deviceId = game?.players.get(playerId)?.deviceId;
       for (const ws of phones.get(deviceId) ?? []) send(ws, "serverToPhone", type, payload);
     },
     toPhones(type, payload) {

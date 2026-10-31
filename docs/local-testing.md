@@ -25,7 +25,7 @@ This starts three things:
 | Godot game, connected with `--server` | a window on the Mac |
 
 The server prints the exact phone URLs at start-up (it detects the Mac's Wi-Fi IP; set `PUBLIC_URL` to override).
-A session starts automatically so you can race straight away (`BK_AUTOSTART=0` to start it from the admin API instead).
+A session starts automatically so you can race straight away. A session lasts `sessionMinutes` (30); when it runs out the next one starts right away with a fresh leaderboard, and a server that boots on an ended session starts a new one. With `BK_AUTOSTART=0` the session stays ended until the game manager or the admin API starts the next one, and phones show "This race is over".
 
 On the phone (same Wi-Fi as the Mac), open `http://<mac-ip>:5173`:
 
@@ -77,7 +77,7 @@ The garage has a **New drawings** button to redo a racer's photos without resett
 | `PUBLIC_URL` | `http://<wifi-ip>:8080` | Used in asset URLs and the printed join URL |
 | `BK_GAME_KEY` | `bebbikart-dev` | Game must send the same key (`--game-key=` or `BK_GAME_KEY`) |
 | `BK_ADMIN_PIN` | `1234` | Header `x-admin-pin` for `/api/admin/*` |
-| `BK_AUTOSTART` | `1` | Start a session at boot |
+| `BK_AUTOSTART` | `1` | Keep a session running: start one at boot and the next one when time runs out |
 | `BK_DATA_DIR` | `apps/server/data` | SQLite db, uploads and asset packages (git-ignored) |
 
 Handy admin calls:
