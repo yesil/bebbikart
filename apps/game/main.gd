@@ -101,6 +101,9 @@ var quality := ""
 var audio: AudioDirector
 ## Language sent to the server and not yet echoed in config.updated (other updates are stale).
 var language_sent := ""
+var _village_plan = null   # world/village/village_plan.gd, built on a worker for the camera blockers
+var _plan_task := -1       # WorkerThreadPool task building it; -1 when none is running
+var _plan_terrain: Node = null
 
 
 func _ready() -> void:
@@ -308,7 +311,6 @@ func _setup_camera_director() -> bool:
 	director.cycle_s = float(cycle)
 	cam_hud = CameraHud.new()
 	add_child(cam_hud)
-	cam_hud.blockers = camera.blockers
 	var inset := str(args.get("inset", _saved_setting("camera", "inset", "face")))
 	if not cam_hud.set_inset(inset):
 		get_tree().quit(1)
@@ -554,20 +556,35 @@ func _load_village_world() -> bool:
 
 
 ## The houses and the covered bridge's roof the cameras keep out of (world/camera_blockers.gd), on
-## the baked terrain's ground. Quits with an error if a house has no ground under it.
+## the baked terrain's ground. The village plan behind them takes about 2 s to lay out, so it is
+## built on a worker thread and the cameras get their boxes when it is done (well before the
+## first racer leaves the grid); _finish_village_blockers picks it up.
 func _village_blockers(terrain: Node) -> bool:
-	var data = terrain.get("data")
-	if data == null:
+	if terrain.get("data") == null:
 		push_error("camera blockers: the village terrain has no height data; re-run tools/bake_village.gd")
 		get_tree().quit(1)
 		return false
+	_plan_terrain = terrain
+	_plan_task = WorkerThreadPool.add_task(func() -> void: _village_plan = CameraBlockers.VillagePlan.new(course),
+		false, "village plan for the camera blockers")
+	return true
+
+
+## Once the worker has laid out the village plan: build the boxes on the terrain's ground and hand
+## them to both cameras. Quits with an error if a house has no ground under it.
+func _finish_village_blockers() -> void:
+	if _plan_task < 0 or not WorkerThreadPool.is_task_completed(_plan_task):
+		return
+	WorkerThreadPool.wait_for_task_completion(_plan_task)
+	_plan_task = -1
+	var data = _plan_terrain.get("data")
 	var b := CameraBlockers.new()
-	if not b.add_village(course, func(x: float, z: float) -> float: return float(data.call("get_height", Vector3(x, 0.0, z)))):
+	if not b.add_village(course, func(x: float, z: float) -> float: return float(data.call("get_height", Vector3(x, 0.0, z))), _village_plan):
 		push_error("camera blockers: %s" % "; ".join(b.errors))
 		get_tree().quit(1)
-		return false
+		return
 	camera.blockers = b
-	return true
+	cam_hud.blockers = b
 
 
 ## A shot of each village fork from just before its split, looking down both branches.
@@ -780,6 +797,7 @@ func _result(line: String) -> void:
 
 func _process(delta: float) -> void:
 	run_time += delta
+	_finish_village_blockers()
 	var racing: Array = sim.racers.duplicate()
 	# On a loop, laps first, then position in the lap.
 	racing.sort_custom(func(a, b): return a.lap + a.progress() > b.lap + b.progress())
@@ -955,6 +973,9 @@ func _quit() -> void:
 	if quitting:
 		return
 	quitting = true
+	if _plan_task >= 0:  # never leave the worker running into shutdown
+		WorkerThreadPool.wait_for_task_completion(_plan_task)
+		_plan_task = -1
 	if sim == null:  # startup failed and already reported; nothing to summarise
 		get_tree().quit(1)
 		return

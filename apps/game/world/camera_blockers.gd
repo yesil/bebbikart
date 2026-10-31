@@ -25,10 +25,12 @@ func add_box(xf: Transform3D, half: Vector3) -> void:
 
 
 ## Every house of the village plan, standing on the lowest ground height_at(x, z) gives under its
-## footprint (as tools/bake_village.gd places it), and the covered bridge's roof. Returns false
+## footprint (as tools/bake_village.gd places it), and the covered bridge's roof. Pass the plan if
+## it is already built (it takes about 2 s; main.gd builds it on a worker thread). Returns false
 ## with `errors` filled if the ground is missing under a house.
-func add_village(course, height_at: Callable) -> bool:
-	var plan := VillagePlan.new(course)
+func add_village(course, height_at: Callable, plan: VillagePlan = null) -> bool:
+	if plan == null:
+		plan = VillagePlan.new(course)
 	for b in plan.buildings:
 		var floor_y := INF
 		for q in VillagePlan.sample_points(VillagePlan.footprint(b)):
