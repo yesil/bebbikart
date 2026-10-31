@@ -234,3 +234,125 @@ test("a DeepSeek failure fails the job loudly: no sample design, phone sees the 
   expect(me.status).toBe("draft");
   expect(me.asset).toBeUndefined();
 });
+
+test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
+  settings.designClient.complete = async () =>
+    JSON.stringify({ check: {}, spec: MOCK_DESIGNS.pair02.spec, notes: "test" });
+  const admin = { "x-admin-pin": settings.adminPin, "content-type": "application/json" };
+  const locked = await fetch(`${base}/api/admin/config`, {
+    method: "PATCH",
+    headers: admin,
+    body: JSON.stringify({ track: "village" }),
+  });
+  expect(locked.status).toBe(409);
+  expect((await locked.json()).error.code).toBe("track_locked");
+  await fetch(`${base}/api/admin/session/end`, { method: "POST", headers: admin });
+  const patched = await fetch(`${base}/api/admin/config`, {
+    method: "PATCH",
+    headers: admin,
+    body: JSON.stringify({ track: "village" }),
+  });
+  expect((await patched.json()).track).toBe("village");
+  await fetch(`${base}/api/admin/session/start`, { method: "POST", headers: admin, body: "{}" });
+
+  const game = client({}, { role: "game", gameKey: settings.gameKey });
+  await game.start();
+  await game.wait("welcome");
+  const dev = await fetch(`${base}/api/device`, { method: "POST" });
+  const cookie = dev.headers.get("set-cookie").split(";")[0];
+  await fetch(`${base}/api/players`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ nickname: "Lapper" }),
+  });
+  const phone = client({ cookie }, { role: "phone" });
+  await phone.start();
+  await phone.wait("welcome");
+  const form = new FormData();
+  for (const [k, f] of [
+    ["character", "pair02-character-robot.jpg"],
+    ["vehicle", "pair02-vehicle-rocket-shoe.jpg"],
+  ])
+    form.append(k, new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }));
+  await fetch(`${base}/api/players/me/drawings`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  await phone.wait("player.updated", (p) => p.status === "ready", 20000);
+
+  phone.send("phoneToServer", "phone.go", {});
+  const start = await game.wait("run.start", (p) => p.playerId !== undefined);
+  const runId = start.payload.runId;
+  const queued = await phone.wait("run.queued");
+  expect(queued.payload.run.track).toBe("village");
+  game.send("gameToServer", "game.run.started", { runId });
+  const splits = { hills: 5000, pond: 5000, crossing: 5000, bends: 5000 };
+  game.send("gameToServer", "game.run.lap", {
+    runId,
+    lap: 1,
+    lapMs: 20000,
+    elapsedMs: 20000,
+    splits,
+    isBest: true,
+  });
+  const lap1 = await phone.wait("run.lap", (p) => p.lap === 1);
+  expect(lap1.payload.isLapBest).toBe(true);
+  expect(lap1.payload.deltaVsBestLapMs).toBeUndefined();
+  game.send("gameToServer", "game.run.lap", {
+    runId,
+    lap: 2,
+    lapMs: 19000,
+    elapsedMs: 39000,
+    splits,
+    isBest: true,
+  });
+  const lap2 = await phone.wait("run.lap", (p) => p.lap === 2);
+  expect(lap2.payload.isLapBest).toBe(true);
+  expect(lap2.payload.deltaVsBestLapMs).toBe(-1000);
+
+  phone.send("phoneToServer", "phone.stop", { runId });
+  await game.wait("run.stop", (p) => p.runId === runId);
+  game.send("gameToServer", "game.run.finished", {
+    runId,
+    elapsedMs: 60000,
+    laps: [20000, 19000, 21000],
+    bestLapMs: 19000,
+    splits,
+    events: [],
+    boostsUsed: 0,
+    weatherSeen: [],
+    trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
+  });
+  const ended = await phone.wait("run.ended", (p) => p.run.id === runId);
+  expect(ended.payload.run.laps).toEqual([20000, 19000, 21000]);
+  expect(ended.payload.run.bestLapMs).toBe(19000);
+  expect(ended.payload.isPersonalBest).toBe(true);
+  const me = await phone.wait("player.updated", (p) => p.bestTimeMs === 19000);
+  expect(me.payload.bestRun.id).toBe(runId);
+  const lb = await (await fetch(`${base}/api/leaderboard`)).json();
+  expect(lb.find((e) => e.nickname === "Lapper").bestTimeMs).toBe(19000);
+
+  // A failed run that still completed a faster lap counts.
+  await Bun.sleep(10);
+  phone.send("phoneToServer", "phone.go", {});
+  const start2 = await game.wait("run.start", (p) => p.runId !== runId);
+  game.send("gameToServer", "game.run.failed", {
+    runId: start2.payload.runId,
+    reason: "off_track",
+    section: "bends",
+    elapsedMs: 30000,
+    laps: [18000],
+    bestLapMs: 18000,
+    splits,
+    events: [],
+    boostsUsed: 0,
+    weatherSeen: [],
+  });
+  const ended2 = await phone.wait("run.ended", (p) => p.run.id === start2.payload.runId);
+  expect(ended2.payload.run.outcome).toBe("failed");
+  expect(ended2.payload.isPersonalBest).toBe(true);
+  await phone.wait("player.updated", (p) => p.bestTimeMs === 18000);
+  game.ws.close();
+  phone.ws.close();
+}, 40000);

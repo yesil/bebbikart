@@ -100,6 +100,9 @@ function onWs(s, type, p) {
     case "run.progress":
       if (s.live && s.live.runId !== p.runId) return s;
       return { ...s, live: { sections: {}, ...s.live, ...p } };
+    case "run.lap":
+      if (!s.live || s.live.runId !== p.runId) return s;
+      return { ...s, live: { ...s.live, laps: [...(s.live.laps ?? []), p], sections: {} } };
     case "run.section":
       if (!s.live || s.live.runId !== p.runId) return s;
       return { ...s, live: { ...s.live, sections: { ...s.live.sections, [p.section]: p } } };

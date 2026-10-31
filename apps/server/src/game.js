@@ -1,6 +1,13 @@
 // The server's state and rules: session, players, builds, runs, leaderboard (game-server.md).
 // Transport-free: REST and WS handlers call these methods, and outgoing messages go through `hub`.
-import { coachTip, DEFAULT_BUILD, newId, parseBuildInput, SECTION_IDS } from "@bebbikart/shared";
+import {
+  coachTip,
+  DEFAULT_BUILD,
+  LOOP_TRACKS,
+  newId,
+  parseBuildInput,
+  SECTION_IDS,
+} from "@bebbikart/shared";
 import { ApiError, cleanNickname } from "./errors.js";
 
 const now = () => new Date().toISOString();
@@ -9,6 +16,18 @@ const CALM_WEATHER = () => ({
   wind: { phase: "calm", strength: 0, dirDeg: 0 },
   changedAt: now(),
 });
+/** Loop tracks rank by best lap (contracts §2a). */
+const isLoop = (track) => LOOP_TRACKS.includes(track);
+/** What ranks a done run: best lap on loops (failed runs with laps count), else a finished time. */
+function rankTime(run) {
+  if (isLoop(run.track)) return run.bestLapMs;
+  return run.outcome === "finished" ? run.elapsedMs : undefined;
+}
+/** coachTip compares elapsedMs; on loops that is the best lap. */
+function forCoach(run) {
+  if (!run || !isLoop(run.track) || run.bestLapMs === undefined) return run;
+  return { ...run, elapsedMs: run.bestLapMs, outcome: "finished" };
+}
 const ABORT_TIP = { key: "aborted", text: "That race was stopped. Press Go! to try again." };
 
 /**
@@ -340,6 +359,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
       buildId: build.id,
       status: "queued",
       queuedAt: now(),
+      track: config.track,
     };
     saveRun(run);
     hub.toGame("run.start", runStart(run));
@@ -352,6 +372,15 @@ export function createGame({ db, settings, hub, log = console.log }) {
     const run = activeRun(playerId);
     if (!run || (runId && run.id !== runId)) return false;
     hub.toGame("run.boost", { runId: run.id });
+    return true;
+  }
+  /** "Pit in" on a loop track: the game finishes the run at the next line crossing. */
+  function stop(playerId, runId) {
+    const run = activeRun(playerId);
+    if (!run || (runId && run.id !== runId)) return false;
+    if (!isLoop(run.track))
+      throw new ApiError("bad_request", "Pit in only works on a loop track", 400);
+    hub.toGame("run.stop", { runId: run.id });
     return true;
   }
   function abortRun(run, reason) {
@@ -416,6 +445,25 @@ export function createGame({ db, settings, hub, log = console.log }) {
         hub.toPhone(r.playerId, "run.section", out);
         return;
       }
+      case "game.run.lap": {
+        const r = gameRun(pl.runId);
+        if (!r) return;
+        const prev = [players.get(r.playerId)?.bestTimeMs, ...(r.liveLaps ?? [])].filter(
+          (x) => x !== undefined,
+        );
+        const bestBefore = prev.length ? Math.min(...prev) : undefined;
+        r.liveLaps = [...(r.liveLaps ?? []), pl.lapMs];
+        r.liveSplits = {}; // section splits restart each lap
+        const out = {
+          runId: pl.runId,
+          lap: pl.lap,
+          lapMs: pl.lapMs,
+          isLapBest: bestBefore === undefined || pl.lapMs < bestBefore,
+        };
+        if (bestBefore !== undefined) out.deltaVsBestLapMs = Math.round(pl.lapMs - bestBefore);
+        hub.toPhone(r.playerId, "run.lap", out);
+        return;
+      }
       case "game.run.finished":
       case "game.run.failed":
         return finishRun(type === "game.run.finished", pl);
@@ -434,7 +482,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function finishRun(ok, pl) {
     const r = gameRun(pl.runId);
     if (!r) return;
-    const { liveSplits, ...base } = r;
+    const { liveSplits, liveLaps, ...base } = r;
     const run = {
       ...base,
       status: "done",
@@ -448,20 +496,28 @@ export function createGame({ db, settings, hub, log = console.log }) {
     };
     if (ok) run.elapsedMs = pl.elapsedMs;
     else Object.assign(run, { failReason: pl.reason, failSection: pl.section });
+    if (pl.laps) run.laps = pl.laps;
+    if (pl.bestLapMs !== undefined) run.bestLapMs = pl.bestLapMs;
+    if (isLoop(run.track) && run.laps?.length && run.bestLapMs === undefined)
+      run.bestLapMs = Math.min(...run.laps);
     saveRun(run);
     const p = players.get(r.playerId);
     const prevBest = bestRunOf(r.playerId);
-    const isPersonalBest = ok && (!prevBest || run.elapsedMs < prevBest.elapsedMs);
+    const time = rankTime(run);
+    const isPersonalBest =
+      time !== undefined && (p.bestTimeMs === undefined || time < p.bestTimeMs);
     if (isPersonalBest) {
       if (prevBest) {
         traces.delete(prevBest.id);
         db.del("best_trace", prevBest.id);
       }
-      traces.set(run.id, pl.trace);
-      db.put("best_trace", { id: run.id, trace: pl.trace });
-      savePlayer({ ...p, bestRunId: run.id, bestTimeMs: run.elapsedMs });
+      if (pl.trace) {
+        traces.set(run.id, pl.trace);
+        db.put("best_trace", { id: run.id, trace: pl.trace });
+      }
+      savePlayer({ ...p, bestRunId: run.id, bestTimeMs: time });
     }
-    const coach = coachTip(run, builds.get(run.buildId), prevBest);
+    const coach = coachTip(forCoach(run), builds.get(run.buildId), forCoach(prevBest));
     const rank = ranks().get(r.playerId);
     hub.toPhone(r.playerId, "run.ended", { run, isPersonalBest, ...(rank ? { rank } : {}), coach });
     pushPlayer(r.playerId);
@@ -470,13 +526,14 @@ export function createGame({ db, settings, hub, log = console.log }) {
       pushRoster();
     }
     log(
-      `[run] ${run.id} ${run.outcome} "${p?.nickname}" ${ok ? `${(run.elapsedMs / 1000).toFixed(2)} s${isPersonalBest ? " (best)" : ""}` : `${run.failReason} @${run.failSection}`}`,
+      `[run] ${run.id} ${run.outcome} "${p?.nickname}" ${ok ? `${(run.elapsedMs / 1000).toFixed(2)} s` : `${run.failReason} @${run.failSection}`}${run.laps ? ` laps ${run.laps.map((l) => (l / 1000).toFixed(2)).join("/")}` : ""}${isPersonalBest ? " (best)" : ""}`,
     );
   }
   // Runs the game never reports back on (e.g. it crashed mid-run).
   const capTimer = setInterval(() => {
-    const limit = config.runTimeCapMs + 30_000;
     for (const r of runs.values()) {
+      // runTimeCapMs applies per lap on loop tracks.
+      const limit = config.runTimeCapMs * (isLoop(r.track) ? config.lapsPerRun : 1) + 30_000;
       if (r.status !== "done" && Date.now() - Date.parse(r.queuedAt) > limit)
         abortRun(r, "timeout");
     }
@@ -500,6 +557,8 @@ export function createGame({ db, settings, hub, log = console.log }) {
     return session;
   }
   function patchConfig(next) {
+    if (next.track !== config.track && session.status === "running")
+      throw new ApiError("track_locked", "End the session before changing the track", 409);
     config = next;
     hub.toPhones("config.updated", config);
     hub.toAdmins("config.updated", config);
@@ -578,6 +637,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     // runs
     launch,
     boost,
+    stop,
     abortRun,
     abortAllRuns,
     onGameMessage,

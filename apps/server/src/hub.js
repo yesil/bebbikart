@@ -72,6 +72,12 @@ export function createHub({ settings, log = console.log }) {
             }
           } else if (type === "phone.boost") {
             game.boost(p.id, payload.runId);
+          } else if (type === "phone.stop") {
+            try {
+              game.stop(p.id, payload.runId);
+            } catch (err) {
+              sendError(ws, out, err.code ?? "bad_request", err.message, id);
+            }
           }
         }
       },

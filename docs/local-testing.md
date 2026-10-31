@@ -45,6 +45,18 @@ macOS may ask whether `bun` may accept incoming connections: allow it, or phones
 
 `bun run fake-game` connects a stand-in game that "races" each run in about 12 s with fake splits, so you can test the phone flow on its own (run it instead of the Godot game; only one game connection is kept).
 
+## Village loop (laps)
+
+Pick the track per session (it can't change while a session runs):
+
+```bash
+curl -X POST -H 'x-admin-pin: 1234' localhost:8080/api/admin/session/end
+curl -X PATCH -H 'x-admin-pin: 1234' -H 'content-type: application/json' -d '{"track":"village"}' localhost:8080/api/admin/config
+curl -X POST -H 'x-admin-pin: 1234' -H 'content-type: application/json' -d '{}' localhost:8080/api/admin/session/start
+```
+
+Or set `"track": "village"` in `bebbikart.config.json` at the repo root before starting. On the village the phone shows "Lap 2 of 3", the lap timer, each lap's time vs your best lap, and a **Pit in** button (finish at the next line). The best lap ranks. `bun run fake-game` races laps too.
+
 ## DeepSeek key (required, no fallbacks)
 
 The server designs every racer from the kid's drawings with DeepSeek. It reads `DEEPSEEK_API_KEY` from the environment or from the first of these `.env` files that sets it: `apps/server/.env`, `.env` (repo root), `packages/asset-pipeline/.env`. The start-up banner says which file it used.

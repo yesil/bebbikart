@@ -1,13 +1,14 @@
 // Stand-in for the Godot game, for testing the phone flow without Godot:
 //   bun apps/server/scripts/fake-game.js [ws://localhost:8080/ws]
 // Connects as the game, prints the roster, and "races" every run.start in ~12 s with fake splits.
-import { makeMsg, SECTION_IDS } from "@bebbikart/shared";
+import { LOOP_TRACKS, makeMsg, SECTION_IDS } from "@bebbikart/shared";
 
 const url = process.argv[2] ?? "ws://localhost:8080/ws";
 const gameKey = process.env.BK_GAME_KEY ?? "bebbikart-dev";
 const ws = new WebSocket(url);
 const send = (type, payload) => ws.send(JSON.stringify(makeMsg("gameToServer", type, payload)));
 const runs = new Map();
+let config = { track: "countryside", lapsPerRun: 3 };
 
 ws.onopen = () =>
   ws.send(JSON.stringify(makeMsg("phoneToServer", "hello", { role: "game", gameKey })));
@@ -17,6 +18,8 @@ ws.onclose = (e) => {
 };
 ws.onmessage = (e) => {
   const { type, payload } = JSON.parse(e.data);
+  if (type === "welcome") config = payload.config;
+  if (type === "config.updated") config = payload;
   if (type === "welcome" || type === "roster.updated") {
     const roster = type === "welcome" ? payload.roster : payload;
     console.log(
@@ -31,12 +34,19 @@ ws.onmessage = (e) => {
       r.boosts++;
       console.log(`[fake-game] boost ${payload.runId}`);
     }
+  } else if (type === "run.stop") {
+    const r = runs.get(payload.runId);
+    if (r) {
+      r.pitIn = true;
+      console.log(`[fake-game] pit in ${payload.runId}`);
+    }
   } else if (type === "run.abort") {
     runs.get(payload.runId)?.stop();
   }
 };
 
 function race(start) {
+  if (LOOP_TRACKS.includes(config.track)) return raceLoop(start);
   const r = { boostsLeft: 3, boosts: 0, stop: () => {} };
   runs.set(start.runId, r);
   console.log(`[fake-game] run ${start.runId} for ${start.playerId}`);
@@ -86,6 +96,69 @@ function race(start) {
           elapsedMs,
           trace: { runId: start.runId, hz: 10, samples: [0, 0, 0, 0, 0] },
         });
+      runs.delete(start.runId);
+    }
+  }, 200);
+  r.stop = () => {
+    clearInterval(timer);
+    runs.delete(start.runId);
+  };
+}
+
+// Loop track: 8 s laps; finishes after lapsPerRun laps, or at the next line after Pit in.
+function raceLoop(start) {
+  const r = { boostsLeft: 3, boosts: 0, pitIn: false, stop: () => {} };
+  runs.set(start.runId, r);
+  console.log(`[fake-game] loop run ${start.runId} (${config.lapsPerRun} laps)`);
+  const lapTarget = 8000;
+  const laps = [];
+  let t = 0;
+  let lapT = 0;
+  let lapLen = lapTarget + Math.round(Math.random() * 1500);
+  setTimeout(() => send("game.run.started", { runId: start.runId }), 500);
+  const splitsOf = (ms) => Object.fromEntries(SECTION_IDS.map((s) => [s, Math.round(ms / 4)]));
+  const timer = setInterval(() => {
+    t += 200;
+    lapT += 200;
+    const progress = Math.min(1, lapT / lapLen);
+    const section = SECTION_IDS[Math.min(3, Math.floor(progress * 4))];
+    send("game.run.progress", {
+      runId: start.runId,
+      progress,
+      elapsedMs: t,
+      section,
+      boostsLeft: r.boostsLeft,
+      lap: laps.length + 1,
+      lapMs: lapT,
+    });
+    if (lapT < lapLen) return;
+    const lapMs = lapT - r.boosts * 300;
+    laps.push(lapMs);
+    send("game.run.lap", {
+      runId: start.runId,
+      lap: laps.length,
+      lapMs,
+      elapsedMs: t,
+      splits: splitsOf(lapMs),
+      isBest: lapMs === Math.min(...laps),
+    });
+    lapT = 0;
+    r.boosts = 0;
+    lapLen = lapTarget + Math.round(Math.random() * 1500);
+    if (laps.length >= config.lapsPerRun || r.pitIn) {
+      clearInterval(timer);
+      const best = Math.min(...laps);
+      send("game.run.finished", {
+        runId: start.runId,
+        elapsedMs: t,
+        laps,
+        bestLapMs: best,
+        splits: splitsOf(best),
+        events: [],
+        boostsUsed: 0,
+        weatherSeen: [],
+        trace: { runId: start.runId, hz: 10, samples: [0, 0, 0, 0, 0] },
+      });
       runs.delete(start.runId);
     }
   }, 200);

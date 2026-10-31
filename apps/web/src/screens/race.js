@@ -3,7 +3,7 @@ import { html } from "htm/preact";
 import { useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY } from "../copy.js";
-import { Avatar, delta, secs } from "./common.js";
+import { Avatar, delta, isLoop, secs } from "./common.js";
 
 export function Run({ ctx }) {
   const { s, send } = ctx;
@@ -15,6 +15,10 @@ export function Run({ ctx }) {
     sections: {},
   };
   const [flash, setFlash] = useState(false);
+  const [pitting, setPitting] = useState(false);
+  const loop = isLoop(s.me.currentRun?.track ?? s.config.track);
+  const lapsDone = live.laps ?? [];
+  const lastLap = lapsDone[lapsDone.length - 1];
   const started = s.me.currentRun?.status === "running" || live.elapsedMs > 0;
   const boostsLeft = live.boostsLeft ?? s.config.boostsPerRun;
   const lastSection = SECTION_IDS.filter((id) => live.sections?.[id]).pop();
@@ -29,9 +33,31 @@ export function Run({ ctx }) {
     setTimeout(() => setFlash(false), 180);
   }
 
+  function pitIn() {
+    if (!live.runId || pitting) return;
+    send("phone.stop", { runId: live.runId });
+    setPitting(true);
+  }
+
   return html`
     <div class="run">
-      <div class="timer">${started ? secs(live.elapsedMs) : COPY.run.queued}</div>
+      ${
+        loop && started
+          ? html`<div class="lap-head">
+              <span>${COPY.run.lap(Math.min(live.lap ?? lapsDone.length + 1, s.config.lapsPerRun), s.config.lapsPerRun)}</span>
+              <span class="muted">${secs(live.elapsedMs)}</span>
+            </div>`
+          : null
+      }
+      <div class="timer">${started ? secs(loop ? (live.lapMs ?? live.elapsedMs) : live.elapsedMs) : COPY.run.queued}</div>
+      ${
+        loop && lastLap
+          ? html`<div class=${`lap-result ${lastLap.isLapBest ? "good" : lastLap.deltaVsBestLapMs > 0 ? "bad" : ""}`}>
+              ${lastLap.isLapBest ? COPY.run.bestLap : COPY.run.lastLap} ${secs(lastLap.lapMs)}
+              ${lastLap.deltaVsBestLapMs !== undefined ? html` (${delta(lastLap.deltaVsBestLapMs)})` : null}
+            </div>`
+          : null
+      }
       <div class="track">
         <div class="fill" style=${{ width: `${Math.round((live.progress ?? 0) * 100)}%` }}></div>
         ${SECTION_IDS.slice(1).map((id, i) => html`<i key=${id} style=${{ left: `${((i + 1) / SECTION_IDS.length) * 100}%` }}></i>`)}
@@ -54,6 +80,13 @@ export function Run({ ctx }) {
         ${COPY.run.boost}
         <span class="charges">${Array.from({ length: s.config.boostsPerRun }, (_, i) => html`<i class=${i < boostsLeft ? "on" : ""}>⚡</i>`)}</span>
       </button>
+      ${
+        loop && started
+          ? html`<button class="ghost pit" disabled=${pitting} onClick=${pitIn}>
+              ${pitting ? COPY.run.pitting : COPY.run.pitIn}
+            </button>`
+          : null
+      }
       <p class="muted center">📺 ${COPY.run.watch}</p>
     </div>
   `;
@@ -66,6 +99,8 @@ export function Result({ ctx }) {
   const ok = run.outcome === "finished";
   const mood = r.isPersonalBest ? "excited" : ok ? "happy" : "sad";
   const best = r.prevBest;
+  const loop = isLoop(run.track);
+  const laps = run.laps ?? [];
 
   async function again() {
     dispatch({ type: "clearResult" });
@@ -80,10 +115,15 @@ export function Result({ ctx }) {
     <div class="card center result">
       <${Avatar} me=${s.me} mood=${mood} size=${140} />
       ${
-        ok
-          ? html`<h1>${r.isPersonalBest ? COPY.result.pb : COPY.result.finished}</h1>
+        loop && run.bestLapMs !== undefined
+          ? html`<h1>${r.isPersonalBest ? COPY.result.pb : ok ? COPY.result.finished : COPY.result.oops}</h1>
+              <div class="muted">${COPY.result.bestLapTitle}</div>
+              <div class="bigtime">${secs(run.bestLapMs)}</div>
+              ${!ok ? html`<p class="lead">${COPY.result.fail[run.failReason] ?? ""}</p>` : null}`
+          : ok
+            ? html`<h1>${r.isPersonalBest ? COPY.result.pb : COPY.result.finished}</h1>
               <div class="bigtime">${secs(run.elapsedMs)}</div>`
-          : html`<h1>${COPY.result.oops}</h1>
+            : html`<h1>${COPY.result.oops}</h1>
               <p class="lead">${run.outcome === "aborted" ? COPY.result.aborted : `${COPY.result.fail[run.failReason] ?? ""}${run.failSection ? ` · ${COPY.sections[run.failSection]}` : ""}`}</p>`
       }
       ${r.rank ? html`<p class="muted">${COPY.garage.rank} #${r.rank}</p>` : null}
@@ -103,6 +143,16 @@ export function Result({ ctx }) {
                 </tr>`;
               })}
             </table>
+          </section>`
+        : null
+    }
+    ${
+      loop && laps.length
+        ? html`<section class="card">
+            <h2>${COPY.result.laps}</h2>
+            <ol class="laps">
+              ${laps.map((l, i) => html`<li key=${i} class=${l === run.bestLapMs ? "best" : ""}>${secs(l)}</li>`)}
+            </ol>
           </section>`
         : null
     }

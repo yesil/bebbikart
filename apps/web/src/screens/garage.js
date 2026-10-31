@@ -3,7 +3,7 @@ import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY } from "../copy.js";
-import { Avatar, secs } from "./common.js";
+import { Avatar, isLoop, secs } from "./common.js";
 
 const pick = (b) => ({ stars: { ...b.stars }, routes: { ...b.routes }, style: b.style });
 const same = (a, b) => JSON.stringify(pick(a)) === JSON.stringify(pick(b));
@@ -78,7 +78,7 @@ export function Garage({ ctx }) {
         <div class="nick">${me.nickname}</div>
         <div class="muted">${me.asset?.spec.title ?? ""}</div>
         <div class="stats">
-          <span>${COPY.garage.best}: <b>${me.bestTimeMs ? secs(me.bestTimeMs) : COPY.garage.noBest}</b></span>
+          <span>${isLoop(cfg.track) ? COPY.garage.bestLap : COPY.garage.best}: <b>${me.bestTimeMs ? secs(me.bestTimeMs) : COPY.garage.noBest}</b></span>
           ${me.rank ? html`<span>${COPY.garage.rank}: <b>#${me.rank}</b></span>` : null}
         </div>
       </div>

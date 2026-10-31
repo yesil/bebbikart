@@ -646,3 +646,28 @@ h2 {
   word-break: break-word;
   color: var(--ink);
 }
+.lap-head {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 800;
+  font-size: 1.2rem;
+}
+.lap-result {
+  text-align: center;
+  font-weight: 800;
+  font-size: 1.2rem;
+}
+.pit {
+  margin-top: 0;
+}
+.laps {
+  margin: 0;
+  padding-left: 1.6em;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.1rem;
+  line-height: 1.8;
+}
+.laps li.best {
+  color: var(--good);
+  font-weight: 800;
+}
