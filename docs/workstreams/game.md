@@ -45,19 +45,32 @@ Forks join back before the next section line, so splits are comparable whichever
 - **Fixed timestep 60 Hz**, decoupled from rendering. `elapsedMs = ticks × 1000/60`. Seedable RNG for tests (`?seed=123`). Gameplay seeds randomly.
 - **Racer state:** distance `s` along the active route spline, lateral offset `d`, speed `v`, vertical state (grounded / airborne with `vy`), yaw wobble. World position = spline(s) + normal × d (+ height while airborne). Simpler and more stable than rigid bodies, and still looks physical with squash, bounce and tilt.
 - **Autopilot:** each spline sample has a curvature and a target speed. Target speed = min(topSpeed, cornerSpeed(grip, rain, style)). Accelerates or brakes toward it. Steers `d` back toward 0 with a gain from `grip`. Takes the fork the build chose.
-- **Stat mapping (starting values; tune in M3):** each formula takes the ability's level, which is its stars ÷ 2 (0–10 stars out of 20 → level 0–5; `Tuning.STAR_STEP`).
+- **Stat mapping (tuned on the village loop, loop 2 of the gameplay thread; numbers in `sim/tuning.gd`):** each formula takes the ability's level, which is its stars ÷ 2 (0–10 stars out of 20 → level 0–5; `Tuning.STAR_STEP`). Each village stretch tests one ability: farm (grip, muddy), cobbles (bounce), ridge (stability, open), alpbach ford (water).
 
-| Level (0–5) | Effect                                                                                                 |
-| ----------- | ------------------------------------------------------------------------------------------------------ |
-| `speed`     | topSpeed = 12 + 2.2×speed m/s; accel slightly lower above 3                                            |
-| `jump`      | ramp launch vy = 4 + 1.5×jump; also clears small bumps without slowing                                 |
-| `grip`      | corner speed factor 0.7 + 0.08×grip; lateral recovery gain                                             |
-| `water`     | speed multiplier in water = 0.45 + 0.12×water                                                          |
-| `stability` | wind push × (1 − 0.15×stability); landing wobble ↓; accel × (1 − 0.03×stability)                       |
-| `bounce`    | landing recovery time ↓ and bumps give tiny speed kicks; above 3 adds `bounce_wobble` in tight bends   |
-| style       | careful 0.9× / balanced 1.0× / daring 1.12× corner target speed; daring also lowers the slip threshold |
+| Level (0–5) | Effect |
+| ----------- | ------ |
+| `speed`     | topSpeed = 14 + 2.4×speed m/s; accel −5% per level above 3. In rain and in open wind a fast kart is held back to its safe speed (see grip, stability), so speed pays most when it's dry |
+| `jump`      | ramp launch vy = 1.0 + 1.45×jump: the kicker pays from about 8 stars |
+| `grip`      | corner speed factor 0.7 + 0.08×grip; cuts the grip rain and mud take away (× 1 − 0.12×grip); safe flat-out speed in full rain = 15 + 0.9×grip m/s; lateral recovery gain |
+| `water`     | speed in water = top × (0.30 + 0.65×(water/5)^1.7), 0.95 at 10 stars (never faster than the dry road); rain swells the fords (−0.14 at 0 stars, none at 10); splash on entry |
+| `stability` | wind push × (1 − 0.15×stability); safe flat-out speed in full open wind = 15 + 1.6×stability m/s (exposure × wind strength); landing wobble ↓; accel × (1 − 0.03×stability) |
+| `bounce`    | each bump (cobbles, humps) costs 10% − 1.8%×bounce of speed, a hop of 1.6 − 0.2×bounce and a rattle (0.6 s at 0.75× speed, 18% shorter per level; logged as a bumpy landing); landing recovery ↓; above 3 adds `bounce_wobble` in tight bends |
+| style       | corner target careful 0.93× / balanced 1.0× / daring 1.03×; plans braking at 7 / 8.5 / 11 m/s² (brakes bite 40% less in full rain); rain misjudged (perceived grip loss 0.23 / 0.19 / 0.05 vs 0.22 real); misses the roundabout exit (course 7% + 8% boosting + 15% rain) × 0.1 / 0.4 / 1.6 |
+
+Wooden bridge decks are slick in the rain whatever the tyres (segment `rain_slick`). Time held back by the rain cap is logged as `slip` ("Try +1 grip"), by the wind cap as `wind_push` ("Try +1 stability").
 
 **Design check (M3):** no single allocation should win in every weather. Keep a table of the best build per weather state from automated sweeps (below).
+
+**Village balance (2026-10-31, `tools/sweep.gd -- --track=village`, 300 random builds + hill-climb, expected lap 2 incl. missed-exit risk, fail = 90 s lap):**
+
+| Weather | Best build | Lap | Calm-best there |
+| ------- | ---------- | --- | --------------- |
+| calm  | spd9 grp10 bnc1, daring, around/bridge/exposed | 39.7 s | — |
+| rain  | spd5 grp10 wat4 bnc1, daring, around/bridge/exposed | 46.0 s | +0.4 s |
+| wind  | spd6 grp8 stb6, daring, around/bridge/exposed | 48.1 s | +2.9 s |
+| storm | spd5 grp10 stb5, daring, around/bridge/exposed | 50.5 s | +4.2 s |
+
+Explainable: speed and grip when it's dry, half the speed for water in the rain, stability in the wind. Balanced is within 0.4 s of daring in every weather (ahead in calm). Shortcuts: the kicker comes within 0.2–1.4 s of the best, the ford within 1.2 s in rain; the ford beats the bridge from about 5 water stars (even at 4–5, +3.5 s at 0 in calm, +8 s at 0 in rain). Stretch gain 0→10 stars (default build): farm grip 1.3 s (1.8 rain), cobbles bounce 0.3–0.4 s, ridge stability 1.3 s in wind (−0.5 calm), alpbach water 0.7 s (1.0 storm). Random-build fails per run: calm 0%, rain 1.3%, wind 0%, storm 2.3%; storm laps ≤ 1.39× calm. Open: daring still edges balanced in rain and storm; the calm-best loses only 0.4 s in rain; the best builds always pick around/bridge/exposed.
 - **Slip:** if lateral demand > grip limit (grip × rain factor × style), the racer slides: `d` drifts and speed drops. If |d| > track half-width → `off_track` fail. Log a `slip` event with time lost.
 - **Boost:** `run.boost` from the server. On a boost zone: +35% speed for 1.2 s, no penalty (`boost_perfect`). Off zone the wheels spin for 0.8 s (`boost_weak`): no surge, the kart holds 75% of its target speed, fishtails wide with grip × 0.7, and the autopilot drives to that lower grip, so it costs about 0.4 s but never throws a racer off in calm weather (rain with daring still can, rarely). The time it costs is logged as a `boost_weak` loss event, so the coach says "Boost on the glowing zones!". Regression check: `tools/start_crowd_check.gd -- --boost=onetap`. Ignored if `boostsLeft` is 0. Zones glow and pulse so the audience can shout "NOW!"
 - **Fails:** `off_track`, `flipped` (bad landing at high wobble), `stuck` (no progress 3 s), `timeout` (90 s). Show a comic spin or splash, then the racer pops away in confetti. The server handles retry.
