@@ -16,10 +16,18 @@ var react_id := -1
 var react_cool := 0.0
 var brace_cool := 0.0
 var react_prev := Vector3.ZERO
+var grid_t := -1.0       # seconds waiting on the start grid; -1 = not on it
+var grid_next := 0.0     # grid_t of the next fidget
+var grid_beat := 0       # whole seconds to green at the last nod
+var grid_ready := false  # leaning in for the start
 ## "" while racing, else the outcome being shown ("finished" / "failed") before the view frees.
 var leaving := ""
 var _leave_t := 0.0
 var _leave_v := 0.0
+var _leave_seg := {}      # where on the course the racer coasts after its run: segment, metres
+var _leave_ls := 0.0      # along it, sideways offset, height above the road
+var _leave_d := 0.0
+var _leave_dy := 0.0
 var _yaw_prev := 0.0
 var _turn := 0.0
 var _braced := false
@@ -141,8 +149,9 @@ func forward() -> Vector3:
 
 
 ## The run ended (main.gd on sim.removed): the racer stays FINISH_STAY s (cheer, then a wave at
-## the camera) or FAIL_STAY s (spin and slump), coasts to a stop, pops away and frees itself.
-## An aborted run, or a view without a toy, goes at once.
+## the camera) or FAIL_STAY s (spin and slump), coasts to a stop along the road's curve (onto the
+## next lap's first stretch on a loop), pops away and frees itself. An aborted run, or a view
+## without a toy, goes at once.
 func leave(outcome: String) -> void:
 	if toy == null or outcome not in ["finished", "failed"]:
 		queue_free()
@@ -150,6 +159,10 @@ func leave(outcome: String) -> void:
 	leaving = outcome
 	visible = true
 	_leave_v = racer.v
+	_leave_seg = racer.seg
+	_leave_ls = racer.ls
+	_leave_d = racer.d
+	_leave_dy = racer.y - racer.course_ref.surface_y(racer.seg, racer.ls)
 	toy.slipping = false
 	toy.airborne = false
 	if outcome == "finished":
@@ -171,9 +184,22 @@ func _process(delta: float) -> void:
 		return
 	_leave_t -= delta
 	_leave_v = maxf(0.0, _leave_v - delta * maxf(8.0, _leave_v * 2.5))
-	position += forward() * _leave_v * delta
+	_leave_ls += _leave_v * delta
+	var rt = _leave_seg["route"]
+	if _leave_ls > rt.length and racer.looping and not racer.segs.is_empty() and _leave_seg != racer.segs[0]:
+		_leave_ls -= rt.length
+		_leave_seg = racer.segs[0]
+		rt = _leave_seg["route"]
+	var s := minf(_leave_ls, rt.length)
+	var p: Vector3 = rt.world_at(s, _leave_d) + rt.tangent_at(s) * (_leave_ls - s)  # past a road's end: straight on
+	_leave_dy = maxf(0.0, _leave_dy - delta * 4.0)
+	p.y = racer.course_ref.surface_y(_leave_seg, s) + _leave_dy
+	position = p
+	var yaw: float = rt.heading_at(s)
+	var k := minf(1.0, delta * 6.0)
+	toy.turn = lerpf(toy.turn, clampf(wrapf(yaw - _body.rotation.y, -PI, PI) / delta, -3.0, 3.0), k)
+	_body.rotation = Vector3(lerpf(_body.rotation.x, 0.0, k), yaw, lerpf(_body.rotation.z, 0.0, k))
 	toy.speed = _leave_v
-	toy.turn = 0.0
 	if _leave_t < POP:
 		scale = Vector3.ONE * maxf(0.001, _leave_t / POP)
 	if _leave_t <= 0.0:
