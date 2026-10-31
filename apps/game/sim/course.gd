@@ -9,6 +9,11 @@ const Tuning = preload("res://sim/tuning.gd")
 
 ## Length of the plank wedge from the jump pit up onto the landing road.
 const LANDING_WEDGE := 1.6
+## Baked road surface beyond half_width: shoulder plus gutter lip (tools/bake_world.gd).
+const SHOULDER := 0.45
+const GUTTER := 0.45
+## Railed lanes clamp the kart's centre this far inside half_width (sim/racer.gd).
+const RAIL_INSET := 0.45
 
 ## Segment: {
 ##   id, section, fork ("" or fork id), choice, route (Route), half_width,
@@ -121,6 +126,45 @@ static func _key_y(keys: Array, s: float) -> float:
 		if s <= float(b[0]):
 			return lerpf(float(a[1]), float(b[1]), smoothstep(float(a[0]), float(b[0]), s))
 	return float(keys[keys.size() - 1][1])
+
+
+## Half width of the band a kart's body can reach: the centre-line limit the sim enforces
+## (clamp inside rails, else off_track beyond the soft edge) plus the kart radius. Nothing solid
+## may stand in it except the lane's own rails and ramp.
+static func corridor_half(seg: Dictionary) -> float:
+	var hw: float = seg["half_width"]
+	if bool(seg["rails"]) or bool(seg.get("low_rails", false)):
+		return hw - RAIL_INSET + Tuning.RADIUS
+	return hw + float(seg["edge"]) + Tuning.RADIUS
+
+
+## Id of a segment (other than `except`) whose drivable corridor, grown by `margin`, contains
+## the ground point p (x, z); "" if none. For placing props and plants clear of every road.
+func corridor_at(p: Vector2, margin := 0.0, except := "") -> String:
+	for id in ordered_ids:
+		if id == except:
+			continue
+		var seg: Dictionary = segments[id]
+		var r: Route = seg["route"]
+		var lim := corridor_half(seg) + margin
+		var s := 0.0
+		while s <= r.length:
+			var q := r.pos_at(s)
+			# Points 1 m apart: the true distance is at most 0.5 m below the sampled one.
+			if Vector2(q.x, q.z).distance_to(p) < lim + 0.5:
+				var t := maxf(0.0, s - 1.0)
+				while t <= minf(r.length, s + 1.0):
+					var u := r.pos_at(t)
+					if Vector2(u.x, u.z).distance_to(p) < lim:
+						return id
+					t += 0.05
+			s += 1.0
+	return ""
+
+
+## Half width of the baked road surface (shoulder and gutter lip included).
+static func surface_half(seg: Dictionary) -> float:
+	return float(seg["half_width"]) + SHOULDER + GUTTER
 
 
 func _end(id: String) -> Vector3:

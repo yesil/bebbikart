@@ -104,7 +104,7 @@ Sweep flags:
 |---|---|---|
 | 1. Check the layout | `godot --headless --path . --script res://tools/layout_map.gd` | `docs/layout_map.png`, exit 1 on bad geometry |
 | 2. Bake the world | `godot --headless --path . --script res://tools/bake_world.gd` | `world/course_world.tscn`, `world/terrain_data/`, `world/baked/`, `world/vegetation/` |
-| 3. Check the world | `godot --headless --path . --script res://tools/world_check.gd` | exit 1 if anything is scattered on a road or in water, floats or sinks more than 0.3 m, the terrain pokes through a road, or an asset is missing |
+| 3. Check the world | `godot --headless --path . --script res://tools/world_check.gd` | exit 1 if anything is scattered on a road or in water, floats or sinks more than 0.3 m, the terrain pokes through a road, anything solid (prop, post, sign, rail, plant) stands where a kart's body can reach on any road, sibling roads overlap at different heights, or an asset is missing |
 | 4. Benchmark | `godot --path . --resolution 1920x1080 --script res://tools/bench.gd -- --seconds=30 [--cam=wide]` | average and 1% low fps with 20 mock racers, exit 1 below 60 |
 | 5. Screenshots | `godot --path . --resolution 1920x1080 --script res://tools/shots.gd -- --out=DIR` | fixed viewpoints from `world/viewpoints.gd` |
 
