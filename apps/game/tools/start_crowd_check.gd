@@ -122,7 +122,13 @@ func _drive(course, builds: Array, seed_: int, crowd: bool) -> Dictionary:
 		taps["r%d" % i] = [int((1.5 + trng.randf() * 2.0) * Tuning.HZ), int((8.0 + trng.randf() * 2.0) * Tuning.HZ), int((14.0 + trng.randf() * 2.0) * Tuning.HZ)]
 	var out := {"early": 0, "early_bumped": 0, "bumps": 0, "start_bumps": 0, "start_loss": 0, "release_last": 0.0, "reasons": {}}
 	var released := 0
-	for t in int(EARLY_S * Tuning.HZ):
+	# The start countdown (config.startCountdownMs) holds the group on the grid first: the early
+	# and start windows count from the first release (green), the last release from Go.
+	var go := -1
+	var countdown_s := float(cfg.get("startCountdownMs", 0)) / 1000.0
+	for t in int((EARLY_S + countdown_s + 2.0) * Tuning.HZ):
+		if go >= 0 and t - go >= int(EARLY_S * Tuning.HZ):
+			break
 		for o in sim.racers:
 			var r: Racer = o
 			if boost_mode == "early" and (taps[r.run_id] as Array).has(r.ticks):
@@ -134,12 +140,14 @@ func _drive(course, builds: Array, seed_: int, crowd: bool) -> Dictionary:
 			var p: Dictionary = m["payload"]
 			match m["type"]:
 				"game.run.started":
+					if go < 0:
+						go = t
 					released += 1
 					if released == builds.size():
 						out["release_last"] = t / float(Tuning.HZ)
 				"sim.bump":
 					out["bumps"] += 1
-					if t < START_S * Tuning.HZ:
+					if go >= 0 and t - go < START_S * Tuning.HZ:
 						out["start_bumps"] += 1
 				"game.run.failed":
 					out["early"] += 1
