@@ -290,15 +290,14 @@ func step(sim) -> void:
 	plan_t -= 1
 	if plan_t <= 0:
 		plan_t = 3
-		var corner_f := grip_f * float(Tuning.STYLE_CORNER[style]) * rain_seen * noise
+		# Spinning wheels after an off-zone tap: the autopilot knows and drives to the lower grip.
+		var corner_f := grip_f * float(Tuning.STYLE_CORNER[style]) * rain_seen * boost_grip * noise
 		var p := _plan(corner_f, float(Tuning.STYLE_PLAN_DECEL[style]))
 		target_v = p[0]
 		ref_v = p[1]
-	var amt := boost_amt
-	if weak_grip_t > 0.0 and target_v < top * 0.95:
-		# Autopilot only half-commits an off-zone boost into a corner (still slippy, rarely fatal).
-		amt *= 0.4
-	var tv := target_v * (1.0 + amt)
+	var tv := target_v * (1.0 + boost_amt)
+	if weak_grip_t > 0.0:
+		tv *= Tuning.BOOST_WEAK_DRIVE
 	var cap := top * (1.0 + boost_amt)
 	tv = minf(tv, cap)
 	if in_water:
@@ -521,12 +520,17 @@ func boost(sim) -> void:
 		boost_t = Tuning.BOOST_PERFECT_S
 		v *= 1.06
 	else:
-		boost_amt = Tuning.BOOST_WEAK_AMT
+		# Off a zone the wheels spin: no surge, the kart fishtails wide and loses a little time.
+		boost_amt = 0.0
 		boost_t = Tuning.BOOST_WEAK_S
 		weak_grip_t = Tuning.BOOST_WEAK_S
-		v *= 1.03
 		if airborne:
 			wobble += 0.4
+		else:
+			var k := route().curv_at(ls)
+			var side := signf(k) if absf(k) > Tuning.CORNER_MIN_K else (1.0 if rng.randf() < 0.5 else -1.0)
+			vd += side * Tuning.BOOST_WEAK_KICK
+			wobble += Tuning.BOOST_WEAK_WOBBLE
 	var kind := "boost_perfect" if perfect else "boost_weak"
 	_add_event({"kind": kind, "section": section, "atMs": elapsed_ms()})
 	sim.emit("sim.boost", {"runId": run_id, "kind": kind})
@@ -552,6 +556,8 @@ func bumped_other(other_player: String) -> void:
 func _cause(k: float, exposure: float) -> String:
 	if slipping:
 		return "slip"
+	if weak_grip_t > 0.0:
+		return "boost_weak"
 	if bumped_t > 0.0:
 		return "bumped"
 	if recover_t > 0.0 and recover_mult < 0.9:

@@ -79,9 +79,11 @@ const WIND_DRAG := 0.5            # top-speed loss at strength 1, fully exposed,
 # Boost
 const BOOST_PERFECT_AMT := 0.35
 const BOOST_PERFECT_S := 1.2
-const BOOST_WEAK_AMT := 0.20
-const BOOST_WEAK_S := 0.8
-const BOOST_WEAK_GRIP := 0.7
+const BOOST_WEAK_S := 0.8         # off a zone: wheelspin this long
+const BOOST_WEAK_GRIP := 0.7      # grip while spinning (the autopilot drives to it)
+const BOOST_WEAK_DRIVE := 0.75    # share of its target speed the spinning kart holds
+const BOOST_WEAK_KICK := 0.8      # m/s sideways fishtail, to the outside of a bend
+const BOOST_WEAK_WOBBLE := 0.3
 
 # Collisions (circles in (s, d) space)
 const RADIUS := 0.85
