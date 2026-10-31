@@ -7,6 +7,7 @@ export function createHub({ settings, log = console.log }) {
   const phones = new Map(); // deviceId -> Set<ws>
   const admins = new Set();
   let gameWs = null;
+  let gameTrack = null; // the course the connected game has loaded (its hello), null = follows config
 
   function send(ws, channel, type, payload) {
     let msg;
@@ -26,6 +27,7 @@ export function createHub({ settings, log = console.log }) {
       game = g;
     },
     gameOnline: () => gameWs !== null,
+    gameTrack: () => gameTrack,
     deviceOnline: (deviceId) => (phones.get(deviceId)?.size ?? 0) > 0,
     toPhone(playerId, type, payload) {
       const deviceId = game?.players.get(playerId)?.deviceId;
@@ -147,7 +149,8 @@ export function createHub({ settings, log = console.log }) {
         game.abortAllRuns("game_replaced");
       }
       gameWs = ws;
-      log("[ws] game connected");
+      gameTrack = h.track ?? null;
+      log(`[ws] game connected${gameTrack ? ` with the ${gameTrack} track loaded` : ""}`);
       send(ws, "serverToGame", "welcome", {
         session: game.session,
         config: game.config,

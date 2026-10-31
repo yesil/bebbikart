@@ -78,6 +78,10 @@ soon as the first has pulled away. A run that arrives after green opens the next
 `startCountdownMs: 0` there is no countdown and no `game.run.grid`. Run times start when the racer
 leaves, so waiting on the grid never costs time.
 
+Every phone also hears `grid.updated { goInMs, racers: [{ playerId, nickname }] }` each time a run
+joins the open countdown, so friends still in the garage or on the result screen see "Mia is on the
+grid! Join the race: 2" and can press Go to join that start.
+
 ## 3. Enums
 
 ```ts
@@ -384,7 +388,7 @@ interface Envelope<T extends string, P> {
 | Role    | `hello` payload                                    | Who                                                                |
 | ------- | -------------------------------------------------- | ------------------------------------------------------------------ |
 | `phone` | `{ role: "phone" }` (cookie identifies the device) | Phone app                                                          |
-| `game`  | `{ role: "game", gameKey }` (`BK_GAME_KEY` env)    | Big-screen game. **Exactly one**; a second one replaces the first. |
+| `game`  | `{ role: "game", gameKey, track? }` (`BK_GAME_KEY` env) | Big-screen game. **Exactly one**; a second one replaces the first. `track` = the course it has loaded: while it differs from `config.track` (the game reloads the new world once its track is empty), Go is refused with `track_changing`. |
 | `admin` | `{ role: "admin", pin }`                           | Facilitator console                                                |
 
 ### Phone → Server
@@ -406,6 +410,7 @@ interface Envelope<T extends string, P> {
 | `run.queued` / `run.started` | `{ run }`                                                                                      |                                                       |
 | `run.grid`                   | `{ runId, goInMs }`                                                                            | On the start grid: the lights go green in goInMs (§2c) |
 | `run.heat`                   | `{ heatId, done, entries: HeatEntry[] }`                                                       | A heat-mate's run ended (see "Heats" below)           |
+| `grid.updated`               | `{ goInMs, racers: [{ playerId, nickname }] }`                                                 | To every phone: a run joined the open countdown (§2c) |
 | `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1 |
 | `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
@@ -450,7 +455,7 @@ Everything a phone gets that isn't about one player's run (`leaderboard.updated`
 
 ### Error codes
 
-`bad_request`, `bad_message`, `unauthorized`, `not_found`, `invalid_build`, `player_exists`, `server_full`, `run_in_progress`, `cooldown`, `session_not_running`, `not_ready`, `game_offline`, `reroll_limit`, `track_locked`. REST errors use the body `{ error: { code, message } }`.
+`bad_request`, `bad_message`, `unauthorized`, `not_found`, `invalid_build`, `player_exists`, `server_full`, `run_in_progress`, `cooldown`, `session_not_running`, `not_ready`, `game_offline`, `reroll_limit`, `track_locked`, `track_changing`. REST errors use the body `{ error: { code, message } }`.
 
 ### Server → Game
 

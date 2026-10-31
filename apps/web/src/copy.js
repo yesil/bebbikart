@@ -153,6 +153,11 @@ const en = {
   },
   sections: { hills: "Hills", pond: "Pond", crossing: "Crossing", bends: "Bends" },
   tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Leaderboard" },
+  grid: {
+    call: (names, n) =>
+      `${names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(" & ")} ${names.length === 1 ? "is" : "are"} on the grid! Join the race: ${n}`,
+    join: "Join the race!",
+  },
   sessionEnded: "This race is over! Thanks for racing. The next one starts on the big screen.",
   sessionIdle: "The race hasn't started yet.",
   quit: {
@@ -178,6 +183,7 @@ const en = {
     bad_message: "That didn't work. Try again!",
     unauthorized: "This phone isn't allowed to do that.",
     track_locked: "The track can't change during a race.",
+    track_changing: "The big screen is changing track. Try again in a moment!",
     generic: "Something went wrong. Try again!",
   },
 };
@@ -346,6 +352,11 @@ const de = {
   },
   sections: { hills: "Hügel", pond: "Teich", crossing: "Kreuzung", bends: "Kurven" },
   tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Rangliste" },
+  grid: {
+    call: (names, n) =>
+      `${names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(" & ")} ${names.length === 1 ? "steht" : "stehen"} am Start! Fahr mit: ${n}`,
+    join: "Mitfahren!",
+  },
   sessionEnded:
     "Dieses Rennen ist vorbei! Danke fürs Mitfahren. Das nächste startet auf dem grossen Bildschirm.",
   sessionIdle: "Das Rennen hat noch nicht angefangen.",
@@ -373,6 +384,7 @@ const de = {
     bad_message: "Das hat nicht geklappt. Versuch es nochmal!",
     unauthorized: "Dieses Handy darf das nicht.",
     track_locked: "Die Strecke kann während eines Rennens nicht wechseln.",
+    track_changing: "Der grosse Bildschirm wechselt die Strecke. Gleich nochmal versuchen!",
     generic: "Etwas ist schiefgelaufen. Versuch es nochmal!",
   },
 };

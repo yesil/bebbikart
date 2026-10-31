@@ -102,6 +102,7 @@ export const ERROR_CODES = /** @type {const} */ ([
   "game_offline",
   "reroll_limit",
   "track_locked",
+  "track_changing",
 ]);
 
 /** WS close code when `hello` is missing or rejected. */

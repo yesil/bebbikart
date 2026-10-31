@@ -3,7 +3,7 @@ import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
-import { Avatar, isLoop, secs } from "./common.js";
+import { Avatar, GridCall, isLoop, secs, useGridCall } from "./common.js";
 
 const pick = (b) => ({ stars: { ...b.stars }, routes: { ...b.routes }, style: b.style });
 const same = (a, b) => JSON.stringify(pick(a)) === JSON.stringify(pick(b));
@@ -48,6 +48,7 @@ export function Garage({ ctx }) {
     change({ ...build, stars: { ...build.stars, [a]: n } });
   };
 
+  const gridLeft = useGridCall(s);
   const cooldownLeft = me.lastRun?.endedAt
     ? Date.parse(me.lastRun.endedAt) + cfg.launchCooldownMs - now
     : 0;
@@ -151,8 +152,8 @@ export function Garage({ ctx }) {
     <button class="ghost" onClick=${() => dispatch({ type: "redo", on: true })}>📷 ${COPY.garage.newDrawings}</button>
 
     <div class="go-bar">
-      ${blocked ? html`<div class="muted small center">${blocked}</div>` : null}
-      <button class="go" disabled=${!!blocked || saving} onClick=${go}>${COPY.garage.go}</button>
+      ${blocked ? html`<div class="muted small center">${blocked}</div>` : html`<${GridCall} s=${s} left=${gridLeft} />`}
+      <button class="go" disabled=${!!blocked || saving} onClick=${go}>${gridLeft && !blocked ? COPY.grid.join : COPY.garage.go}</button>
     </div>
   `;
 }

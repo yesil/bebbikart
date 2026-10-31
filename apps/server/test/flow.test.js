@@ -169,6 +169,12 @@ test("phone → drawings → racer on the big screen → race → result", async
   game.send("gameToServer", "game.run.grid", { runId, goInMs: 3000 });
   const grid = await phone.wait("run.grid");
   expect(grid.payload).toEqual({ runId, goInMs: 3000 });
+  // Every phone hears who is on the grid (friends can join the countdown).
+  const call = await phone.wait("grid.updated");
+  expect(call.payload).toEqual({
+    goInMs: 3000,
+    racers: [{ playerId: player.id, nickname: "Mila" }],
+  });
   game.send("gameToServer", "game.run.started", { runId });
   await phone.wait("run.started");
   phone.send("phoneToServer", "phone.boost", { runId });
@@ -712,4 +718,67 @@ test("a heat: racers who left together see each other's places on their phones, 
   game.ws.close();
   a.phone.ws.close();
   b.phone.ws.close();
+}, 30000);
+
+test("after a track switch, Go waits until the big screen has loaded the new track (track_changing)", async () => {
+  const s = startServer({ ...settings, port: 0, dbFile: ":memory:" }, { log: () => {} });
+  const sBase = `http://localhost:${s.server.port}`;
+  const admin = { "x-admin-pin": settings.adminPin, "content-type": "application/json" };
+  const gameHello = async (track) => {
+    const ws = new WebSocket(`${sBase.replace("http", "ws")}/ws`);
+    await new Promise((r) => (ws.onopen = r));
+    ws.send(
+      JSON.stringify(
+        makeMsg("phoneToServer", "hello", { role: "game", gameKey: settings.gameKey, track }),
+      ),
+    );
+    await Bun.sleep(50);
+    return ws;
+  };
+  const game = await gameHello("countryside");
+  const dev = await fetch(`${sBase}/api/device`, { method: "POST" });
+  const cookie = dev.headers.get("set-cookie").split(";")[0];
+  await fetch(`${sBase}/api/players`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ nickname: "Switcher" }),
+  });
+  const form = new FormData();
+  for (const [k, f] of [
+    ["character", "pair01-character-cat.jpg"],
+    ["vehicle", "pair01-vehicle-kart.jpg"],
+  ])
+    form.append(k, new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }));
+  await fetch(`${sBase}/api/players/me/drawings`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  for (let i = 0; i < 200; i++) {
+    const st = await (await fetch(`${sBase}/api/state`, { headers: { cookie } })).json();
+    if (st.me.status === "ready") break;
+    await Bun.sleep(100);
+  }
+  await fetch(`${sBase}/api/admin/session/end`, { method: "POST", headers: admin });
+  await fetch(`${sBase}/api/admin/config`, {
+    method: "PATCH",
+    headers: admin,
+    body: JSON.stringify({ track: "village" }),
+  });
+  await fetch(`${sBase}/api/admin/session/start`, { method: "POST", headers: admin, body: "{}" });
+  // The game still has the countryside loaded: a run now would race the old course.
+  const early = await fetch(`${sBase}/api/players/me/runs`, {
+    method: "POST",
+    headers: { cookie },
+  });
+  expect(early.status).toBe(409);
+  expect((await early.json()).error.code).toBe("track_changing");
+  // It reloads and says hello with the village: Go works.
+  const reloaded = await gameHello("village");
+  const ok = await fetch(`${sBase}/api/players/me/runs`, { method: "POST", headers: { cookie } });
+  expect(ok.status).toBe(201);
+  expect((await ok.json()).track).toBe("village");
+  game.close();
+  reloaded.close();
+  s.stop();
 }, 30000);

@@ -3,7 +3,7 @@ import { html } from "htm/preact";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
-import { Avatar, delta, isLoop, secs } from "./common.js";
+import { Avatar, delta, GridCall, isLoop, secs, useGridCall } from "./common.js";
 
 export function Run({ ctx }) {
   const { s, send } = ctx;
@@ -139,6 +139,7 @@ export function Result({ ctx }) {
   const best = r.prevBest;
   const loop = isLoop(run.track);
   const laps = run.laps ?? [];
+  const gridLeft = useGridCall(s);
 
   async function again() {
     dispatch({ type: "clearResult" });
@@ -197,8 +198,9 @@ export function Result({ ctx }) {
     }
     ${r.coach ? html`<section class="card coach">💡 ${r.coach.text}</section>` : null}
     <div class="go-bar two">
+      ${gridLeft ? html`<div class="span2"><${GridCall} s=${s} left=${gridLeft} /></div>` : null}
       <button class="ghost" onClick=${() => dispatch({ type: "clearResult", coach: r.coach })}>${COPY.result.change}</button>
-      <button class="go small" onClick=${again}>${COPY.result.again}</button>
+      <button class="go small" onClick=${again}>${gridLeft ? COPY.grid.join : COPY.result.again}</button>
     </div>
   `;
 }

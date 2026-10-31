@@ -17,6 +17,7 @@ var cfg: Dictionary
 var log_mode := "summary"   # none | summary | full
 var status := "connecting"  # connecting | online | offline (shown in the overlay)
 var session_status := "?"   # idle | running | ended, from welcome and session.updated
+var loaded_track := ""      # the course this scene loaded; sent in hello (server refuses Go while it differs)
 var course = null           # unused; mock_net uses it
 var players: Array = []     # unused; mock_net fills it at start-up
 var sent_counts := {}
@@ -33,6 +34,7 @@ var _nicks := {}
 
 func _init(config: Dictionary, p_url: String, p_game_key: String) -> void:
 	cfg = config
+	loaded_track = String(config.get("track", ""))
 	url = p_url
 	game_key = p_game_key
 	_connect()
@@ -72,7 +74,7 @@ func poll(dt: float, _free_slots: int) -> Array:
 				_open = true
 				status = "online"
 				print("ServerNet: connected to ", url)
-				_ws.send_text(JSON.stringify(Messages.make_msg("hello", {"role": "game", "gameKey": game_key})))
+				_ws.send_text(JSON.stringify(Messages.make_msg("hello", {"role": "game", "gameKey": game_key, "track": loaded_track})))
 			while _ws.get_available_packet_count() > 0:
 				_receive(_ws.get_packet().get_string_from_utf8())
 		WebSocketPeer.STATE_CLOSED:

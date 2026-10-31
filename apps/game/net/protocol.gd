@@ -34,7 +34,8 @@ const ERROR_CODES = [
 	"not_ready",
 	"game_offline",
 	"reroll_limit",
-	"track_locked"
+	"track_locked",
+	"track_changing"
 ]
 const FAIL_REASONS = [
 	"off_track",
@@ -264,11 +265,13 @@ const MSG_SERVER_TO_PHONE = [
 	"player.removed",
 	"run.queued",
 	"run.grid",
+	"grid.updated",
 	"run.started",
 	"run.progress",
 	"run.lap",
 	"run.section",
 	"run.ended",
+	"run.heat",
 	"camera.updated"
 ]
 const MSG_SERVER_TO_ADMIN = [

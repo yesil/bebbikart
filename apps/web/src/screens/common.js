@@ -1,5 +1,7 @@
 import { LOOP_TRACKS } from "@bebbikart/shared";
 import { html } from "htm/preact";
+import { useEffect, useState } from "preact/hooks";
+import { COPY } from "../copy.js";
 
 /** The racer's face for the app: avatar render, else hero, else the driver drawing. */
 export function avatarUrl(me, mood = "happy") {
@@ -20,3 +22,26 @@ export const delta = (ms) =>
 
 /** Loop tracks (village) are raced in laps and rank by best lap. */
 export const isLoop = (track) => LOOP_TRACKS.includes(track);
+
+/** Seconds until an open start countdown (grid.updated) goes green, or 0 when there is none to
+ *  join: none open, already green, or I'm on that grid. Re-renders while it counts. */
+export function useGridCall(s) {
+  const [now, setNow] = useState(Date.now());
+  const g = s.grid;
+  const open = !!g && g.goAt > now && !g.racers.some((r) => r.playerId === s.me?.id);
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(t);
+  }, [open, g]);
+  return open ? Math.ceil((g.goAt - now) / 1000) : 0;
+}
+
+/** "Mia and Noah are on the grid! Join the race: 2" above the Go button. */
+export function GridCall({ s, left }) {
+  if (!left) return null;
+  return html`<div class="grid-call">🚦 ${COPY.grid.call(
+    s.grid.racers.map((r) => r.nickname),
+    left,
+  )}</div>`;
+}

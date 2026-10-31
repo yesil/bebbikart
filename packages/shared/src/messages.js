@@ -17,6 +17,7 @@ import {
   SectionIdSchema,
   SessionSchema,
   SplitsSchema,
+  TrackIdSchema,
   WeatherKindSchema,
   WeatherStateSchema,
 } from "./schemas.js";
@@ -27,7 +28,9 @@ const progress = z.number().min(0).max(1);
 
 const hello = z.discriminatedUnion("role", [
   z.object({ role: z.literal("phone") }), // the bk_device cookie identifies the device
-  z.object({ role: z.literal("game"), gameKey: z.string() }),
+  // track: the course the game has loaded; Go is refused (track_changing) while it differs from
+  // config.track. Left out by a game that races whatever config.track says (fake-game).
+  z.object({ role: z.literal("game"), gameKey: z.string(), track: TrackIdSchema.optional() }),
   z.object({ role: z.literal("admin"), pin: z.string() }),
 ]);
 
@@ -139,6 +142,12 @@ export const CHANNELS = {
     "run.queued": z.object({ run: RunSchema }),
     // Relayed game.run.grid: on the start grid, the lights go green in goInMs.
     "run.grid": z.object({ runId: z.string(), goInMs: ms }),
+    // To every phone: a countdown is open and these racers are on the grid; others can still
+    // press Go and join that race (§2c).
+    "grid.updated": z.object({
+      goInMs: ms,
+      racers: z.array(z.object({ playerId: z.string(), nickname: z.string() })),
+    }),
     "run.started": z.object({ run: RunSchema }),
     "run.progress": z.object({
       runId: z.string(),

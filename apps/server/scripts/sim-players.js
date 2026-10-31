@@ -180,7 +180,8 @@ class Phone {
     } else if (m.type === "run.heat") this.heats.push({ ...p, at });
     else if (m.type === "config.updated") this.config = p;
     else if (m.type === "player.removed") fail(this.tag, "the racer was removed");
-    else if (m.type === "error") fail(this.tag, `server error ${p.code}: ${p.message}`);
+    else if (m.type === "error" && p.code !== "track_changing")
+      fail(this.tag, `server error ${p.code}: ${p.message}`);
     this.race?.onMessage(m, at);
     for (const w of [...this.waiters]) {
       if (w.type !== m.type || !w.pred(p)) continue;
@@ -294,15 +295,30 @@ class Race {
     this.goAt = performance.now();
     phone.send("phone.go", {});
     const capMs = phone.config.runTimeCapMs * (this.loop ? phone.config.lapsPerRun : 1) + 60_000;
-    const q = await new Promise((res, rej) => {
-      phone.wait("run.queued", () => true, 5000).then(res, rej);
-      phone
-        .wait("error", () => true, 5000)
-        .then(
-          (e) => rej(new Error(`Go refused: ${e.code} ${e.message}`)),
-          () => {},
-        );
-    });
+    // Like a kid: the big screen still loading a new track says "try again in a moment".
+    let q;
+    for (let attempt = 0; !q; attempt++) {
+      try {
+        q = await new Promise((res, rej) => {
+          phone.wait("run.queued", () => true, 5000).then(res, rej);
+          phone
+            .wait("error", () => true, 5000)
+            .then(
+              (e) =>
+                rej(
+                  Object.assign(new Error(`Go refused: ${e.code} ${e.message}`), { code: e.code }),
+                ),
+              () => {},
+            );
+        });
+      } catch (err) {
+        if (err.code !== "track_changing" || attempt >= 30) throw err;
+        if (attempt === 0) line(phone.tag, "the big screen is changing track; Go again every 1 s");
+        await Bun.sleep(1000);
+        this.goAt = performance.now();
+        phone.send("phone.go", {});
+      }
+    }
     this.runId = q.run.id;
     this.r.goToQueuedMs = performance.now() - this.goAt;
     await phone.wait("run.started", (p) => p.run.id === this.runId, 60_000);

@@ -398,6 +398,14 @@ export function createGame({ db, settings, hub, log = console.log }) {
       throw new ApiError("cooldown", "Catch your breath! Ready in a moment", 409);
     if (!hub.gameOnline())
       throw new ApiError("game_offline", "The big screen isn't connected", 409);
+    // After a track switch the big screen loads the new world once its track is empty, then says
+    // hello again with it. A run before that would race the old course.
+    if (hub.gameTrack() && hub.gameTrack() !== config.track)
+      throw new ApiError(
+        "track_changing",
+        "The big screen is changing track, try again in a moment",
+        409,
+      );
     const running = [...runs.values()].filter((r) => r.status !== "done").length;
     if (running >= config.maxConcurrentRuns)
       throw new ApiError("run_in_progress", "The track is full, try again in a moment", 409);
@@ -521,6 +529,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
       log(`[run] ${r.id} aborted (${reason})`);
     }
   }
+  let grid = null; // the open start countdown: { goAt, playerIds } (grid.updated)
   function gameRun(runId) {
     const r = runs.get(runId);
     return r && r.status !== "done" ? r : undefined;
@@ -538,9 +547,18 @@ export function createGame({ db, settings, hub, log = console.log }) {
         return;
       }
       case "game.run.grid": {
-        // On the start grid in a countdown: the phone counts down to green with the big screen.
+        // On the start grid in a countdown: the phone counts down to green with the big screen,
+        // and every other phone hears who is on the grid, so friends can join that race.
         const r = gameRun(pl.runId);
-        if (r) hub.toPhone(r.playerId, "run.grid", pl);
+        if (!r) return;
+        hub.toPhone(r.playerId, "run.grid", pl);
+        const goAt = Date.now() + pl.goInMs;
+        if (!grid || Math.abs(grid.goAt - goAt) > 300) grid = { goAt, playerIds: [] };
+        if (!grid.playerIds.includes(r.playerId)) grid.playerIds.push(r.playerId);
+        const racers = grid.playerIds
+          .filter((id) => players.has(id))
+          .map((id) => ({ playerId: id, nickname: players.get(id).nickname }));
+        hub.toPhones("grid.updated", { goInMs: pl.goInMs, racers });
         return;
       }
       case "game.run.progress": {
