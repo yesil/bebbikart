@@ -47,7 +47,7 @@ macOS may ask whether `bun` may accept incoming connections: allow it, or phones
 
 ## Village loop (laps)
 
-Pick the track per session (it can't change while a session runs):
+The game manager picks the track, laps and session length in the game's options menu on the big screen (phones never set options). Switching track ends the session and starts a new one with an empty leaderboard; racers stay. Scripts can do the same over the admin API (the track can't change while a session runs):
 
 ```bash
 curl -X POST -H 'x-admin-pin: 1234' localhost:8080/api/admin/session/end

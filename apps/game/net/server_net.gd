@@ -123,6 +123,7 @@ func _receive(text: String) -> void:
 			_inbox.append(msg)
 		"error":
 			push_error("ServerNet: server error %s: %s" % [pl.get("code", "?"), pl.get("message", "")])
+			_inbox.append(msg)  # the options menu shows refusals (refId = the message we sent)
 		_:
 			_inbox.append(msg)
 

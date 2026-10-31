@@ -50,7 +50,7 @@ export const DEFAULT_CONFIG = {
 
 ## 2a. Tracks and laps
 
-The facilitator picks the session's **track** in config (`track`). Both tracks have the same four sections and the same three forks, so builds, splits and coach tips mean the same on either.
+The game manager picks the session's **track** in config (`track`) from the options menu on the big screen (`game.config.set`, §7). Both tracks have the same four sections and the same three forks, so builds, splits and coach tips mean the same on either.
 
 - `countryside` is point to point: a run is one trip from start to finish, and `elapsedMs` ranks.
 - `village` is a **loop** (in `LOOP_TRACKS`): the racer crosses the line and keeps going. Each crossing books a lap (`game.run.lap`). The run finishes after `lapsPerRun` laps, or at the next crossing after the player taps **Pit in** (`phone.stop` → `run.stop`). The player's **best lap** ranks: `Player.bestTimeMs` and `LeaderboardEntry.bestTimeMs` hold the best lap, `run.splits` and the ghost trace are the best lap's, and `runTimeCapMs` applies per lap. A run that fails after completing laps still reports them (`laps`, `bestLapMs`), and those laps count.
@@ -429,6 +429,11 @@ interface RunStart {
 | `game.run.failed`   | `{ runId, reason: FailReason, section, elapsedMs, splits, events, boostsUsed, weatherSeen, laps?, bestLapMs? }` |
 | `game.weather`      | `WeatherState` (on every phase change)                                                       |
 | `game.capacity`     | `{ freeSlots }` (if the game ever wants fewer than `maxConcurrentRuns`)                      |
+| `game.config.set`   | `{ track?, lapsPerRun?, sessionMinutes? }`: game manager options (see below)                  |
+| `game.session.end`  | `{}`: ends the running session                                                                |
+| `game.session.start`| `{}`: starts a session (`sessionMinutes`); after an ended one, a **new** session with an empty leaderboard |
+
+**Game options live on the big screen.** Phones are players: they join, race and quit (Pit in), and never set options. The game manager sets the track, laps and session length in the game's options menu, which sends the `game.config.*` / `game.session.*` messages above. The server answers with `config.updated` / `session.updated` to every client, or with `error { code, message, refId }` where `refId` is the refused message's `id` (`track_locked` when the track changes during a running session, `bad_request` when starting a running session, `bad_message` for any other field). Switching track = `game.session.end`, `game.config.set { track }`, `game.session.start`, sent back to back. Racers stay; bests and ghosts don't carry over to the new session. The admin REST routes do the same for scripts.
 
 The **game is the authority** for timing and outcomes. The server trusts these messages and records them.
 

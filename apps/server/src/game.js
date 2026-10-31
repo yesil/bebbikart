@@ -4,6 +4,7 @@ import {
   coachTip,
   DEFAULT_BUILD,
   LOOP_TRACKS,
+  mergeConfig,
   newId,
   parseBuildInput,
   SECTION_IDS,
@@ -202,7 +203,15 @@ export function createGame({ db, settings, hub, log = console.log }) {
     const ms = Date.parse(session.endsAt) - Date.now();
     endTimer = setTimeout(endSession, Math.max(0, Math.min(ms, 2 ** 31 - 1)));
   }
+  // A session that ended is over: starting again opens a new session with a fresh
+  // leaderboard (racers stay). Bests from another track or session never carry over.
   function startSession(durationMs = session.durationMs) {
+    if (session.status === "ended") {
+      const prev = session.id;
+      newSession();
+      clearBests();
+      log(`[session] ${prev} ended; new session ${session.id} on ${config.track}`);
+    }
     const t = Date.now();
     saveSession({
       ...session,
@@ -215,6 +224,18 @@ export function createGame({ db, settings, hub, log = console.log }) {
     pushSession();
     log(`[session] ${session.id} running for ${Math.round(durationMs / 60000)} min`);
     return session;
+  }
+  function clearBests() {
+    for (const p of players.values()) {
+      if (p.bestRunId === undefined && p.bestTimeMs === undefined) continue;
+      const { bestRunId, bestTimeMs, ...rest } = p;
+      savePlayer(rest);
+    }
+    traces.clear();
+    db.clear("best_trace");
+    pushRoster();
+    pushLeaderboard();
+    for (const id of players.keys()) pushPlayer(id);
   }
   function endSession() {
     if (session.status === "ended") return session;
@@ -566,6 +587,22 @@ export function createGame({ db, settings, hub, log = console.log }) {
     return config;
   }
 
+  // Options set by the game manager on the big screen (game.config.set, game.session.*).
+  function managerCommand(type, pl) {
+    if (type === "game.config.set") {
+      const next = patchConfig(mergeConfig(config, pl));
+      log(`[config] set from the game: ${JSON.stringify(pl)}`);
+      return next;
+    }
+    if (type === "game.session.end") return endSession();
+    if (type === "game.session.start") {
+      if (session.status === "running")
+        throw new ApiError("bad_request", "The session is already running", 400);
+      return startSession(config.sessionMinutes * 60_000);
+    }
+    throw new ApiError("bad_request", `Unknown command ${type}`, 400);
+  }
+
   // ------------------------------------------------------------------ boot
   for (const s of db.all("session")) session = s;
   for (const d of db.all("device")) devices.set(d.id, d);
@@ -646,6 +683,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     endSession,
     resetSession,
     patchConfig,
+    managerCommand,
     close() {
       clearInterval(capTimer);
       clearTimeout(endTimer);

@@ -356,3 +356,52 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
   game.ws.close();
   phone.ws.close();
 }, 40000);
+
+test("game manager sets track and laps from the big screen; a new session starts clean", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey });
+  await game.start();
+  const welcome = await game.wait("welcome");
+  expect(welcome.payload.session.status).toBe("running");
+  const oldSession = welcome.payload.session.id;
+  const phone = client({}, { role: "phone" });
+  await phone.start();
+  await phone.wait("welcome");
+  expect((await (await fetch(`${base}/api/leaderboard`)).json()).length).toBeGreaterThan(0);
+
+  // Track can't change mid-session: the error names the message it refuses.
+  const refused = makeMsg("gameToServer", "game.config.set", { track: "countryside" });
+  game.ws.send(JSON.stringify(refused));
+  const err = await game.wait("error", (p) => p.refId === refused.id);
+  expect(err.payload.code).toBe("track_locked");
+
+  // Unknown or player-only fields are rejected by the contract.
+  const bad = {
+    v: 1,
+    type: "game.config.set",
+    id: "m1",
+    ts: new Date().toISOString(),
+    payload: { maxPlayers: 1 },
+  };
+  game.ws.send(JSON.stringify(bad));
+  expect((await game.wait("error", (p) => p.code === "bad_message")).payload.code).toBe(
+    "bad_message",
+  );
+
+  // Switch track: end, set, start (back to back).
+  game.send("gameToServer", "game.session.end", {});
+  game.send("gameToServer", "game.config.set", { track: "countryside", lapsPerRun: 5 });
+  game.send("gameToServer", "game.session.start", {});
+  await game.wait("session.updated", (s) => s.status === "ended");
+  const cfg = await phone.wait("config.updated", (c) => c.track === "countryside");
+  expect(cfg.payload.lapsPerRun).toBe(5);
+  const fresh = await phone.wait("session.updated", (s) => s.status === "running");
+  expect(fresh.payload.id).not.toBe(oldSession);
+  expect(await (await fetch(`${base}/api/leaderboard`)).json()).toEqual([]);
+
+  // Starting a running session is refused loudly.
+  const again = makeMsg("gameToServer", "game.session.start", {});
+  game.ws.send(JSON.stringify(again));
+  expect((await game.wait("error", (p) => p.refId === again.id)).payload.code).toBe("bad_request");
+  game.ws.close();
+  phone.ws.close();
+});

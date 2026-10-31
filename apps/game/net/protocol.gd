@@ -232,7 +232,10 @@ const MSG_GAME_TO_SERVER = [
 	"game.run.finished",
 	"game.run.failed",
 	"game.weather",
-	"game.capacity"
+	"game.capacity",
+	"game.config.set",
+	"game.session.start",
+	"game.session.end"
 ]
 const MSG_SERVER_TO_PHONE = [
 	"leaderboard.updated",

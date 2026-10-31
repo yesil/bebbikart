@@ -60,6 +60,15 @@ export function createHub({ settings, log = console.log }) {
         if (type === "hello") return;
         if (role === "game") {
           if (ws !== gameWs) return;
+          if (type.startsWith("game.config.") || type.startsWith("game.session.")) {
+            try {
+              game.managerCommand(type, payload);
+            } catch (err) {
+              log(`[ws] game ${type} refused: ${err.code ?? "bad_request"}: ${err.message}`);
+              sendError(ws, out, err.code ?? "bad_request", err.message, id);
+            }
+            return;
+          }
           game.onGameMessage(type, payload);
         } else if (role === "phone") {
           const p = game.playerForDevice(ws.data.deviceId);

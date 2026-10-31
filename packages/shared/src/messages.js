@@ -104,6 +104,13 @@ export const CHANNELS = {
     }),
     "game.weather": WeatherStateSchema,
     "game.capacity": z.object({ freeSlots: z.number().int().nonnegative() }),
+    // Game manager options on the big screen (phones never set options).
+    // track changes only while no session is running (error track_locked).
+    "game.config.set": ConfigSchema.pick({ track: true, lapsPerRun: true, sessionMinutes: true })
+      .partial()
+      .strict(),
+    "game.session.start": empty, // ended → a new session with a fresh leaderboard
+    "game.session.end": empty,
   },
   serverToPhone: {
     ...phoneBroadcasts,
