@@ -10,7 +10,7 @@ var run_id := ""
 var player_id := ""
 var build: Dictionary
 var style := "balanced"
-var st := {}  # stars, int per ability
+var st := {}  # effect level per ability: stars * Tuning.STAR_STEP (0..5)
 
 var state := "queued"  # queued | racing | finished | failed | aborted
 var fail_reason := ""
@@ -111,7 +111,7 @@ func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, c
 	style = String(build.get("style", "balanced"))
 	var stars: Dictionary = build.get("stars", {})
 	for a in ["speed", "jump", "grip", "water", "stability", "bounce"]:
-		st[a] = int(stars.get(a, 0))
+		st[a] = int(stars.get(a, 0)) * Tuning.STAR_STEP
 	rng.seed = seed_
 	gust_phase = rng.randf_range(0.0, TAU)
 	path = course.path_for(build.get("routes", {}))

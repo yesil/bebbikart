@@ -4,6 +4,11 @@ extends RefCounted
 const HZ := 60
 const DT := 1.0 / 60.0
 
+# Stars: players spend 20 (max 10 per ability). Every per-star number below is tuned on the
+# original 10-star scale (max 5), so one star counts as half of one of those steps; racer.gd
+# turns stars into that effect level. A 10-star ability is as strong as a 5-star one was.
+const STAR_STEP := 0.5
+
 # Speed / acceleration
 const TOP_SPEED_BASE := 14.0      # m/s
 const TOP_SPEED_PER_STAR := 2.4
@@ -61,7 +66,7 @@ const BAD_LANDING_RECOVER := 2.2
 const FLIP_WOBBLE := 1.25         # + 0.1 per stability
 
 # Bounce wobble in tight bends
-const BOUNCE_WOBBLE_MIN_STARS := 4
+const BOUNCE_WOBBLE_MIN_STARS := 4  # effect level, i.e. 8 stars
 const BOUNCE_WOBBLE_K := 1.0 / 22.0
 
 # Wind

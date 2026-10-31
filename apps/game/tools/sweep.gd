@@ -208,15 +208,16 @@ func _build_with(stat: String, x: int) -> Dictionary:
 	var total := 0
 	for a in stars:
 		total += int(stars[a])
+	var want := int(cfg["starsTotal"])
 	var i := 0
 	var guard := 0
-	while total != 10 and guard < 200:
+	while total != want and guard < 400:
 		guard += 1
 		var a: String = order[i % order.size()]
-		if total > 10 and int(stars[a]) > 0:
+		if total > want and int(stars[a]) > 0:
 			stars[a] = int(stars[a]) - 1
 			total -= 1
-		elif total < 10 and int(stars[a]) < 5:
+		elif total < want and int(stars[a]) < int(cfg["starsMaxPerAbility"]):
 			stars[a] = int(stars[a]) + 1
 			total += 1
 		i += 1
@@ -229,10 +230,10 @@ func _section_forks() -> void:
 		var fork: String = f[0]
 		var stat: String = f[1]
 		var choices: Array = f[2]
-		print("\n== Fork %s: %s stars 0..5 (rest default-ish); time %s vs %s, Δ = first - second ==" % [fork, stat, choices[0], choices[1]])
+		print("\n== Fork %s: %s stars 0..%d step 2 (rest default-ish); time %s vs %s, Δ = first - second ==" % [fork, stat, int(cfg["starsMaxPerAbility"]), choices[0], choices[1]])
 		for w in WEATHERS:
 			var line := "  %-6s" % w
-			for x in 6:
+			for x in range(0, int(cfg["starsMaxPerAbility"]) + 1, 2):
 				var b := _build_with(stat, x)
 				var ma := measure(_with_route(b, fork, choices[0]), w)
 				var mb := measure(_with_route(b, fork, choices[1]), w)

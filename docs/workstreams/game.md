@@ -45,9 +45,9 @@ Forks join back before the next section line, so splits are comparable whichever
 - **Fixed timestep 60 Hz**, decoupled from rendering. `elapsedMs = ticks × 1000/60`. Seedable RNG for tests (`?seed=123`). Gameplay seeds randomly.
 - **Racer state:** distance `s` along the active route spline, lateral offset `d`, speed `v`, vertical state (grounded / airborne with `vy`), yaw wobble. World position = spline(s) + normal × d (+ height while airborne). Simpler and more stable than rigid bodies, and still looks physical with squash, bounce and tilt.
 - **Autopilot:** each spline sample has a curvature and a target speed. Target speed = min(topSpeed, cornerSpeed(grip, rain, style)). Accelerates or brakes toward it. Steers `d` back toward 0 with a gain from `grip`. Takes the fork the build chose.
-- **Stat mapping (starting values; tune in M3):**
+- **Stat mapping (starting values; tune in M3):** each formula takes the ability's level, which is its stars ÷ 2 (0–10 stars out of 20 → level 0–5; `Tuning.STAR_STEP`).
 
-| Stat (0–5)  | Effect                                                                                                 |
+| Level (0–5) | Effect                                                                                                 |
 | ----------- | ------------------------------------------------------------------------------------------------------ |
 | `speed`     | topSpeed = 12 + 2.2×speed m/s; accel slightly lower above 3                                            |
 | `jump`      | ramp launch vy = 4 + 1.5×jump; also clears small bumps without slowing                                 |

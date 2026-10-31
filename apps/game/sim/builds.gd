@@ -1,5 +1,5 @@
 extends RefCounted
-## Build helpers: default, random valid builds (10 stars, max 5 each) and enumeration for the sweep.
+## Build helpers: default, random valid builds (starsTotal stars, max starsMaxPerAbility each) and enumeration for the sweep.
 
 
 
@@ -7,7 +7,8 @@ static func default_build() -> Dictionary:
 	return Protocol.DEFAULT_BUILD.duplicate(true)
 
 
-static func random_stars(rng: RandomNumberGenerator, total: int = 10, max_per: int = 5) -> Dictionary:
+static func random_stars(rng: RandomNumberGenerator, total: int = int(Protocol.DEFAULT_CONFIG["starsTotal"]),
+		max_per: int = int(Protocol.DEFAULT_CONFIG["starsMaxPerAbility"])) -> Dictionary:
 	var stars := {}
 	for a in Protocol.ABILITIES:
 		stars[a] = 0
@@ -33,9 +34,9 @@ static func random_build(rng: RandomNumberGenerator) -> Dictionary:
 	var routes := random_routes(rng)
 	# Players tend to pick routes that suit their stars.
 	if rng.randf() < 0.6:
-		routes["ramp"] = "jump" if int(stars["jump"]) >= 4 else "around"
-		routes["pond"] = "water" if int(stars["water"]) >= 3 else "bridge"
-		routes["crossing"] = "exposed" if int(stars["stability"]) >= 2 else "sheltered"
+		routes["ramp"] = "jump" if int(stars["jump"]) >= 8 else "around"
+		routes["pond"] = "water" if int(stars["water"]) >= 6 else "bridge"
+		routes["crossing"] = "exposed" if int(stars["stability"]) >= 4 else "sheltered"
 	return {
 		"stars": stars,
 		"routes": routes,
