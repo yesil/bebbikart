@@ -6,7 +6,6 @@ import { JOB_STAGES, newId } from "@bebbikart/shared";
 import { ApiError } from "./errors.js";
 
 const MAX_UPLOAD = 15 * 1024 * 1024;
-const CONCURRENCY = 3;
 const MAX_REROLLS = 3;
 const now = () => new Date().toISOString();
 
@@ -39,7 +38,7 @@ export function createJobs({ game, settings, log = console.log, logError = conso
   }
 
   function pump() {
-    while (active < CONCURRENCY && queue.length) {
+    while (active < settings.designConcurrency && queue.length) {
       const id = queue.shift();
       active++;
       run(id)

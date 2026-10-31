@@ -75,5 +75,8 @@ export function loadSettings(env = process.env) {
     hasAnthropicKey: !!env.ANTHROPIC_API_KEY,
     // Four Claude passes (look, design, critique, refine) plus retries for invalid replies.
     jobTimeoutMs: Number(env.BK_JOB_TIMEOUT_MS ?? 300_000),
+    // Racers designed at once. A group of 8 joining together all start right away (3 made the
+    // 8th kid wait ~4 min); more wait in line, and the SDK backs off on rate limits.
+    designConcurrency: Number(env.BK_DESIGN_CONCURRENCY ?? 8),
   };
 }
