@@ -41,6 +41,8 @@ export const JOB_STATUSES = /** @type {const} */ ([
   "needs_review",
   "failed",
 ]);
+/** What a designing job is doing now (runDesignJob's onStatus), in order. */
+export const JOB_STAGES = /** @type {const} */ (["looking", "designing", "critiquing", "refining"]);
 export const REJECT_REASONS = /** @type {const} */ ([
   "not_a_drawing",
   "real_person",

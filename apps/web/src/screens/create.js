@@ -6,6 +6,8 @@ import { downscale } from "../image.js";
 
 // Photos survive a retake of just one image (rejected → retake the failing one).
 const photos = { character: null, vehicle: null };
+// Design pipeline steps, in order (JOB_STAGES in the shared package).
+const STAGES = ["looking", "designing", "critiquing", "refining"];
 
 function PhotoButton({ kind, label, file, onFile }) {
   const [url, setUrl] = useState(null);
@@ -131,19 +133,29 @@ export function Making({ ctx, review }) {
     const t = setInterval(() => setTick((n) => n + 1), 2500);
     return () => clearInterval(t);
   }, []);
+  const stage = job?.status === "designing" ? job.stage : undefined;
   const text = review
     ? COPY.making.review
     : job?.status === "queued"
       ? COPY.making.queued
-      : tick % 2 === 0
-        ? COPY.making.designing
-        : COPY.making.building;
+      : stage
+        ? COPY.making.stages[stage]
+        : tick % 2 === 0
+          ? COPY.making.designing
+          : COPY.making.building;
+  const step = stage ? STAGES.indexOf(stage) : -1;
   const drawing = ctx.s.me?.asset?.drawings?.character;
   return html`
     <div class="card center making">
       ${drawing ? html`<img class="drawing" src=${drawing} alt="" />` : null}
       <div class="spinner"></div>
       <h2>${text}</h2>
+      ${
+        step >= 0
+          ? html`<div class="stages">${STAGES.map((st, i) => html`<i class=${i < step ? "done" : i === step ? "on" : ""}></i>`)}</div>`
+          : null
+      }
+      ${step >= 0 ? html`<p class="hint">${COPY.making.slow}</p>` : null}
     </div>
   `;
 }
@@ -186,6 +198,7 @@ export function Reveal({ ctx }) {
         ${hero ? html`<img class="hero" src=${hero} alt="" />` : html`<img class="drawing" src=${me.asset.drawings.vehicle} alt="" />`}
       </div>
       <h1>${spec.title}!</h1>
+      ${spec.tagline ? html`<p class="tagline">“${spec.tagline}”</p>` : null}
       <p class="words">${spec.personality.join(" · ")}</p>
       <p class="lead">👀 ${COPY.reveal.lookUp}</p>
       <button class="primary" onClick=${() => dispatch({ type: "revealSeen", id: me.asset.packageId })}>

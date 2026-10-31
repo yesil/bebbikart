@@ -2,7 +2,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normaliseDrawing, runDesignJob } from "@bebbikart/asset-pipeline";
-import { newId } from "@bebbikart/shared";
+import { JOB_STAGES, newId } from "@bebbikart/shared";
 import { ApiError } from "./errors.js";
 
 const MAX_UPLOAD = 15 * 1024 * 1024;
@@ -73,26 +73,41 @@ export function createJobs({ game, settings, log = console.log, logError = conso
       reroll: !!job.reroll,
       name: "spec",
     };
+    // Stage updates (looking → designing → critiquing → refining) go to the phone.
+    const onStatus = (stage) => {
+      if (!JOB_STAGES.includes(stage) || done) return;
+      job = update(game.jobs.get(job.id) ?? job, { stage });
+      game.pushPlayer(job.playerId);
+      log(`[job] ${job.id} ${stage}…`);
+    };
     let result;
+    let done = false;
+    let timer;
     try {
       result = await Promise.race([
-        runDesignJob(input, () => {}, { client, log: (m) => log(`[job] ${job.id} ${m}`) }),
-        new Promise((_, rej) =>
-          setTimeout(() => rej(new Error("timed out")), settings.jobTimeoutMs),
-        ),
+        runDesignJob(input, onStatus, { client, log: (m) => log(`[job] ${job.id} ${m}`) }),
+        new Promise((_, rej) => {
+          timer = setTimeout(
+            () => rej(new Error(`timed out after ${settings.jobTimeoutMs / 1000} s`)),
+            settings.jobTimeoutMs,
+          );
+        }),
       ]);
     } catch (err) {
       result = { status: "failed", error: err.message };
+    } finally {
+      done = true;
+      clearTimeout(timer);
     }
+    const { stage: _stage, ...latest } = game.jobs.get(job.id) ?? job;
+    job = latest;
     if (!game.players.has(job.playerId)) return; // removed meanwhile
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     if (result.status === "ready") {
       const manifest = await writePackage(job, result);
       update(job, { status: "ready" });
       game.setManifest(job.playerId, manifest);
-      log(
-        `[job] ${job.id} ready in ${secs} s: "${manifest.spec.title}"${result.fallback ? " (fallback)" : ""}`,
-      );
+      log(`[job] ${job.id} ready in ${secs} s: "${manifest.spec.title}"`);
     } else if (result.status === "rejected") {
       update(job, { status: "rejected", rejectReason: result.reason, rejectedImage: result.image });
       game.setPlayerStatus(job.playerId, "rejected");

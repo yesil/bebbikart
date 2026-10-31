@@ -183,6 +183,7 @@ interface AssetJob {
   id: string;
   playerId: string;
   status: JobStatus;
+  stage?: "looking" | "designing" | "critiquing" | "refining"; // while designing: the pipeline step now (runDesignJob onStatus); the phone shows it
   rejectReason?: RejectReason;
   rejectedImage?: "character" | "vehicle";
   error?: string;

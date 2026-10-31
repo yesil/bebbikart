@@ -127,6 +127,11 @@ test("phone → drawings → racer on the big screen → race → result", async
   expect((await up.json()).status).toBe("queued");
 
   const ready = await phone.wait("player.updated", (p) => p.status === "ready", 20000);
+  // The phone saw the pipeline stage while designing, and the stage is gone once ready.
+  expect(
+    phone.msgs.some((m) => m.type === "player.updated" && m.payload.job?.stage === "designing"),
+  ).toBe(true);
+  expect(ready.payload.job.stage).toBeUndefined();
   expect(ready.payload.asset.spec.title).toBe("The Purple Flash");
   const roster = await game.wait("roster.updated", (r) => r.some((e) => e.status === "ready"));
   const entry = roster.payload.find((e) => e.playerId === player.id);

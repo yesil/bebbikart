@@ -91,5 +91,5 @@ curl -H 'x-admin-pin: 1234' localhost:8080/api/admin/players                   #
 
 - **Phone can't load the page:** same Wi-Fi? Guest networks often block device-to-device traffic. Check the IP the server printed, and the macOS firewall prompt.
 - **"The big screen isn't connected yet" on Go!:** the game isn't connected. Its overlay says `SERVER online` when it is; check the game key.
-- **Racer stuck on "Looking at your drawing…":** see the server log (`[job] …`). Jobs time out after 200 s (one DeepSeek call can take 90 s, plus one retry) and the phone shows the error.
+- **Racer stuck on "Looking at your drawing…":** see the server log (`[job] …`). Jobs time out after 300 s (`BK_JOB_TIMEOUT_MS`; the look, design, critique and refine passes take about 60 to 150 s) and the phone shows the error.
 - **Fresh start:** stop the server and delete `apps/server/data/`, or call the reset endpoint above.

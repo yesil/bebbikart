@@ -72,6 +72,12 @@ const ID_PREFIXES = {
 	"session": "ses",
 	"message": "msg"
 }
+const JOB_STAGES = [
+	"looking",
+	"designing",
+	"critiquing",
+	"refining"
+]
 const JOB_STATUSES = [
 	"queued",
 	"designing",

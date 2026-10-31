@@ -74,6 +74,6 @@ export function loadSettings(env = process.env) {
     autoStart: (env.BK_AUTOSTART ?? "1") !== "0",
     hasDeepSeekKey: !!env.DEEPSEEK_API_KEY,
     // One DeepSeek call can take up to 90 s, plus one retry for an invalid reply.
-    jobTimeoutMs: Number(env.BK_JOB_TIMEOUT_MS ?? 200_000),
+    jobTimeoutMs: Number(env.BK_JOB_TIMEOUT_MS ?? 300_000),
   };
 }

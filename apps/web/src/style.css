@@ -311,6 +311,36 @@ h2 {
     opacity: 0;
   }
 }
+.stages {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.stages i {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.stages i.done {
+  background: var(--accent);
+}
+.stages i.on {
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  to {
+    transform: scale(1.35);
+    opacity: 0.6;
+  }
+}
+.tagline {
+  font-size: 1.15rem;
+  font-style: italic;
+  margin: 4px 0 8px;
+}
 .words {
   font-weight: 700;
   color: var(--muted);
@@ -670,4 +700,8 @@ h2 {
 .laps li.best {
   color: var(--good);
   font-weight: 800;
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.9rem;
 }

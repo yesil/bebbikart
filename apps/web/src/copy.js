@@ -20,6 +20,13 @@ export const COPY = {
     queued: "Waiting in line…",
     designing: "Looking at your drawing…",
     building: "Building your racer…",
+    stages: {
+      looking: "Looking at your drawing…",
+      designing: "Dreaming up your racer…",
+      critiquing: "Checking it looks like your drawing…",
+      refining: "Adding the finishing touches…",
+    },
+    slow: "Making a racer takes a minute or two.",
     review: "A grown-up is checking it, one moment.",
     failed: "We couldn't make your racer from these drawings.",
     failedHint: "Tell a grown-up what it says, then try again:",

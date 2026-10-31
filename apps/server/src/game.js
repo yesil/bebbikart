@@ -668,6 +668,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     setDeviceOnline,
     // assets
     saveJob,
+    pushPlayer,
     setPlayerStatus,
     setManifest,
     setRender,

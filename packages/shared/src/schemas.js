@@ -7,6 +7,7 @@ import {
   FAIL_REASONS,
   FORK_IDS,
   GHOST_HZ,
+  JOB_STAGES,
   JOB_STATUSES,
   PLAYER_STATUSES,
   REJECT_REASONS,
@@ -105,6 +106,7 @@ export const AssetJobSchema = z.object({
   id: z.string(),
   playerId: z.string(),
   status: JobStatusSchema,
+  stage: z.enum(JOB_STAGES).optional(), // while designing: the pipeline step in progress
   rejectReason: RejectReasonSchema.optional(),
   rejectedImage: z.enum(DRAWING_KINDS).optional(),
   error: z.string().optional(),
