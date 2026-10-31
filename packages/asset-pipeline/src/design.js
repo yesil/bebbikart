@@ -44,6 +44,9 @@ function effortFromEnv(v) {
   return { design, review };
 }
 
+/** Review rounds (render → review → patch). BK_REVIEW_ROUNDS overrides; see the timings above. */
+const REVIEW_ROUNDS = Number(process.env.BK_REVIEW_ROUNDS ?? 1);
+
 /** Tries per pass; each retry carries the validation errors. */
 const ATTEMPTS = 3;
 
@@ -156,38 +159,48 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       return reject(design.rejected.reason, design.rejected.image, design.rejected.seen);
 
     // 3 · Review: render the racer, show it next to the drawings, apply the reviewer's patch.
-    onStatus("critiquing");
-    let renders = null;
-    if (renderer) {
-      const started = Date.now();
-      try {
-        renders = await renderer.render(design.spec);
-      } catch (err) {
-        throw new StageFailed(`render for the review failed: ${err.message}`);
+    // REVIEW_ROUNDS > 1 renders the patched racer and reviews it again.
+    let current = design.spec;
+    let review = null;
+    const fixes = [...design.fixes];
+    for (let round = 1; round <= REVIEW_ROUNDS; round++) {
+      const tag = round === 1 ? "" : `${round}`;
+      onStatus("critiquing");
+      let renders = null;
+      if (renderer) {
+        const started = Date.now();
+        try {
+          renders = await renderer.render(current);
+        } catch (err) {
+          throw new StageFailed(`render for the review failed: ${err.message}`);
+        }
+        timings[`render${tag}`] = Date.now() - started;
+        log(`render${tag}: ok in ${((Date.now() - started) / 1000).toFixed(1)} s`);
       }
-      timings.render = Date.now() - started;
-      log(`render: ok in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+      const shown = {
+        observations: design.observations,
+        featureMap: design.featureMap,
+        spec: current,
+      };
+      const spec = current;
+      review = await pass(
+        `review${tag}`,
+        (errors) =>
+          buildReviewMessages({
+            characterDataUrl: imgs.character.dataUrl,
+            vehicleDataUrl: imgs.vehicle.dataUrl,
+            design: shown,
+            renders,
+            previousErrors: errors,
+          }),
+        { vision: true, effort: DESIGN_EFFORT.review, onText: () => onStatus("refining") },
+        (v) => validateReview(v, spec),
+      );
+      current = review.spec;
+      fixes.push(...review.fixes);
+      if (review.patch.length === 0) break;
     }
-    const shown = {
-      observations: design.observations,
-      featureMap: design.featureMap,
-      spec: design.spec,
-    };
-    const review = await pass(
-      "review",
-      (errors) =>
-        buildReviewMessages({
-          characterDataUrl: imgs.character.dataUrl,
-          vehicleDataUrl: imgs.vehicle.dataUrl,
-          design: shown,
-          renders,
-          previousErrors: errors,
-        }),
-      { vision: true, effort: DESIGN_EFFORT.review, onText: () => onStatus("refining") },
-      (v) => validateReview(v, design.spec),
-    );
 
-    const fixes = [...design.fixes, ...review.fixes];
     const file = await writeSpec(input.outDir, name, review.spec, {
       jobId: input.jobId,
       playerId: input.playerId,

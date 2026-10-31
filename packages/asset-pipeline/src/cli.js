@@ -17,14 +17,14 @@ const USAGE = `Usage:
 Options:
   --out <dir>     folder for <name>.spec.json files (default: out)
   --name <name>   spec file name (default: from the vehicle file name)
-  --mock          use hand-written replies instead of DeepSeek (no API key needed)
+  --mock          use hand-written replies instead of Claude (no API key needed)
   --reroll        "try another look": ask for a different design
   --skip-check    facilitator approved the photos: never reject
   --quiet         don't print the spec JSON
   --jobs <n>      design n racers at the same time (default 1)
 
-Env: DEEPSEEK_API_KEY (required without --mock), DEEPSEEK_VISION_MODEL, DEEPSEEK_DESIGN_MODEL,
-     DEEPSEEK_BASE_URL, DEEPSEEK_TIMEOUT_MS`;
+Env: ANTHROPIC_API_KEY (required without --mock), CLAUDE_DESIGN_MODEL (default claude-sonnet-5-5),
+     CLAUDE_EFFORT, CLAUDE_PASS_EFFORT (design,review), BK_REVIEW_ROUNDS, BK_GODOT_BIN`;
 
 async function main(argv) {
   const [command, ...rest] = argv;
@@ -46,8 +46,8 @@ async function main(argv) {
   });
   if (values.help) return console.log(USAGE);
 
-  if (!values.mock && !process.env.DEEPSEEK_API_KEY) {
-    return fail("DEEPSEEK_API_KEY is not set. Put it in .env (never commit it) or use --mock.");
+  if (!values.mock && !process.env.ANTHROPIC_API_KEY) {
+    return fail("ANTHROPIC_API_KEY is not set. Put it in .env (never commit it) or use --mock.");
   }
 
   const runs = values.samples
