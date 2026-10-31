@@ -1,9 +1,10 @@
-import { SECTION_IDS } from "@bebbikart/shared";
+import { SECTION_IDS, TRACK_STRETCHES } from "@bebbikart/shared";
 import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
 import { Avatar, delta, GridCall, isLoop, secs, useGridCall } from "./common.js";
+import { SetupCard } from "./setup-card.js";
 import { TrackMap } from "./track-map.js";
 
 export function Run({ ctx }) {
@@ -153,6 +154,7 @@ export function Result({ ctx }) {
   const gridLeft = useGridCall(s);
   const [sel, setSel] = useState(null); // the stretch tapped on the map (its row lights up)
   const see = seeWhy(r, s.me?.id);
+  const [peek, setPeek] = useState(false); // the faster racer's setup card is open
 
   async function again() {
     dispatch({ type: "clearResult" });
@@ -191,7 +193,7 @@ export function Result({ ctx }) {
                 selected=${sel} onPick=${setSel} />
               <p class="hint center">${COPY.map.tapHint}</p>
             </section>
-            <${Stretches} r=${r} see=${see} sel=${sel} />`
+            <${Stretches} r=${r} see=${see} sel=${sel} onPeek=${() => setPeek(true)} />`
         : null
     }
     ${
@@ -202,6 +204,21 @@ export function Result({ ctx }) {
               ${laps.map((l, i) => html`<li key=${i} class=${l === run.bestLapMs ? "best" : ""}>${secs(l)}</li>`)}
             </ol>
           </section>`
+        : null
+    }
+    ${
+      peek && see.faster && s.me
+        ? html`<${SetupCard}
+            who=${{
+              nickname: see.faster.who,
+              avatarUrl: s.leaderboard.find((e) => e.playerId === see.faster.playerId)?.avatarUrl,
+              timeMs: see.faster.ms,
+              timeLabel: COPY.stretches[run.track][see.faster.route ?? see.faster.id],
+            }}
+            setup=${see.faster.setup} mine=${r.build ?? s.me.build} maxStars=${s.config.starsMaxPerAbility}
+            ability=${see.faster.route ? null : see.faster.ability}
+            fork=${see.faster.route ? TRACK_STRETCHES[run.track].find((x) => x.id === see.faster.route).fork : null}
+            onClose=${() => setPeek(false)} />`
         : null
     }
     <div class="go-bar-space" aria-hidden="true"></div>
@@ -220,21 +237,45 @@ const FASTER_NOTE_MS = 200;
 const gapToBest = (st) =>
   st.bestMs !== undefined ? Math.round((st.ms - st.bestMs) / 100) * 100 : null;
 
+/** Green or red only beyond noise: 0.2 s or 2% of the stretch, whichever is bigger. */
+const toneOf = (st, d) =>
+  d === null || Math.abs(d) < Math.max(200, st.ms * 0.02) ? "" : d < 0 ? "good" : "bad";
+
 /**
- * What the map and the list show (contracts §2d): each stretch green or red against my best (a
- * hair either way, or no best yet, stays neutral), and the one stretch where the session's fastest
- * racer (someone else) gains most on me.
+ * What the map and the list show (contracts §2d, §2f): each stretch green or red against my best
+ * (small gaps or no best yet stay neutral), and the one stretch where someone else in the session
+ * gains most on me: on the same stretch, or on a fork through the other route ("Mia takes the
+ * ford"), with their setup.
  */
 function seeWhy(r, meId) {
   const tone = {};
   let faster;
+  const consider = (f) => {
+    if (f.gap >= FASTER_NOTE_MS && (!faster || f.gap > faster.gap)) faster = f;
+  };
   for (const st of r.stretches ?? []) {
-    const d = gapToBest(st);
-    if (d) tone[st.id] = d < 0 ? "good" : "bad";
-    if (!st.fastestNickname || st.fastestPlayerId === meId) continue;
-    const gap = st.ms - st.fastestMs;
-    if (gap >= FASTER_NOTE_MS && (!faster || gap > faster.gap))
-      faster = { id: st.id, gap, who: st.fastestNickname };
+    const t = toneOf(st, gapToBest(st));
+    if (t) tone[st.id] = t;
+    if (st.fastestNickname && st.fastestPlayerId !== meId)
+      consider({
+        id: st.id,
+        gap: st.ms - st.fastestMs,
+        who: st.fastestNickname,
+        playerId: st.fastestPlayerId,
+        ms: st.fastestMs,
+        setup: st.fastestSetup,
+        ability: st.ability,
+      });
+    if (st.other && st.other.playerId !== meId)
+      consider({
+        id: st.id,
+        gap: st.ms - st.other.ms,
+        who: st.other.nickname,
+        playerId: st.other.playerId,
+        ms: st.other.ms,
+        setup: st.other.setup,
+        route: st.other.id, // their way through this fork
+      });
   }
   return { tone, faster };
 }
@@ -244,7 +285,7 @@ function seeWhy(r, meId) {
  * coach tip's stretch highlighted, the one tapped on the map lit up; a note where the session's
  * fastest gains most on me; a failed run's last stretch at the end.
  */
-function Stretches({ r, see, sel }) {
+function Stretches({ r, see, sel, onPeek }) {
   const run = r.run;
   const names = COPY.stretches[run.track];
   const faster = see.faster;
@@ -261,15 +302,26 @@ function Stretches({ r, see, sel }) {
       <ol class="stretches" ref=${list}>
         ${r.stretches.map((st) => {
           const d = gapToBest(st);
+          const t = toneOf(st, d);
           return html`<li key=${st.id} data-st=${st.id}
             class=${`${r.coach?.stretch === st.id ? "tip" : ""} ${sel === st.id ? "sel" : ""}`}>
             <span class="ic">${st.ability ? COPY.abilities[st.ability][0] : COPY.result.safeRoute}</span>
             <span class="nm">${names[st.id]}</span>
             <span class="t">${secs(st.ms)}</span>
-            <span class=${`d ${d === null || d === 0 ? "" : d < 0 ? "good" : "bad"}`}>${d === null ? "–" : delta(d)}</span>
+            <span class=${`d ${t}`}>${d === null ? "–" : delta(d)}</span>
             ${
               faster?.id === st.id
-                ? html`<span class="note">${COPY.result.fasterHere(faster.who, (faster.gap / 1000).toFixed(1))}</span>`
+                ? html`<button class="note link" onClick=${onPeek}>
+                    ${
+                      faster.route
+                        ? COPY.setup.fasterRoute(
+                            faster.who,
+                            names[faster.route],
+                            (faster.gap / 1000).toFixed(1),
+                          )
+                        : COPY.result.fasterHere(faster.who, (faster.gap / 1000).toFixed(1))
+                    } ›
+                  </button>`
                 : null
             }
           </li>`;
