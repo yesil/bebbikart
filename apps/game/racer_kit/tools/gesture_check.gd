@@ -1,13 +1,17 @@
 extends SceneTree
-## Headless check of the gesture layer (racer_gestures.gd) on every racer we have: the samples,
-## data/pkg_default and every spec the designer wrote under packages/asset-pipeline/out*/. Each
-## racer gets every gesture and driven event, stepped 4 s at 60 Hz, and fails on:
-##   - a NaN / infinite transform on a node the layer moves
+## Headless check of the gesture and ride layers (racer_gestures.gd, ride_motion.gd) on every
+## racer we have: the samples, data/pkg_default and every spec the designer wrote under
+## packages/asset-pipeline/out*/. Each racer gets every gesture and driven event, stepped 4 s at
+## 60 Hz, and fails on:
+##   - a NaN / infinite transform on a node the layers move
+##   - a ride reaction that does not show (RIDE_EXPECT: a pony that does not rear at the finish,
+##     wings that do not fold on landing, a kart body that does not roll in a bend ...), or a ride
+##     not back at rest once it is over
 ##   - hands not back at rest (on the handle, or hanging) once the gesture is over
 ##   - the head turned past RacerGestures' limits
 ##   - any part of the racer below the ground
 ##   - snap_pose() not giving back the exact built pose
-##   - the layer costing more than MAX_US per racer per frame (busiest state, mean)
+##   - both layers together costing more than MAX_US per racer per frame (busiest state, mean)
 ## Exit code 1 on any failure.
 ##
 ##   godot --headless --path apps/game --script res://racer_kit/tools/gesture_check.gd
@@ -48,7 +52,7 @@ func _run() -> void:
 	var t0 := Time.get_ticks_msec()
 	for f in files:
 		_check(f)
-	print("%d racers x %d events, %d failures, gesture layer %.1f us/racer/frame (worst %s %.1f us), %.1f s" % [
+	print("%d racers x %d events, %d failures, gesture + ride layers %.1f us/racer/frame (worst %s %.1f us), %.1f s" % [
 		files.size(), EVENTS.size(), failures, total_us / maxi(1, total_frames), worst_name, worst_us,
 		(Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -85,8 +89,8 @@ func _check(path: String) -> void:
 		return
 	root.add_child(r)
 	var g: Gestures = r.gestures
-	if not g.ok:
-		_fail(who, "setup", g.error)
+	if not g.ok or not r.ride.ok:
+		_fail(who, "setup", (g.error + " " + r.ride.error).strip_edges())
 		r.free()
 		return
 	var rest := _snapshot(r)
@@ -97,10 +101,12 @@ func _check(path: String) -> void:
 		_fire(r, ev, true)
 		var steps := int((EVENT_S + SETTLE_S) / DT)
 		var broke := false
+		var ext := {}
 		for i in steps:
 			if i == int(1.5 / DT):
 				_fire(r, ev, false)  # held states end
 			r._process(DT)
+			_ride_extremes(r, ext)
 			var why := _frame_problem(r, i % 15 == 0)
 			if why != "":
 				_fail(who, ev, "t=%.2f s: %s" % [i * DT, why])
@@ -112,6 +118,8 @@ func _check(path: String) -> void:
 		if broke:
 			continue
 		var why2 := _hands_problem(r)
+		if why2 == "":
+			why2 = _ride_problem(r, ev, ext)
 		if why2 != "":
 			_fail(who, ev, why2)
 			bad += 1
@@ -164,6 +172,7 @@ func _nodes(r: ToyRacer) -> Array:
 	out.append_array(g._elbow)
 	out.append_array(g._hand)
 	out.append_array(g._sw_node)
+	out.append_array(r.ride.nodes())
 	return out
 
 
@@ -202,6 +211,89 @@ func _lowest(n: Node, xf: Transform3D) -> void:
 				_low = y
 				_low_name = str(c.get_parent().name) + "/" + str(c.name)
 		_lowest(c, cx)
+
+
+## Largest ride motions seen during an event (rig pitch / roll / squash, the Sway, wings, jelly, flames).
+func _ride_extremes(r: ToyRacer, e: Dictionary) -> void:
+	var rb := r.rig.basis
+	var eu := rb.get_euler()
+	_mx(e, "pitch", eu.x)
+	_mx(e, "-pitch", -eu.x)
+	_mx(e, "roll", absf(eu.z))
+	_mx(e, "-sy", -rb.get_scale().y)
+	var m = r.ride
+	if m._sway:
+		_mx(e, "sway_roll", absf(m._sway.basis.get_euler().z))
+		_mx(e, "-sway_sy", -m._sway.basis.get_scale().y)
+	if m._jelly:
+		_mx(e, "-jelly_sy", -m._jelly.basis.get_scale().y)
+		_mx(e, "jelly_lean", absf(m._jelly.basis.get_euler().z))
+	for w in m._wings:
+		_mx(e, "wing_fold", absf(w.rotation.y))
+		_mx(e, "wing_flap", absf(w.rotation.z))
+	for f in m._flames:
+		_mx(e, "flame", f.scale.z)
+
+
+static func _mx(e: Dictionary, k: String, v: float) -> void:
+	e[k] = maxf(float(e.get(k, -INF)), v)
+
+
+## Per event and ride: [extreme, at least, what it shows]. "-x" keys are negated minima.
+func _ride_expect(r: ToyRacer, ev: String) -> Array:
+	var m = r.ride
+	var out: Array = []
+	var wheeled: bool = m.base in m.WHEELED
+	var carver: bool = m.base in m.CARVERS
+	match ev:
+		"finish":
+			if m.base == "animal4" and m._rear_max > 0.15:
+				out.append(["pitch", m._rear_max * 0.7, "rears up"])
+			if m.base == "blob":
+				out.append(["-jelly_sy", -0.9, "bounces"])
+			if m.base in ["boat", "sailboat"]:
+				out.append(["roll", 0.06, "rocks"])
+			if not m._wings.is_empty():
+				out.append(["wing_flap", 0.6, "flaps"])
+		"land":
+			if wheeled:
+				out.append(["-sway_sy", -0.93, "squashes its body"])
+			if carver:
+				out.append(["-sy", -0.95, "squashes"])
+			if m.base == "animal4" and m._buck_max > 0.05:
+				out.append(["-pitch", m._buck_max * 0.6, "bucks"])
+			if m.base == "blob":
+				out.append(["-jelly_sy", -0.85, "wobbles"])
+			if not m._wings.is_empty():
+				out.append(["wing_fold", 0.5, "folds its wings"])
+		"drive":
+			if wheeled:
+				out.append(["sway_roll", 0.08, "rolls into the bend"])
+			if carver:
+				out.append(["roll", 0.15, "carves into the bend"])
+			if m.base == "blob":
+				out.append(["jelly_lean", 0.06, "leans out of the bend"])
+		"state:air":
+			if not m._wings.is_empty():
+				out.append(["wing_flap", 0.9, "flaps hard"])
+		"state:boost":
+			if not m._flames.is_empty():
+				out.append(["flame", 1.8, "flares"])
+	return out
+
+
+func _ride_problem(r: ToyRacer, ev: String, ext: Dictionary) -> String:
+	for x in _ride_expect(r, ev):
+		var got := float(ext.get(x[0], -INF))
+		if got < float(x[1]):
+			return "ride reaction missing: %s %s (%s %.3f, want >= %.3f)" % [r.ride.base, x[2], x[0], got, x[1]]
+	var m = r.ride
+	if m._sway and absf(m._sway.basis.get_euler().z) > 0.02:
+		return "ride not back at rest: Sway still rolled %.3f" % m._sway.basis.get_euler().z
+	for w in m._wings:
+		if absf(w.rotation.y) > 0.02:
+			return "ride not back at rest: wings still folded %.3f" % w.rotation.y
+	return ""
 
 
 func _hands_problem(r: ToyRacer) -> String:
@@ -260,6 +352,7 @@ func _time(r: ToyRacer, who: String) -> void:
 	var n := 240
 	var t0 := Time.get_ticks_usec()
 	for i in n:
+		r.ride.update(DT)
 		g.update(DT)
 	var us := float(Time.get_ticks_usec() - t0) / n
 	total_us += us * n

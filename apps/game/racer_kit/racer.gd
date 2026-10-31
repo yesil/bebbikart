@@ -8,12 +8,14 @@ extends Node3D
 ##
 ## Hierarchy: ToyRacer > Rig (lean/bounce/squash) > Model (grounded) > Ride, Character.
 ## Animated nodes are found by metadata: wheel_spin, leg_swing, wing_flap, spin, flicker,
-## tail_wag (see KitRideParts).
+## tail_wag, jiggle (see KitRideParts); ride_motion.gd (`ride`) moves them and gives every ride
+## base its reactions (rearing, wing folds, squash and stretch, rocking, flares, wobbles).
 
 signal mood_changed(mood: String)
 
 ## By path, not class name: racer.gd must load even before Godot's class cache knows the script.
 const Gestures = preload("res://racer_kit/racer_gestures.gd")
+const RideMotion = preload("res://racer_kit/ride_motion.gd")
 
 var spec: Dictionary = {}
 var bounciness := 1.0
@@ -44,6 +46,7 @@ var arm_r: Node3D
 var face: RacerFace
 var name_tag: Label3D
 var gestures := Gestures.new()
+var ride := RideMotion.new()
 
 var _anim := {}  # meta name -> Array[Node3D]
 var _t := 0.0
@@ -84,11 +87,13 @@ func setup(refs: Dictionary) -> void:
 	_collect(model)
 	_t = randf() * 10.0
 	_foot = _footprint()
-	if not gestures.setup(self):
+	var ok_g := gestures.setup(self)
+	var ok_r := ride.setup(self)
+	if not ok_g or not ok_r:
 		# A builder bug (a node it always makes is missing): say so on the racer too.
 		var l := Label3D.new()
 		l.name = "GestureError"
-		l.text = gestures.error
+		l.text = (gestures.error + "\n" + ride.error).strip_edges()
 		l.modulate = Color(1.0, 0.25, 0.2)
 		l.font_size = 32
 		l.pixel_size = 0.006
@@ -167,12 +172,14 @@ func land() -> void:
 	_squash = 0.25
 	_squash_k = 0.7
 	gestures.kick(Vector3(0.0, -3.0, 0.0))
+	ride.land()
 
 
 ## Spin-out (fall off track, hit hard): dizzy, then slumps.
 func fail() -> void:
 	_fail_t = FAIL_TIME
 	_sad_t = 0.0
+	ride.fail()
 	gestures.play(Gestures.G.DIZZY, 0, 0.6)
 	gestures.play(Gestures.G.SLUMP, 0, 1.5, 0.4)
 
@@ -188,8 +195,10 @@ func wave() -> void:
 	gestures.play(Gestures.G.WAVE)
 
 
-## Crossed the line: the personality's finish gesture, then a wave at the camera.
+## Crossed the line: the personality's finish gesture, then a wave at the camera; the ride rears
+## up, flaps or bounces.
 func finish() -> void:
+	ride.finish()
 	match gestures.win_pose:
 		Gestures.G.CHEER:
 			celebrate(2)
@@ -260,6 +269,7 @@ func reset_anim() -> void:
 	if rig:
 		rig.transform = Transform3D.IDENTITY
 	gestures.reset()
+	ride.reset()
 	for key in _anim:
 		for n in _anim[key]:
 			n.transform = n.get_meta("rest")
@@ -311,34 +321,9 @@ func _process(delta: float) -> void:
 	if face:
 		face.tick(dt)
 	var moving := clampf(speed / 10.0, 0.0, 1.0)
+	ride.update(dt)
 
-	for n in _anim["wheel_spin"]:
-		if not airborne:
-			n.rotation.x -= speed / maxf(float(n.get_meta("wheel_spin")), 0.05) * dt
-	for n in _anim["leg_swing"]:
-		var amp := 0.12 + 0.6 * moving
-		var target := sin(_t * (5.0 + speed * 0.6) + float(n.get_meta("leg_swing"))) * amp
-		if airborne:
-			target = 0.7
-		n.rotation.x = lerpf(n.rotation.x, target, minf(1.0, dt * 20.0))
-	for n in _anim["wing_flap"]:
-		var fast := airborne or boost
-		var flap := sin(_t * (14.0 if fast else 4.0 + speed * 0.4)) * (0.7 if fast else 0.15 + 0.25 * moving)
-		n.rotation.z = float(n.get_meta("wing_flap")) * flap
-	for n in _anim["spin"]:
-		n.rotation.y += float(n.get_meta("spin")) * dt
-	for n in _anim["flicker"]:
-		var base := 1.6 if boost else 0.6 + moving * 0.6
-		var f := base * (1.0 + 0.15 * sin(_t * 31.0) + 0.1 * sin(_t * 17.0))
-		n.scale = Vector3(1.0, 1.0, f) * (0.9 + 0.1 * f)
-	for n in _anim["tail_wag"]:
-		n.rotation.y = sin(_t * (5.0 + speed * 0.5)) * (0.25 + 0.2 * moving)
-
-	for n in _anim["jiggle"]:
-		var j := sin(_t * (6.0 + speed * 0.4)) * (0.02 + 0.04 * moving) * bounciness
-		n.scale = Vector3(1.0 + j, 1.0 - j, 1.0 + j)
-
-	# Rig: lean, bounce, squash, spin-out, hops.
+	# Rig: lean, bounce, squash, spin-out, hops, and the ride's own pitch / roll / lift / squash.
 	_lean_s = lerpf(_lean_s, lean, minf(1.0, dt * 8.0))
 	var xf := Transform3D.IDENTITY
 	var bounce := absf(sin(_t * (7.0 + speed * 0.5))) * 0.025 * bounciness * moving
@@ -360,12 +345,15 @@ func _process(delta: float) -> void:
 	var sq := Vector3.ONE
 	if _squash > 0.0:
 		_squash -= dt
-		var s := sin(clampf(_squash / 0.35, 0.0, 1.0) * PI) * 0.22 * _squash_k * bounciness
+		var s := sin(clampf(_squash / 0.35, 0.0, 1.0) * PI) * 0.22 * _squash_k * bounciness * ride.rig_squash
 		sq = Vector3(1.0 + s, 1.0 - s, 1.0 + s)
 	_motion(moving)
-	xf.basis = Basis.from_euler(Vector3(pitch, yaw, -_lean_s * 0.22 + _mo_roll)).scaled(sq)
-	xf.origin = Vector3(_mo_x, maxf(0.0, bounce + idle + hop + _mo_y) + _ground_lift(xf.basis), 0)
+	_mo_char_pitch -= ride.pitch * 0.45  # the driver leans into a rearing / diving ride
+	xf.basis = Basis.from_euler(Vector3(pitch + ride.pitch, yaw + ride.yaw, -_lean_s * 0.22 + _mo_roll + ride.roll)) \
+		.scaled(sq * ride.scale)
+	xf.origin = Vector3(_mo_x, maxf(0.0, bounce + idle + hop + _mo_y + ride.lift) + _ground_lift(xf.basis), 0)
 	rig.transform = xf
+	gestures.carry = ride.carry
 	gestures.update(dt)
 	if _sad_t > 0.0:
 		_sad_t -= dt

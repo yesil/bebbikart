@@ -87,6 +87,9 @@ var head_pivot: Node3D
 var head: Node3D
 var legs: Node3D           # null when the character has no legs
 var grip := false          # hands hold a handle / reins (else they hang free: board, blob)
+## Model-space transform the driver sits on, written by RideMotion before update() (a kart's
+## body rolling on its springs, a blob's bouncing top); identity on a still ride.
+var carry := Transform3D.IDENTITY
 
 # Personality
 var amp := 1.0
@@ -710,6 +713,7 @@ func reset() -> void:
 	_was_slip = false
 	_was_hat = false
 	_air_held = -1
+	carry = Transform3D.IDENTITY
 	_char_xf = _char_rest
 	_char_inv = _char_rest.affine_inverse()
 	_head_xf = _head_rest
@@ -833,11 +837,11 @@ func update(dt: float) -> void:
 	var b := sin(_breath) * lerpf(0.012, 0.03, pant_k)
 	var basis := Basis.from_euler(Vector3(_pitch + gp + b * 0.5, gt, _roll + gr)) * _char_rest.basis \
 		* Basis.from_scale(Vector3(1.0 + 0.5 * b, 1.0 + b, 1.0 + 0.5 * b))
-	_char_xf = Transform3D(basis, _char_rest.origin + Vector3(0.0, gl, 0.0))
+	_char_xf = carry * Transform3D(basis, _char_rest.origin + Vector3(0.0, gl, 0.0))
 	character.transform = _char_xf
 	_char_inv = _char_xf.affine_inverse()
 	if legs:
-		legs.transform = _char_inv * _char_rest * _legs_rest
+		legs.transform = _char_inv * carry * _char_rest * _legs_rest
 
 	# Head: look target (spring with quick turns), personality, gestures; clamped.
 	_look(dt, sdt, moving)
@@ -968,7 +972,7 @@ func _arms() -> void:
 		var s := -1.0 if i == 0 else 1.0
 		var t: Vector3
 		if grip:
-			t = _char_inv * _grip_model[i]
+			t = _char_inv * (carry * _grip_model[i])
 		else:
 			t = _hand_rest[i] + Vector3(s * 0.06, 0.1, 0.0) * lean_out
 		var pole := Vector3(s * POLE_GRIP.x, POLE_GRIP.y, POLE_GRIP.z)
