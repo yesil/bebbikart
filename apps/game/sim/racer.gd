@@ -360,9 +360,15 @@ func step(sim) -> void:
 	if not airborne:
 		wobble = maxf(0.0, wobble - (0.5 + 0.1 * st["stability"]) * dt)
 
-	if bool(seg["rails"]):
+	if bool(seg["rails"]) or bool(seg.get("low_rails", false)):
 		var lim := hw - 0.45
 		if absf(d) > lim:
+			# A low rail (the causeway) stops a kart that reaches it slowly; one blown into it
+			# hard tips over it. Either way the kart never drives through the rail.
+			if bool(seg.get("low_rails", false)) and absf(vd) > Tuning.RAIL_TOPPLE_VD:
+				d = clampf(d, -lim, lim)
+				_fail(sim, "off_track")
+				return
 			d = clampf(d, -lim, lim)
 			vd = 0.0
 			v *= 1.0 - 0.8 * dt
@@ -472,7 +478,7 @@ func step(sim) -> void:
 func _land(sim) -> void:
 	airborne = false
 	vy = 0.0
-	if absf(d) > half_width() + float(seg["edge"]) and not bool(seg["rails"]):
+	if absf(d) > half_width() + float(seg["edge"]) and not bool(seg["rails"]) and not bool(seg.get("low_rails", false)):
 		_fail(sim, "off_track")
 		return
 	if not jump_air:
@@ -641,7 +647,7 @@ func _close_split(sim) -> void:
 func _trace_sample() -> void:
 	var p := world_pos()
 	trace.append_array([snappedf(p.x, 0.01), snappedf(p.y, 0.01), snappedf(p.z, 0.01),
-		snappedf(route().heading_at(ls), 0.01), snappedf(-route().pitch_at(ls), 0.01)])
+		snappedf(route().heading_at(ls), 0.01), snappedf(-ground_pitch(), 0.01)])
 
 
 func _summary() -> Dictionary:
@@ -723,7 +729,29 @@ func yaw() -> float:
 func pitch() -> float:
 	if airborne:
 		return clampf(-vy * 0.04, -0.5, 0.5)
-	return -route().pitch_at(ls)
+	return -ground_pitch()
+
+
+## Slope of the surface under the kart, including the kicker and the landing wedge (the bare
+## centre line is flat there, so a kart pitched by it noses into the kicker).
+func ground_pitch() -> float:
+	var r := route()
+	var s0 := ls - 0.75
+	var s1 := ls + 0.75
+	var ramp: Dictionary = seg["ramp"]
+	if not ramp.is_empty():
+		# Don't measure across the drop at the lip.
+		var lip: float = ramp["lip_s"]
+		if ls <= lip:
+			s1 = minf(s1, lip)
+		else:
+			s0 = maxf(s0, lip + 0.01)
+	var a := r.pos_at(s0)
+	var b := r.pos_at(s1)
+	var ya := a.y + Course.surface_offset(seg, s0)
+	var yb := b.y + Course.surface_offset(seg, s1)
+	var h := Vector2(b.x - a.x, b.z - a.z).length()
+	return atan2(yb - ya, maxf(h, 0.001))
 
 
 func roll() -> float:

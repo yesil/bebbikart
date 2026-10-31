@@ -42,7 +42,7 @@ const LAT_P := 1.4
 const LAT_VMAX := 3.0
 const LAT_D := 5.0
 const OFF_TRACK_MARGIN := 0.9     # soft shoulder before off_track
-const OFF_TRACK_MARGIN_RAILS := 0.25
+const RAIL_TOPPLE_VD := 0.9       # lateral m/s at a low rail that tips the kart over it (off_track)
 
 # Water
 const WATER_BASE := 0.45

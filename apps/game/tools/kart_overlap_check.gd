@@ -49,6 +49,7 @@ func _run(track: String, course, weather: Array, seconds: float) -> void:
 	cfg["lapsPerRun"] = 2
 	var sim := Sim.new(course, cfg, 7)
 	sim.emit_messages = false
+	var reasons := {}
 	sim.weather.force(weather[1], weather[2], 40.0)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
@@ -65,6 +66,10 @@ func _run(track: String, course, weather: Array, seconds: float) -> void:
 			if r.boosts_left > 0 and r.boost_t <= 0.0 and not r.airborne and Course.in_ranges(r.seg["boosts"], r.ls):
 				r.boost(sim)
 		sim.step()
+		for m in sim.outbox:
+			if m["type"] == "game.run.failed":
+				var k := "%s@%s" % [m["payload"]["reason"], m["payload"]["section"]]
+				reasons[k] = int(reasons.get(k, 0)) + 1
 		sim.outbox.clear()
 		var list: Array = sim.racers
 		for i in list.size():
@@ -81,4 +86,4 @@ func _run(track: String, course, weather: Array, seconds: float) -> void:
 					worst = maxf(worst, limit - dist)
 					fails.append("%s %s t=%.1fs: %s on %s s=%.1f and %s on %s s=%.1f are %.2f m apart" % [
 						track, weather[0], t / float(Tuning.HZ), a.run_id, a.seg_id, a.ls, b.run_id, b.seg_id, b.ls, dist])
-	print("%-11s %-5s %d karts, %d pairs checked, worst overlap %.2f m" % [track, weather[0], launched, pairs, worst])
+	print("%-11s %-5s %d karts, %d pairs checked, worst overlap %.2f m, fails %s" % [track, weather[0], launched, pairs, worst, reasons])

@@ -149,7 +149,7 @@ func _build(hill: float, north: float) -> void:
 	var xl := _along(shelter_pts, h4)
 	_add("cross_exposed", "crossing", "crossing", "exposed", _draw_ops(j4, h4, [["S", xl]],
 		[[0.0, 0.4], [12.0, 0.4], [22.0, 1.4], [xl - 22.0, 1.4], [xl - 12.0, 0.4], [xl, 0.4]]), 2.6,
-		{"exposure": 1.0, "edge": Tuning.OFF_TRACK_MARGIN_RAILS})
+		{"exposure": 1.0, "low_rails": true})
 	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
 	# Square: a chicane past the bakery, then the roundabout round the fountain turns the
 	# course north to the line.

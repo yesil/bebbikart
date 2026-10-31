@@ -13,6 +13,8 @@ const LANDING_WEDGE := 1.6
 ## Segment: {
 ##   id, section, fork ("" or fork id), choice, route (Route), half_width,
 ##   edge (extra metres before off_track), rails (bool: d is clamped, no off_track),
+##   low_rails (bool, optional: clamped too, but a kart hitting them with |vd| > RAIL_TOPPLE_VD
+##   tips over: off_track),
 ##   exposure (0..1 wind), water: [[a,b]], boosts: [[a,b]], bumps: [s...],
 ##   ramp: {} or {kick_a, lip_s, lip_h, land_s, pit_depth}, offset (route s at segment start; per path)
 ## }
@@ -66,7 +68,7 @@ func _init() -> void:
 	var xl := _forward_pts(shelter_pts)
 	_add("cross_exposed", "crossing", "crossing", "exposed", _draw("cross_exposed", j4, [["S", xl]],
 		[[0.0, 0.4], [12.0, 0.4], [22.0, 1.4], [xl - 22.0, 1.4], [xl - 12.0, 0.4], [xl, 0.4]]), 2.6,
-		{"exposure": 1.0, "edge": Tuning.OFF_TRACK_MARGIN_RAILS})
+		{"exposure": 1.0, "low_rails": true})
 	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
 	# Rainbow bends: two mirrored chicanes, then the finish straight.
 	p = _draw("bends", _end("cross_exposed"), [["S", 6.0], ["A", 12.0, -55.0], ["A", 12.0, 110.0], ["A", 12.0, -55.0],

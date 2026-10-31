@@ -196,8 +196,15 @@ func _collide() -> void:
 			var push_a := -nw * overlap * share_a
 			var push_b := nw * overlap * (1.0 - share_a)
 			a.ls = maxf(0.0, a.ls + push_a.dot(tan[i]))
-			a.d += push_a.dot(nor[i])
 			b.ls = maxf(0.0, b.ls + push_b.dot(tan[j]))
+			if a.seg_id != b.seg_id:
+				# Two branches of a fork where they still overlap (split, merge, the loop's line):
+				# their lines converge, so the karts touch tick after tick. They only rub, and are
+				# never shoved off their own road by a kart driving another one.
+				a.d = _shove(a, push_a.dot(nor[i]))
+				b.d = _shove(b, push_b.dot(nor[j]))
+				continue
+			a.d += push_a.dot(nor[i])
 			b.d += push_b.dot(nor[j])
 			# Approaching speed along the normal (a -> b).
 			var va := tan[i] * a.v + nor[i] * a.vd
@@ -226,6 +233,13 @@ func _collide() -> void:
 			victim.got_bumped(hitter.player_id)
 			hitter.bumped_other(victim.player_id)
 			emit("sim.bump", {"hitter": hitter.run_id, "victim": victim.run_id, "pos": victim.world_pos()})
+
+
+## Racer r's lateral position after a sideways push of dd, kept on the road (inside where a
+## rail would stop it) unless it was already further out.
+func _shove(r: Racer, dd: float) -> float:
+	var lim := maxf(r.half_width() - 0.45, absf(r.d))
+	return clampf(r.d + dd, -lim, lim)
 
 
 # ---------------------------------------------------------------- render helpers
