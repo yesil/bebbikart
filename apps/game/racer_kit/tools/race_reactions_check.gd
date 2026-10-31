@@ -7,6 +7,7 @@ extends SceneTree
 ## twice. Crashes are rare, so flinches are only counted.
 ## main.gd reads the same user args (pass --kit).
 ##
+## High fives must bring the two hands together (HF_TOUCH); every pair of a high five is listed.
 ##   godot --headless --path apps/game --script res://racer_kit/tools/race_reactions_check.gd \
 ##     -- --kit --racers=16 --seed=4 --speed=2 [--limit=120] [--verbose]
 
@@ -14,11 +15,13 @@ const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
 const MUST := ["go", "overtake", "alongside", "finish_together"]
 const SETTLE_S := 0.5
 const MAX_PAIR_FRAMES := 15
+const HF_TOUCH := 0.2        # m: the two slapping hands (centres) must come this close
 
 var main: Node
 var limit := 120.0
 var t := 0.0
-var counts := {"go": 0, "overtake": 0, "alongside": 0, "flinch": 0, "finish_together": 0}
+var counts := {"go": 0, "overtake": 0, "alongside": 0, "flinch": 0, "finish_together": 0, "revenge": 0, "high_five": 0}
+var hf_pairs := {}     # [a, b] of each high five -> closest the two slapping hands came (m)
 var ready_seen := {}   # views seen leaning in on the grid
 var off_road := 0      # frames a coasting finisher was off its road
 var coast_frames := 0
@@ -48,9 +51,24 @@ func _process(delta: float) -> bool:
 			counts[e.type] = int(counts.get(e.type, 0)) + 1
 			if e.type == "alongside" and (e.by.race_t < 5.0 or e.to.race_t < 5.0):
 				early_rivals += 1
-			if e.type == "finish_together":
+			if e.type == "finish_together" or e.type == "high_five":
 				for v in e.views:
 					together[v] = int(together.get(v, 0)) + 1
+			if e.type == "high_five":
+				hf_pairs[e.views] = INF
+	for pair in hf_pairs:
+		var a = pair[0]
+		var b = pair[1]
+		if is_instance_valid(a) and is_instance_valid(b) and a.hf_with == b and a.hf_go >= 0.0 \
+				and a.hf_t - a.hf_go > 0.36 and a.hf_t - a.hf_go < 0.6:
+			var d: float = a.toy.gestures.hand_world(_toward(a, b)).distance_to(b.toy.gestures.hand_world(_toward(b, a)))
+			hf_pairs[pair] = minf(hf_pairs[pair], d)
+			if "--verbose" in OS.get_cmdline_user_args() and absf(a.hf_t - a.hf_go - 0.43) < 0.01:
+				var ga = a.toy.gestures
+				var gb = b.toy.gestures
+				print("hf %s-%s t %.2f hands %.2f gap %.2f reach %.2f+%.2f hand_a->meet %.2f hand_b->meet %.2f meet_y %.2f" % [a.nickname, b.nickname, a.hf_t, d,
+					a.global_position.distance_to(b.global_position), ga.high_five_reach(_toward(a, b)), gb.high_five_reach(_toward(b, a)),
+					ga.hand_world(_toward(a, b)).distance_to(ga._hf_point), gb.hand_world(_toward(b, a)).distance_to(gb._hf_point), ga._hf_point.y - a.global_position.y])
 	for k in main.views:
 		var v = main.views[k]
 		if v.get_script() == KitRacerView and v.grid_ready:
@@ -85,6 +103,10 @@ func _process(delta: float) -> bool:
 	return false
 
 
+func _toward(v, other) -> int:
+	return 1 if (v.toy.global_transform.affine_inverse() * other.global_position).x > 0.0 else -1
+
+
 func _settled(v) -> bool:
 	var stay: float = v.FINISH_STAY if v.leaving == "finished" else v.FAIL_STAY
 	return stay - v._leave_t > SETTLE_S and v._leave_t > v.POP
@@ -110,6 +132,14 @@ func _report() -> void:
 			bad.append("no %s" % k)
 	if ready_seen.is_empty():
 		bad.append("nobody leaned in on the grid")
+	var missed := 0
+	var closest := INF
+	for pair in hf_pairs:
+		closest = minf(closest, hf_pairs[pair])
+		if hf_pairs[pair] > HF_TOUCH:
+			missed += 1
+	if missed > 0:
+		bad.append("%d of %d high fives where the hands did not meet (closest %.2f m, limit %.2f)" % [missed, hf_pairs.size(), closest, HF_TOUCH])
 	if early_rivals > 0:
 		bad.append("%d rival moments while a group was still leaving the grid" % early_rivals)
 	var twice := together.values().filter(func(n): return n > 1).size()

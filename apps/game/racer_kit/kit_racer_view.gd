@@ -22,6 +22,9 @@ var grid_beat := 0       # whole seconds to green at the last nod
 var grid_ready := false  # leaning in for the start
 var race_t := 0.0        # seconds since it left the grid (race_reactions.gd)
 var cheered := false     # already cheered together with another finisher
+var hf_with = null       # the finisher this one is high-fiving (race_reactions.gd), or null
+var hf_t := 0.0
+var hf_go := -1.0        # hf_t the slap started at (once side by side within reach), -1 before
 ## "" while racing, else the outcome being shown ("finished" / "failed") before the view frees.
 var leaving := ""
 var _leave_t := 0.0

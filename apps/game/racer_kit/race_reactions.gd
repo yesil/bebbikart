@@ -3,8 +3,11 @@ extends Node
 ## pumps a fist, waves or taunts and glances back, the passed racer's head follows them, a grumpy
 ## one shakes its head), a brace just before two racers bump, a wave or a cheeky taunt to a rival
 ## driving alongside, an "eek" flinch when a racer close by crashes, both cheering when two cross
-## the line within FINISH_TOGETHER_S, and the weather (rain, wind) for every driver. Each driver
-## remembers being passed (grumpier) and passing (cockier): RacerGestures.mood_mem.
+## the line within FINISH_TOGETHER_S (two friends side by side high-five, hands meeting), and the
+## weather (rain, wind) for every driver. Each driver remembers being passed (grumpier) and
+## passing (cockier): RacerGestures.mood_mem. Each pair of players remembers who passed whom and
+## who waved at whom (`_rivals`, for the whole game session): passing back someone who passed you
+## earns them a revenge fist shake, and friends (more waves than passes) high-five at the line.
 ## On the start grid (sim countdown): fidgets, looks at the neighbours, a wave to the crowd or the
 ## signature gesture, leaning in on 3-2-1, a whoop on green (the ride crouches and leaps too).
 ## Runs after main.gd has synced the views each frame. Placeholder views (no toy) are skipped.
@@ -36,6 +39,10 @@ const GRID_CALM_S := 1.3     # s before green the hands go back to the handle
 const LINGER_GAP := 0.25     # m kept between finishers standing after their run, and from racers going by
 const NUDGE_SPEED := 10.0    # m/s they slide apart at
 const OLD_S := 1.2           # s after its run a finisher has had its moment (cheer done)
+const HF_SIDE := Vector2(3.0, 3.5)  # m along / sideways: two finishers this close can high-five
+const HF_S := 2.0            # s the high five may take (roll level within reach, then slap hands)
+const HF_LINE_UP_S := 0.7    # s at most to roll level before the slap starts anyway
+const HF_GAP := 0.045        # m each hand stops short of the meeting point (flat palms touching)
 
 var main                     # main.gd: reads views, leaving views and sim
 ## This frame's events, for tools: {"type": "overtake" | "alongside" | "flinch" | "finish_together"
@@ -53,6 +60,9 @@ var _clock := 0.0
 var _seen_left := {}         # instance id of a view that left (finished / crashed) -> true
 var _finishers: Array = []   # [[clock, view], ...] recent finishers
 var _rng := RandomNumberGenerator.new()
+## "playerA|playerB" (sorted) -> {playerA: times A passed B, playerB: times B passed A, "bond":
+## waves minus passes}. Kept for the whole game session, across runs.
+var _rivals := {}
 
 
 func _init(p_main) -> void:
@@ -97,6 +107,7 @@ func _process(delta: float) -> void:
 	for v in _kits:
 		v.react_prev = v.global_position
 	_left_course()
+	_high_fives(delta)
 	_keep_apart(delta)
 	# Forget pairs of racers that left now and then.
 	_sweep -= delta
@@ -162,20 +173,47 @@ func _overtake(passer, passed) -> void:
 	var gp: Gestures = passed.toy.gestures
 	g.remember(PASSING_MOOD)
 	gp.remember(PASSED_MOOD)
+	var rec := _rivalry(passer, passed)
+	var me: String = passer.racer.player_id
+	var them: String = passed.racer.player_id
+	var revenge := int(rec.get(them, 0)) > int(rec.get(me, 0))  # they had passed me more often
+	rec[me] = int(rec.get(me, 0)) + 1
+	rec.bond = int(rec.bond) - 1
 	if passer.react_cool <= 0.0:
 		passer.react_cool = COOL
 		var toward := _side_of(passer, passed)
-		# Cheer (or taunt, when cocky) with the arm away from the racer just passed, glance back.
-		var pose := g.pass_gesture()
-		g.play(pose, -toward if pose != Gestures.G.TAUNT else toward)
-		g.play(Gestures.G.GLANCE_BACK, toward, 1.1, 0.25)
-		passer.toy.look_at_node(passed.toy.head_pivot, 1.3)
+		if revenge:
+			# Got them back: a fist shaken at them over the shoulder.
+			g.play(Gestures.G.SHAKE_FIST, toward)
+			passer.toy.look_at_node(passed.toy.head_pivot, 1.4)
+			events.append({"type": "revenge", "passer": passer, "passed": passed})
+		else:
+			# Cheer (or taunt, when cocky) with the arm away from the racer just passed, glance back.
+			var pose := g.pass_gesture()
+			g.play(pose, -toward if pose != Gestures.G.TAUNT else toward)
+			g.play(Gestures.G.GLANCE_BACK, toward, 1.1, 0.25)
+			passer.toy.look_at_node(passed.toy.head_pivot, 1.3)
 	if passed.react_cool <= 0.0:
 		passed.react_cool = COOL
 		passed.toy.look_at_node(passer.toy.head_pivot, 1.5)
 		var sulk := gp.passed_gesture()
 		if sulk >= 0:
 			gp.play(sulk, 0, 0.0, 0.35)
+
+
+## The two players' shared memory (see `_rivals`).
+func _rivalry(a, b) -> Dictionary:
+	var pa: String = a.racer.player_id
+	var pb: String = b.racer.player_id
+	var key := pa + "|" + pb if pa < pb else pb + "|" + pa
+	if not _rivals.has(key):
+		_rivals[key] = {pa: 0, pb: 0, "bond": 0}
+	return _rivals[key]
+
+
+## Friends: no more passes than waves between them, and neither in a grump.
+func _friends(a, b) -> bool:
+	return int(_rivalry(a, b).bond) >= 0 and a.toy.gestures.mood_mem > -0.45 and b.toy.gestures.mood_mem > -0.45
 
 
 ## -1 / 1: which side of `v` (its left / right arm) the other racer is on.
@@ -207,6 +245,8 @@ func _alongside(lo, hi, key: int, along: float, lat2: float, delta: float) -> vo
 	var pose := g.rival_gesture()
 	by.toy.look_at_node(to.toy.head_pivot, 1.6)
 	to.toy.look_at_node(by.toy.head_pivot, 1.4)
+	if pose == Gestures.G.WAVE:
+		_rivalry(by, to).bond = int(_rivalry(by, to).bond) + 1
 	if pose >= 0:
 		g.play(pose, _side_of(by, to), 1.2)
 		var back := (to.toy.gestures as Gestures).rival_gesture()
@@ -237,7 +277,10 @@ func _left_course() -> void:
 				if not v.cheered and _clock - float(f[0]) <= FINISH_TOGETHER_S and is_instance_valid(o) \
 						and o.leaving == "finished" and not o.cheered \
 						and o.global_position.distance_squared_to(v.global_position) < TOGETHER_NEAR * TOGETHER_NEAR:
-					_cheer_together(v, o)
+					if _friends(v, o) and _can_high_five(v, o):
+						_high_five(v, o)
+					else:
+						_cheer_together(v, o)
 			_finishers.append([_clock, v])
 	while not _finishers.is_empty() and _clock - float(_finishers[0][0]) > FINISH_TOGETHER_S:
 		_finishers.pop_front()
@@ -254,7 +297,8 @@ func _keep_apart(delta: float) -> void:
 	for i in _lingering.size():
 		var a = _lingering[i]
 		for j in range(i + 1, _lingering.size()):
-			_apart(a, _lingering[j], true, delta)
+			if a.hf_with != _lingering[j]:  # a high-fiving pair keeps its own distance
+				_apart(a, _lingering[j], true, delta)
 		for b in _kits:
 			_apart(a, b, false, delta)
 
@@ -276,10 +320,21 @@ func _apart(a, b, both: bool, delta: float) -> void:
 	# Away from the other one; when right in line, toward the road edge it is already nearer.
 	var away := -signf(lat) if absf(lat) > 0.05 else (1.0 if float(a._leave_d) >= 0.0 else -1.0)
 	var step := NUDGE_SPEED * delta
+	var lock_a := _slapping(a)
 	if not both:
-		# A racer going by: overlapping, or coming up behind within 8 m: get out of its way.
-		if gap_along < 0.0 or (along < 0.0 and gap_along < 8.0):
+		# A racer going by: overlapping, or coming up behind within 8 m: get out of its way (not
+		# in the middle of a high five).
+		if not lock_a and (gap_along < 0.0 or (along < 0.0 and gap_along < 8.0)):
 			a.nudge(away * minf(step * 1.5, -gap_lat), 0.0)
+		return
+	var lock_b := _slapping(b)
+	if lock_a != lock_b:
+		# One of them is mid high five and stays put: the other moves the whole way.
+		var mover = b if lock_a else a
+		var dir := -away if lock_a else away
+		if gap_along < 0.0:
+			mover.nudge(dir * minf(step, -gap_lat), 0.0)
+			mover._leave_v = 0.0
 		return
 	var back = a if along > 0.0 else b
 	var front = b if back == a else a
@@ -299,6 +354,115 @@ func _apart(a, b, both: bool, delta: float) -> void:
 		back._leave_v = front._leave_v + gap_along / 0.5  # ease in behind it
 
 
+## Side by side (HF_SIDE) and their arms can bridge the gap they must keep (LINGER_GAP).
+func _can_high_five(a, b) -> bool:
+	var fwd: Vector3 = a.forward()
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var d: Vector3 = b.global_position - a.global_position
+	if absf(d.dot(fwd)) > HF_SIDE.x or absf(d.dot(Vector3(-fwd.z, 0.0, fwd.x))) > HF_SIDE.y:
+		return false
+	var need: float = a.half_size().x + b.half_size().x + LINGER_GAP
+	var reach: float = a.toy.gestures.high_five_reach(_side_of(a, b)) + b.toy.gestures.high_five_reach(_side_of(b, a))
+	return reach * 0.95 >= need
+
+
+func _high_five(a, b) -> void:
+	a.cheered = true
+	b.cheered = true
+	a.hf_with = b
+	b.hf_with = a
+	a.hf_t = 0.0
+	b.hf_t = 0.0
+	a.hf_go = -1.0
+	b.hf_go = -1.0
+	for p in [[a, b], [b, a]]:
+		var g: Gestures = p[0].toy.gestures
+		g.stop(g.sig_pose)
+		g.stop(Gestures.G.WAVE)
+		g.stop(Gestures.G.CHEER)
+		p[0].toy.look_at_node(p[1].toy.head_pivot, HF_S)
+
+
+## Both lined up: the slap.
+func _slap(a, b) -> void:
+	events.append({"type": "high_five", "views": [a, b]})
+	a.hf_go = a.hf_t
+	b.hf_go = b.hf_t
+	for p in [[a, b], [b, a]]:
+		var g: Gestures = p[0].toy.gestures
+		g.high_five(_meet(p[0], p[1]), _side_of(p[0], p[1]))
+		g.play(Gestures.G.CHEER, 0, 0.9, Gestures.HF_PART + 0.15)
+
+
+## Where a's hand slaps b's: between their shoulders (nearer the shorter arm's), a little above
+## them, a palm's thickness short of the meeting point.
+func _meet(a, b) -> Vector3:
+	var ga: Gestures = a.toy.gestures
+	var gb: Gestures = b.toy.gestures
+	var sa: Vector3 = ga.character.global_transform * ga._shoulder[0 if _side_of(a, b) < 0 else 1]
+	var sb: Vector3 = gb.character.global_transform * gb._shoulder[0 if _side_of(b, a) < 0 else 1]
+	var ra := ga.high_five_reach(_side_of(a, b))
+	var rb := gb.high_five_reach(_side_of(b, a))
+	var mid := sa.lerp(sb, ra / maxf(ra + rb, 0.01)) + Vector3.UP * 0.15
+	var dir := sb - sa
+	dir.y = 0.0
+	return mid - dir.normalized() * HF_GAP
+
+
+## High-fiving pairs: they roll to a stop side by side, just within reach of each other, and their
+## hands keep aiming at the moving meeting point.
+func _high_fives(delta: float) -> void:
+	for id in main.leaving:
+		var a = main.leaving[id]
+		if not is_instance_valid(a) or a.hf_with == null:
+			continue
+		var b = a.hf_with
+		if not is_instance_valid(b) or a.hf_t > HF_S:
+			a.hf_with = null
+			continue
+		a.hf_t += delta
+		if a.get_instance_id() > b.get_instance_id():
+			continue  # each pair once
+		var v := minf(a._leave_v, b._leave_v)
+		a._leave_v = v
+		b._leave_v = v
+		var fwd: Vector3 = a.forward()
+		fwd.y = 0.0
+		fwd = fwd.normalized()
+		var n := Vector3(-fwd.z, 0.0, fwd.x)
+		var d: Vector3 = b.global_position - a.global_position
+		var lat := d.dot(n)
+		var reach: float = a.toy.gestures.high_five_reach(_side_of(a, b)) + b.toy.gestures.high_five_reach(_side_of(b, a))
+		var want := maxf(a.half_size().x + b.half_size().x + LINGER_GAP, reach * 0.85)
+		var move := clampf(absf(lat) - want, -6.0 * delta, 6.0 * delta) * 0.5 * signf(lat)
+		a.nudge(move, 0.0)
+		b.nudge(-move, 0.0)
+		var along := d.dot(fwd)
+		var need: float = a.half_size().y + b.half_size().y + LINGER_GAP
+		if absf(lat) >= a.half_size().x + b.half_size().x + LINGER_GAP - 0.02 or absf(along) >= need:
+			var back = a if along > 0.0 else b
+			back.nudge(0.0, clampf(-absf(along), -6.0 * delta, 0.0))  # draw level (only where they cannot touch)
+		if a.hf_go < 0.0:
+			if absf(absf(lat) - want) < 0.12 and absf(along) < 0.35:
+				_slap(a, b)
+			elif a.hf_t > HF_LINE_UP_S:
+				# The crowd at the line kept them apart: they cheer together instead.
+				a.hf_with = null
+				b.hf_with = null
+				_cheer_together(a, b)
+				continue
+		a.toy.gestures.high_five_point(_meet(a, b))
+		b.toy.gestures.high_five_point(_meet(b, a))
+
+
+## Mid-slap (lined up, until the hands part): the pair is not pushed around by the others.
+func _slapping(v) -> bool:
+	return v.hf_with != null and v.hf_go >= 0.0 and v.hf_t - v.hf_go < Gestures.HF_PART + 0.15
+
+
+## A high five needs the two to roll level within reach (HF_LINE_UP_S); a pair the crowd keeps
+## apart cheers together instead.
 func _cheer_together(a, b) -> void:
 	a.cheered = true
 	b.cheered = true

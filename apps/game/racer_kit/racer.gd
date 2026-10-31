@@ -217,7 +217,8 @@ func signature() -> void:
 
 ## A gesture by name (RacerGestures.NAMES): wave, cheer, fist_pump, glance_back, slump, dizzy,
 ## brace, wheee, tuck, flail, surprised, head_shake, rain, hat_hold, ready, tap, scratch, stretch,
-## salute, clap, bow, spin, peek, twirl, jive, taunt, whoop, flinch. side: -1 left, 1 right arm.
+## salute, clap, bow, spin, peek, twirl, jive, taunt, whoop, flinch, shake_fist (high_five needs a
+## meeting point: gestures.high_five()). side: -1 left, 1 right arm.
 func gesture(gesture_name: String, side := 0) -> void:
 	gestures.play_named(gesture_name, side)
 

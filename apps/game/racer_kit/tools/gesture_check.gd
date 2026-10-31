@@ -27,7 +27,7 @@ const MAX_US := 50.0
 const EVENTS := ["wave", "cheer", "fist_pump", "glance_back", "slump", "dizzy", "brace", "surprised",
 	"head_shake", "flail", "wheee", "tuck", "rain", "hat_hold",
 	"ready", "tap", "scratch", "stretch", "salute", "clap", "bow", "spin", "peek", "twirl", "jive",
-	"taunt", "whoop", "flinch",
+	"taunt", "whoop", "flinch", "high_five", "shake_fist",
 	"state:rain", "state:wind", "state:air", "state:slip", "state:water", "state:boost",
 	"bump", "land", "fail", "celebrate", "finish", "look", "drive", "grid", "signature"]
 ## Arm points (elbow, mid upper arm, forearm) deeper than this inside the head or body (0 at the
@@ -181,6 +181,7 @@ func _fire(r: ToyRacer, ev: String, on: bool) -> void:
 		"celebrate": r.celebrate(3)
 		"finish": r.finish()
 		"signature": r.signature()
+		"high_five": r.gestures.high_five(r.global_position + r.global_basis.x * 0.9 + Vector3.UP * 1.1, 1)
 		"look": r.look_at_point(r.global_position + Vector3(-3.0, 1.5, 2.0), 2.0)
 		_: r.gesture(ev)
 
