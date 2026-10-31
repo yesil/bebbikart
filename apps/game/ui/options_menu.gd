@@ -1,4 +1,5 @@
-# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, sound, language, track and quit.
+# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, camera, sound, language, track
+# and quit.
 # The game manager sets the game options here, on the big screen; phones only join and quit.
 # It does not pause the sim: in server mode phones keep racing while it is open.
 # In server mode a track change during a running session ends that session (fresh
@@ -8,12 +9,16 @@ extends CanvasLayer
 
 const AudioSettings = preload("res://audio/audio_settings.gd")
 const I18n = preload("res://ui/i18n.gd")
+const CameraDirector = preload("res://world/camera_director.gd")
+const CameraHud = preload("res://ui/camera_hud.gd")
 
 signal fullscreen_toggled
 signal track_chosen(id: String)
 signal quit_pressed
 signal quality_chosen(id: String)
 signal language_chosen(id: String)
+signal cam_cycle_chosen(seconds: float)
+signal inset_chosen(id: String)
 
 const MAC := "macOS"
 
@@ -21,6 +26,8 @@ var _panel: PanelContainer
 var _fullscreen: CheckButton
 var _tracks := {}            # TrackId -> Button
 var _qualities := {}         # preset id -> Button
+var _cycles := {}            # seconds -> Button (camera switch interval)
+var _insets := {}            # inset id -> Button (second camera)
 var _volumes := {}           # audio bus -> HSlider
 var _track_note: Label
 var _resume: Button
@@ -80,6 +87,36 @@ func setup(current_track: String, server_mode: bool) -> void:
 	var qnote := _label(I18n.t("menu.quality_note"), 15)
 	qnote.modulate = Color(1, 1, 1, 0.75)
 	box.add_child(qnote)
+
+	box.add_child(_label(I18n.t("menu.camera"), 20))
+	var cgrid := GridContainer.new()
+	cgrid.columns = 2
+	cgrid.add_theme_constant_override("h_separation", 16)
+	cgrid.add_theme_constant_override("v_separation", 8)
+	box.add_child(cgrid)
+	cgrid.add_child(_label(I18n.t("menu.cam_cycle"), 17))
+	var crow := HBoxContainer.new()
+	crow.add_theme_constant_override("separation", 6)
+	cgrid.add_child(crow)
+	var cgroup := ButtonGroup.new()
+	for s in CameraDirector.CYCLE_CHOICES:
+		var b := _choice(I18n.f("menu.cam_seconds", [int(s)]) if s > 0.0 else I18n.t("menu.cam_never"), cgroup, 62)
+		b.pressed.connect(func(): cam_cycle_chosen.emit(float(s)))
+		crow.add_child(b)
+		_cycles[float(s)] = b
+	cgrid.add_child(_label(I18n.t("menu.cam_inset"), 17))
+	var irow := HBoxContainer.new()
+	irow.add_theme_constant_override("separation", 6)
+	cgrid.add_child(irow)
+	var igroup := ButtonGroup.new()
+	for id in CameraHud.INSET_IDS:
+		var b := _choice(I18n.t("menu.inset_" + id), igroup, 92)
+		b.pressed.connect(func(): inset_chosen.emit(id))
+		irow.add_child(b)
+		_insets[id] = b
+	var cnote := _label(I18n.t("menu.camera_note"), 15)
+	cnote.modulate = Color(1, 1, 1, 0.75)
+	box.add_child(cnote)
 
 	box.add_child(_label(I18n.t("menu.sound"), 20))
 	var grid := GridContainer.new()
@@ -153,6 +190,15 @@ func set_session(status: String) -> void:
 
 func set_quality(id: String) -> void:
 	_qualities[id].set_pressed_no_signal(true)
+
+
+## Shows the camera picks: switch interval (none pressed if it is not one of the choices, e.g.
+## from --cam-cycle) and second camera.
+func set_camera(cycle_s: float, inset: String) -> void:
+	for s in _cycles:
+		_cycles[s].set_pressed_no_signal(is_equal_approx(s, cycle_s))
+	for id in _insets:
+		_insets[id].set_pressed_no_signal(id == inset)
 
 
 func is_open() -> bool:
@@ -237,6 +283,17 @@ func _label(text: String, size: int) -> Label:
 	l.text = text
 	l.add_theme_font_size_override("font_size", size)
 	return l
+
+
+## A toggle button in a one-of-several row.
+func _choice(text: String, group: ButtonGroup, width: float) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.toggle_mode = true
+	b.button_group = group
+	b.custom_minimum_size = Vector2(width, 38)
+	b.add_theme_font_size_override("font_size", 17)
+	return b
 
 
 func _button(text: String, cb: Callable) -> Button:

@@ -9,10 +9,13 @@
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
 #   --track=countryside|village (mock mode; with --server the session config picks the track),
 #   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full,
+#   --cam-cycle=SEC (switch racer every SEC s, 0 = never; default: options menu pick, else 8),
+#   --inset=face|side|off (second camera; default: options menu pick, else face),
 #   --quality=low|medium|high (default: last pick in the options menu, else medium),
 #   --language=en|de (default: last pick in the options menu, else config.language; server mode
 #   sends it to the server so every phone follows it)
-# Keys: C camera mode, Tab next racer, F next fork shot, R/W start next rain/wind phase,
+# Keys: C camera mode, Tab / Shift+Tab next / previous racer, A automatic racer switching on/off,
+#   V second camera (face / side / off), F next fork shot, R/W start next rain/wind phase,
 #   K toggle forced calm, B boost the followed racer, H hide overlay,
 #   Esc or ⌘, options menu (fullscreen, language, track, quit), ⌃⌘F or F11 fullscreen, ⌘Q quit.
 extends Node3D
@@ -35,6 +38,8 @@ const Viewpoints = preload("res://world/viewpoints.gd")
 const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
+const CameraDirector = preload("res://world/camera_director.gd")
+const CameraHud = preload("res://ui/camera_hud.gd")
 const OptionsMenu = preload("res://ui/options_menu.gd")
 const I18n = preload("res://ui/i18n.gd")
 const AudioDirector = preload("res://audio/audio_director.gd")
@@ -72,6 +77,8 @@ var nicks := {}            # playerId -> nickname
 var making := {}           # playerId -> design stage last shown (roster stage)
 var results: Array = []    # recent finished/failed lines
 var camera: CameraRig
+var director: CameraDirector   # which racer the camera follows, and when it switches
+var cam_hud: CameraHud         # on-camera name, cut pop, picture-in-picture second camera
 var fx: WeatherFx
 var env: Environment
 var world_env: WorldEnvironment
@@ -173,6 +180,8 @@ func _build_scene() -> void:
 		camera.fork_shots = _village_fork_shots()
 	else:
 		camera.fork_shots = Viewpoints.fork_shots(course)  # one shot per fork split
+	if not _setup_camera_director():
+		return
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)
@@ -221,10 +230,51 @@ func _make_menu() -> void:
 	menu.quit_pressed.connect(_quit)
 	menu.quality_chosen.connect(func(id: String): apply_quality(id); _save_setting("graphics", "quality", id))
 	menu.language_chosen.connect(_choose_language)
+	menu.cam_cycle_chosen.connect(_choose_cam_cycle)
+	menu.inset_chosen.connect(_choose_inset)
 	if quality != "":
 		menu.set_quality(quality)
+	if director != null:
+		menu.set_camera(director.cycle_s, cam_hud.inset)
 	if assets != null:
 		menu.set_session(net.session_status)
+
+
+## The camera director (which racer the camera follows and how often it switches) and the camera
+## HUD with the second camera. --cam-cycle / --inset win over the options menu's saved picks.
+## Returns false (and quits with an error) on a bad value.
+func _setup_camera_director() -> bool:
+	director = CameraDirector.new()
+	var cycle := str(args.get("cam-cycle", _saved_setting("camera", "cycle_s", CameraDirector.DEFAULT_CYCLE_S)))
+	if not cycle.is_valid_float() or float(cycle) < 0.0:
+		push_error("camera: --cam-cycle must be seconds >= 0 (0 = never switch), not \"%s\"" % cycle)
+		get_tree().quit(1)
+		return false
+	director.cycle_s = float(cycle)
+	cam_hud = CameraHud.new()
+	add_child(cam_hud)
+	var inset := str(args.get("inset", _saved_setting("camera", "inset", "face")))
+	if not cam_hud.set_inset(inset):
+		get_tree().quit(1)
+		return false
+	print("camera: switch racer every %s, second camera %s" % [
+		("%.0f s" % director.cycle_s) if director.cycle_s > 0.0 else "never", inset])
+	return true
+
+
+## Options menu: how often the camera switches racer (0 = never).
+func _choose_cam_cycle(seconds: float) -> void:
+	director.cycle_s = seconds
+	_save_setting("camera", "cycle_s", seconds)
+
+
+## Options menu or V: the second camera (face / side / off).
+func _choose_inset(id: String) -> void:
+	if not cam_hud.set_inset(id):
+		menu.show_error(I18n.f("log.error", ["inset " + id]))
+		return
+	_save_setting("camera", "inset", id)
+	menu.set_camera(director.cycle_s, id)
 
 
 ## A setting from user://settings.cfg (the options menu's picks), or `default` if never saved.
@@ -524,6 +574,11 @@ func _handle(msg: Dictionary) -> void:
 			sim.stop(pl["runId"])
 		Messages.RUN_ABORT:
 			sim.abort(pl["runId"])
+		Messages.RUN_WATCH:
+			# A phone's "Show me on the big screen": its racer gets one of the next cuts.
+			var wr: Racer = sim.by_run.get(pl["runId"])
+			if wr != null and wr.state == "racing" and director.request(pl["runId"]):
+				_result(I18n.f("log.watch", [nicks.get(wr.player_id, "?")]))
 		Messages.ROSTER_UPDATED:
 			_on_roster(pl)
 		"session.updated":
@@ -596,9 +651,7 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 				views.erase(pl["runId"])
 			if pl["outcome"] == "aborted":
 				net.run_gone(pl["runId"])
-			if follow_run == pl["runId"]:
-				follow_run = ""
-			return
+			return  # the camera director moves on from a racer that left on its next update
 		Messages.GAME_RUN_FINISHED:
 			if pl.has("bestLapMs"):
 				_result(I18n.f("log.finished_laps", [_nick_of(pl["runId"]), int(pl["bestLapMs"]) / 1000.0, (pl["laps"] as Array).size()]))
@@ -629,13 +682,16 @@ func _process(delta: float) -> void:
 	var racing: Array = sim.racers.duplicate()
 	# On a loop, laps first, then position in the lap.
 	racing.sort_custom(func(a, b): return a.lap + a.progress() > b.lap + b.progress())
-	if follow_run == "" or not views.has(follow_run):
-		follow_run = racing[0].run_id if not racing.is_empty() else ""
+	director.update(delta, sim.racers)
+	if director.run_id != follow_run:
+		follow_run = director.run_id
+		_camera_cut()
 	camera.target = views.get(follow_run)
 	audio.follow_run = follow_run
 	camera.targets = views.values()
 	for v in views.values():
 		v.sync()
+	_update_camera_hud()
 	_update_overlay(racing)
 	var dur := float(args.get("duration", "0"))
 	if args.has("screenshot") and not shot_taken and run_time >= float(args.get("shot-at", str(dur - 0.5 if dur > 1 else 12.0))):
@@ -648,6 +704,25 @@ func _process(delta: float) -> void:
 		_screenshot("%s/t%05.1f_r%d.jpg" % [args["shots"], run_time, sim.racers.size()])
 	if dur > 0.0 and run_time >= dur:
 		_quit()
+
+
+## The director cut to another racer (or to nobody): their name pops up, and the server hears
+## who is on camera so that racer's phone can say so (game.camera → camera.updated).
+func _camera_cut() -> void:
+	if follow_run != "" and camera.mode == CameraRig.Mode.FOLLOW:
+		cam_hud.pop(_nick_of(follow_run), _color_of(follow_run), director.reason == "phone")
+	net.send(Messages.GAME_CAMERA, {"runId": follow_run} if follow_run != "" else {})
+
+
+func _update_camera_hud() -> void:
+	var left := director.next_in()
+	cam_hud.show_racer(views.get(follow_run), _nick_of(follow_run), _color_of(follow_run),
+		camera.mode == CameraRig.Mode.FOLLOW, left / director.cycle_s if left >= 0.0 else -1.0, not director.auto)
+
+
+func _color_of(run_id: String) -> Color:
+	var r: Racer = sim.by_run.get(run_id)
+	return colors.get(r.player_id, Color.WHITE) if r != null else Color.WHITE
 
 
 func _update_overlay(racing: Array) -> void:
@@ -710,9 +785,11 @@ func _unhandled_input(e: InputEvent) -> void:
 			camera.mode = CameraRig.Mode.FORKS
 			camera.fork_idx += 1
 		KEY_TAB:
-			var ids: Array = views.keys()
-			if not ids.is_empty():
-				follow_run = ids[(ids.find(follow_run) + 1) % ids.size()]
+			director.step(-1 if k.shift_pressed else 1, sim.racers)
+		KEY_A:
+			director.auto = not director.auto
+		KEY_V:
+			_choose_inset(cam_hud.cycle_inset())
 		KEY_R:
 			sim.weather.advance("rain")
 		KEY_W:

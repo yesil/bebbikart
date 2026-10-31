@@ -224,6 +224,8 @@ func _log(msg: Dictionary) -> void:
 				pl["runId"], _nick(pl), pl["reason"], pl["section"], int(pl["elapsedMs"]) / 1000.0, JSON.stringify(pl["events"])])
 		Messages.GAME_WEATHER:
 			print("[mock<-game] weather ", JSON.stringify(pl))
+		Messages.GAME_CAMERA:
+			print("[mock<-game] camera on %s" % (who if who != "" else "nobody"))
 		_:
 			print("[mock<-game] %s %s" % [type, JSON.stringify(pl)])
 
