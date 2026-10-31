@@ -111,6 +111,14 @@ export function createHttp({ game, jobs, settings }) {
         return json(game.rename(p.id, nickname));
       },
     ],
+    [
+      "DELETE",
+      "/api/players/me",
+      (req) => {
+        game.removePlayer(me(req).id, "player_quit");
+        return new Response(null, { status: 204 });
+      },
+    ],
     ["POST", "/api/players/me/reroll", (req) => json(jobs.reroll(me(req).id))],
     [
       "POST",

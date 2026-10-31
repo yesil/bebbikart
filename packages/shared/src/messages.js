@@ -121,6 +121,8 @@ export const CHANNELS = {
       weather: WeatherStateSchema,
     }),
     "player.updated": PlayerViewSchema,
+    // The player quit (or the admin removed them): the phone goes back to the join screen.
+    "player.removed": z.object({ playerId: z.string() }),
     "run.queued": z.object({ run: RunSchema }),
     "run.started": z.object({ run: RunSchema }),
     "run.progress": z.object({

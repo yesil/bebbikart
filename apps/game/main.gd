@@ -473,6 +473,14 @@ func _handle(msg: Dictionary) -> void:
 
 ## Server roster: names and colours for racers, and their kit assets (spec, drawing, renders).
 func _on_roster(roster: Array) -> void:
+	# Racers missing from the new roster quit on their phone (or the admin removed them).
+	var still := {}
+	for e in roster:
+		still[String(e["playerId"])] = true
+	for pid in nicks.keys():
+		if not still.has(pid):
+			_result("LEFT  %s" % nicks[pid])
+			nicks.erase(pid)
 	for e in roster:
 		var pid: String = e["playerId"]
 		nicks[pid] = e["nickname"]

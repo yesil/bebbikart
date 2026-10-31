@@ -1,7 +1,7 @@
 // BebbiKart phone site (WS4): create a racer from two drawings, then tune, Go! and Boost!.
 import { html } from "htm/preact";
 import { render } from "preact";
-import { useEffect, useReducer, useRef } from "preact/hooks";
+import { useEffect, useReducer, useRef, useState } from "preact/hooks";
 import { api, connectWs } from "./api.js";
 import { COPY } from "./copy.js";
 import { Create, Making, Rejected, Reveal } from "./screens/create.js";
@@ -50,6 +50,10 @@ function reducer(s, a) {
         localStorage.setItem("bk_reveal_seen", a.id);
       } catch {}
       return { ...s, revealSeen: a.id };
+    case "quitting":
+      return { ...s, quitting: a.on };
+    case "left":
+      return left(s);
     case "clearResult":
       return { ...s, result: null, lastCoach: a.coach ?? s.lastCoach };
     case "ws":
@@ -57,6 +61,11 @@ function reducer(s, a) {
     default:
       return s;
   }
+}
+
+/** Back to the join screen: the racer is gone (quit, or removed by the admin). */
+function left(s) {
+  return { ...s, me: null, live: null, result: null, redo: false, quitting: false, tab: "garage" };
 }
 
 function onWs(s, type, p) {
@@ -67,11 +76,13 @@ function onWs(s, type, p) {
         booted: true,
         session: p.session,
         config: p.config,
-        me: p.me ?? s.me,
+        me: p.me ?? null, // no me = this device has no racer (e.g. it quit)
         weather: p.weather,
       };
     case "player.updated":
       return { ...s, me: p };
+    case "player.removed":
+      return s.me?.id === p.playerId ? left(s) : s;
     case "session.updated":
       return { ...s, session: p };
     case "config.updated":
@@ -153,11 +164,40 @@ function App() {
       <header class="top">
         <span class="logo">${COPY.appName}</span>
         ${!s.online && s.booted ? html`<span class="pill warn">${COPY.offline}</span>` : null}
+        ${s.me ? html`<button class="quit" onClick=${() => dispatch({ type: "quitting", on: true })}>${COPY.quit.button}</button>` : null}
       </header>
+      ${s.me && s.quitting ? html`<${QuitBar} s=${s} dispatch=${dispatch} />` : null}
       ${s.session?.status === "ended" ? html`<div class="banner">${COPY.sessionEnded}</div>` : null}
       ${s.session?.status === "idle" ? html`<div class="banner">${COPY.sessionIdle}</div>` : null}
       <main>${screen(ctx)}</main>
       ${s.toast ? html`<div class="toast" onClick=${() => dispatch({ type: "toast", text: null })}>${s.toast}</div>` : null}
+    </div>
+  `;
+}
+
+function QuitBar({ s, dispatch }) {
+  const [busy, setBusy] = useState(false);
+  async function quit() {
+    setBusy(true);
+    try {
+      await api("DELETE", "/api/players/me");
+      dispatch({ type: "left" });
+    } catch (err) {
+      // Never pretend it worked: the racer is still on the big screen.
+      dispatch({
+        type: "toast",
+        text: `${COPY.quit.failed} (${err.code ?? "error"}: ${err.message})`,
+      });
+      setBusy(false);
+    }
+  }
+  return html`
+    <div class="quit-bar">
+      <p>${s.me.currentRun ? COPY.quit.askRacing : COPY.quit.ask}</p>
+      <div class="row">
+        <button class="ghost" disabled=${busy} onClick=${() => dispatch({ type: "quitting", on: false })}>${COPY.quit.stay}</button>
+        <button class="danger" disabled=${busy} onClick=${quit}>${COPY.quit.confirm}</button>
+      </div>
     </div>
   `;
 }

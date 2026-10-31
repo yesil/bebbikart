@@ -444,3 +444,61 @@ test("autostart: a session that runs out is followed by a new one, also across r
   expect((await get(s)).status).toBe("running");
   s.stop();
 });
+
+test("quit: the racer leaves the race, the big screen and the leaderboard; the phone goes back to join", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey });
+  await game.start();
+  await game.wait("welcome");
+  const dev = await fetch(`${base}/api/device`, { method: "POST" });
+  const cookie = dev.headers.get("set-cookie").split(";")[0];
+  const created = await fetch(`${base}/api/players`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ nickname: "Quitter" }),
+  });
+  const playerId = (await created.json()).id;
+  const phone = client({ cookie }, { role: "phone" });
+  await phone.start();
+  await phone.wait("welcome");
+  const form = new FormData();
+  for (const [k, f] of [
+    ["character", "pair02-character-robot.jpg"],
+    ["vehicle", "pair02-vehicle-rocket-shoe.jpg"],
+  ])
+    form.append(k, new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }));
+  await fetch(`${base}/api/players/me/drawings`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  await phone.wait("player.updated", (p) => p.status === "ready", 20000);
+  await game.wait("roster.updated", (r) => r.some((e) => e.playerId === playerId));
+
+  phone.send("phoneToServer", "phone.go", {});
+  const start = await game.wait("run.start", (p) => p.playerId === playerId);
+
+  const res = await fetch(`${base}/api/players/me`, { method: "DELETE", headers: { cookie } });
+  expect(res.status).toBe(204);
+  const abort = await game.wait("run.abort", (p) => p.runId === start.payload.runId);
+  expect(abort.payload.reason).toBe("player_quit");
+  await phone.wait("player.removed", (p) => p.playerId === playerId);
+  await Bun.sleep(400); // roster.updated is debounced
+  const roster = game.msgs.filter((m) => m.type === "roster.updated").at(-1).payload;
+  expect(roster.some((e) => e.playerId === playerId)).toBe(false);
+  const lb = await (await fetch(`${base}/api/leaderboard`)).json();
+  expect(lb.some((e) => e.playerId === playerId)).toBe(false);
+  const st = await (await fetch(`${base}/api/state`, { headers: { cookie } })).json();
+  expect(st.me).toBeUndefined();
+
+  // Quitting twice fails loudly; joining again makes a new racer.
+  const again = await fetch(`${base}/api/players/me`, { method: "DELETE", headers: { cookie } });
+  expect(again.status).toBe(404);
+  const rejoin = await fetch(`${base}/api/players`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ nickname: "Quitter" }),
+  });
+  expect(rejoin.status).toBe(201);
+  game.ws.close();
+  phone.ws.close();
+}, 30000);

@@ -118,6 +118,14 @@ export const COPY = {
   tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Leaderboard" },
   sessionEnded: "This race is over! Thanks for racing. The next one starts on the big screen.",
   sessionIdle: "The race hasn't started yet.",
+  quit: {
+    button: "Quit",
+    ask: "Leave the game? Your racer leaves the big screen and the leaderboard.",
+    askRacing: "Leave the game? Your racer stops racing and leaves the big screen.",
+    stay: "Keep playing",
+    confirm: "Yes, quit",
+    failed: "Couldn't quit, your racer is still in the game",
+  },
   errors: {
     cooldown: "Catch your breath! Ready in a moment.",
     run_in_progress: "Your racer is still on the track.",

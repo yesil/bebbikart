@@ -252,6 +252,7 @@ const MSG_SERVER_TO_PHONE = [
 	"weather.updated",
 	"welcome",
 	"player.updated",
+	"player.removed",
 	"run.queued",
 	"run.started",
 	"run.progress",

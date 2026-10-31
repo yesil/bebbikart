@@ -705,3 +705,39 @@ h2 {
   color: var(--muted);
   font-size: 0.9rem;
 }
+.quit {
+  margin-left: auto;
+  background: transparent;
+  border: 2px solid var(--line);
+  border-radius: 99px;
+  padding: 6px 14px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.quit-bar {
+  background: #fff;
+  border: 2px solid var(--accent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  text-align: center;
+}
+.quit-bar p {
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+.quit-bar .row {
+  display: flex;
+  gap: 10px;
+}
+.quit-bar .row button {
+  flex: 1;
+}
+button.danger {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  font-weight: 800;
+}

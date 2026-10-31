@@ -317,17 +317,21 @@ export function createGame({ db, settings, hub, log = console.log }) {
     pushPlayer(playerId);
     return b;
   }
-  function removePlayer(playerId) {
+  /** Quit (the phone) or delete (admin): out of any race or queue, off the big screen and the
+   *  leaderboard, and the phone goes back to the join screen. */
+  function removePlayer(playerId, reason = "player_deleted") {
     const p = players.get(playerId);
     if (!p) throw new ApiError("not_found", "No such racer", 404);
     const run = activeRun(playerId);
-    if (run) abortRun(run, "player_deleted");
+    if (run) abortRun(run, reason);
+    hub.toPhone(playerId, "player.removed", { playerId }); // before the delete: routed by player
     players.delete(playerId);
     manifests.delete(playerId);
     db.del("player", playerId);
     hub.toAdmins("player.removed", { playerId });
     pushRoster();
     pushLeaderboard();
+    log(`[player] ${p.nickname} (${playerId}) removed: ${reason}`);
   }
   /** Hub tells us a device's phone socket count went to/from zero. */
   function setDeviceOnline(deviceId, online) {
