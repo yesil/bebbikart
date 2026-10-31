@@ -1,0 +1,14 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/textures/Planks021/Planks021_1K-JPG_Color.jpg" id="1_qywx3"]
+[ext_resource type="Texture2D" path="res://assets/textures/Planks021/Planks021_1K-JPG_NormalGL.jpg" id="2_q7tiu"]
+[ext_resource type="Texture2D" path="res://assets/textures/Planks021/Planks021_1K-JPG_Roughness.jpg" id="3_6mw5e"]
+
+[resource]
+albedo_color = Color(1.6, 1.6, 1.6, 1)
+albedo_texture = ExtResource("1_qywx3")
+roughness = 0.6
+roughness_texture = ExtResource("3_6mw5e")
+normal_enabled = true
+normal_texture = ExtResource("2_q7tiu")
+texture_filter = 5

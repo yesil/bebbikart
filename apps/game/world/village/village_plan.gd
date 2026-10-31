@@ -7,7 +7,7 @@ extends RefCounted
 ## Modelled on Bernese Oberland and Emmental villages: dark-timber chalets with deep eaves and
 ## flower boxes along the main street, a white church with a pointed spire on the hill, a stone
 ## trough fountain and a lime tree on the square, a covered wooden bridge over the brook, a mill,
-## hay barns and an orchard, and mountains all round.
+## hay barns and an orchard. The mountains round it are terrain (village_terrain.gd).
 
 const VillageCourse = preload("res://sim/village_course.gd")
 const Route = preload("res://sim/route.gd")
@@ -16,6 +16,7 @@ const CLEAR := 1.5                 # metres between a building footprint and a r
 const BUILDING_GAP := 1.5          # metres between two footprints
 const BROOK_HALF_WIDTH := 1.8
 const MAX_SETBACK := 14.0          # a landmark that needs more extra setback than this is an error
+const BRIDGE_HALF_LENGTH := 7.0    # covered bridge deck either side of the hump
 
 ## Rows of buildings along a road: [segment, side (+1 left / -1 right of travel), s from, s to,
 ## kind, extra setback]. Footprints face the road; each house goes at the first spot from its
@@ -54,6 +55,9 @@ var _polys: Array = []
 var pond: PackedVector2Array
 var brook: Array[Vector2] = []
 var bridge_mid := Vector3.ZERO
+var bridge_s := 0.0                 # s of the hump on pond_bridge
+var pond_box := Rect2()
+var hay_floor := 0.0                # ground height in the hay meadow where the jump lands
 var fountain := Vector2.ZERO
 var lime_tree := Vector2.ZERO
 var square: PackedVector2Array      # paved area of the Dorfplatz
@@ -62,7 +66,6 @@ var hay_meadow := Vector4.ZERO      # x, z, radius along, radius across, between
 var hay_yaw := 0.0
 var orchard: Array[Vector2] = []    # fruit tree spots in the middle of the loop
 var kicker := {}                    # {from: Vector3, to: Vector3} wooden ski-jump ramp on ramp_jump
-var mountains: Array[Vector4] = []  # backdrop peaks: x, z, radius, height
 var errors: PackedStringArray = []
 var _road: Array = []               # [Vector2, half width, id] every metre of every road
 
@@ -83,7 +86,6 @@ func _init(p_course: VillageCourse) -> void:
 		_row(row[0], int(row[1]), float(row[2]), float(row[3]), row[4], float(row[5]))
 	_infill()
 	_orchard()
-	_mountains()
 
 
 func route(id: String) -> Route:
@@ -128,6 +130,12 @@ func _water() -> void:
 		var reach := 6.0 if side > 0.0 else 16.0
 		var d := side * reach * sqrt(maxf(0.0, 1.0 - pow(absf(cos(t)), 6.0)))
 		pond.append(at("pond_water", clampf(mid + cos(t) * half, 0.0, ford.length), d))
+	var lo := pond[0]
+	var hi := pond[0]
+	for q in pond:
+		lo = lo.min(q)
+		hi = hi.max(q)
+	pond_box = Rect2(lo, hi - lo)
 	# Brook from the eastern hills, under the covered bridge, into the pond's near shore.
 	var br := route("pond_bridge")
 	var s := 0.0
@@ -137,6 +145,7 @@ func _water() -> void:
 			bridge_mid = br.pos_at(s)
 		s += 0.5
 	var bs := _closest_s(br, Vector2(bridge_mid.x, bridge_mid.z))
+	bridge_s = bs
 	var across := br.normal_at(bs)
 	var out := Vector2(across.x, across.z)
 	if (Vector2(bridge_mid.x, bridge_mid.z) + out).distance_to(at("pond_water", mid, 0.0)) < Vector2(bridge_mid.x, bridge_mid.z).distance_to(at("pond_water", mid, 0.0)):
@@ -184,6 +193,7 @@ func _landmarks() -> void:
 	var mid := at("ramp_jump", (lip + land) * 0.5, 3.0)
 	hay_meadow = Vector4(mid.x, mid.y, (land - lip) * 0.5 + 6.0, 6.0)
 	hay_yaw = jr.heading_at(lip)
+	hay_floor = jr.pos_at(lip).y - float(rp["pit_depth"])
 	kicker = {"from": jr.pos_at(float(rp["kick_a"])), "to": jr.pos_at(lip)}
 	_fit("mill", "mill", 3.0, -1, 0.0, "Mühle")
 	_fit("school", "hills2", 3.0, -1, 0.0, "Schulhaus")
@@ -344,20 +354,31 @@ static func sample_points(poly: PackedVector2Array) -> Array:
 	return pts
 
 
-func _mountains() -> void:
-	# A ring of peaks well outside the village, the tallest to the south over the meadow.
-	var c := Vector2.ZERO
-	for q in _road:
-		c += q[0]
-	c /= _road.size()
-	# [bearing from north (degrees, clockwise), distance, radius, height]
-	var peaks := [[180.0, 320.0, 140.0, 140.0], [215.0, 340.0, 120.0, 110.0], [145.0, 350.0, 130.0, 120.0],
-		[250.0, 380.0, 150.0, 100.0], [110.0, 380.0, 140.0, 90.0], [0.0, 420.0, 160.0, 80.0],
-		[300.0, 400.0, 140.0, 90.0], [60.0, 400.0, 130.0, 85.0]]
-	for p in peaks:
-		var ang := deg_to_rad(float(p[0]))
-		var at_ := c + Vector2(sin(ang), cos(ang)) * float(p[1])
-		mountains.append(Vector4(at_.x, at_.y, float(p[2]), float(p[3])))
+## Distance from p to the pond shore line.
+func pond_shore_dist(p: Vector2) -> float:
+	var ring := Array(pond)
+	ring.append(pond[0])
+	return polyline_dist(p, ring)
+
+
+## 0 at the brook's source, 1 where it enters the pond, for the nearest point of the brook.
+func brook_t(p: Vector2) -> float:
+	var total := 0.0
+	for i in brook.size() - 1:
+		total += brook[i].distance_to(brook[i + 1])
+	var best := INF
+	var best_t := 0.0
+	var acc := 0.0
+	for i in brook.size() - 1:
+		var a := brook[i]
+		var ab := brook[i + 1] - a
+		var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		var d := p.distance_to(a + ab * t)
+		if d < best:
+			best = d
+			best_t = (acc + ab.length() * t) / total
+		acc += ab.length()
+	return best_t
 
 
 static func _closest_s(r: Route, p: Vector2) -> float:
