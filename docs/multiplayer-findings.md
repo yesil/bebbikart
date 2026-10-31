@@ -47,6 +47,16 @@ rows fit 20 racers above the camera's name tag.
 | Village laps | Lap 1 51-64 s (standing start), lap 2 48-61 s; Pit in after lap 1 ends the run at the next line. Board shows "Lap 2 · pit" and "best lap". | fine |
 | Load | ~300 KB per phone for 2 two-lap races; boost tap → seen median 81-98 ms. | fine |
 
+## Round 5 (2026-10-31): 8 phones on the village in two waves of 4, 25 s apart, Pit in
+
+| Area | Result |
+|---|---|
+| Waves | Wave 2 lined up ([lights panel](screens/multiplayer-village-wave2.jpg), "at the start" on the board) while wave 1 was lapping; each wave left together at green (phone's green within 17-44 ms of the release) and got its own group result. |
+| Outcomes | 7 of 8 finished, 1 slid off in the bends (not at the start). No errors. |
+| Big screen | 58.7 fps average, min 48 (village, 8 kit racers, 1920x1080), Godot ~30 % of a core, 750 MB. |
+| Standings | With 20 racers the standings ran into the camera's name tag (bottom at 968 px); tighter avatar chips put it at 688 px. `tools/hud_check.gd` renders the [podium](screens/multiplayer-podium.jpg) and a 20-racer standings and fails on a collision. |
+| Camera | In one frame the follow camera sat inside a village building (reported to the camera thread). |
+
 ## Big-screen HUD (`apps/game/ui/race_hud.gd`)
 
 - A tag over every kart: place badge and name in the racer's colour, pushed apart so tags never
