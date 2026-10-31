@@ -8,7 +8,7 @@ const Course = preload("res://sim/course.gd")
 const Racer = preload("res://sim/racer.gd")
 const Weather = preload("res://sim/weather.gd")
 
-var course: Course
+var course  # sim/course.gd or sim/village_course.gd (loop track)
 var config: Dictionary
 var weather: Weather
 var rng := RandomNumberGenerator.new()
@@ -23,7 +23,7 @@ var collisions_enabled := true
 var emit_messages := true       # sweep turns progress chatter off
 
 
-func _init(p_course: Course, p_config: Dictionary, seed_: int) -> void:
+func _init(p_course, p_config: Dictionary, seed_: int) -> void:
 	course = p_course
 	config = p_config
 	rng.seed = seed_
@@ -48,6 +48,13 @@ func boost(run_id: String) -> void:
 	var r: Racer = by_run.get(run_id)
 	if r != null:
 		r.boost(self)
+
+
+## Loop tracks: finish the run when the racer next crosses the line ("pit in").
+func stop(run_id: String) -> void:
+	var r: Racer = by_run.get(run_id)
+	if r != null:
+		r.pit_requested = true
 
 
 func abort(run_id: String) -> void:
@@ -95,8 +102,13 @@ func _release_from_queue() -> void:
 			var gap := 1000.0
 			for o in racers:
 				var r: Racer = o
-				if r.seg_idx == 0 and absf(r.d - lane) < Tuning.RADIUS * 2.0:
+				if absf(r.d - lane) >= Tuning.RADIUS * 2.0:
+					continue
+				if r.seg_idx == 0:
 					gap = minf(gap, r.ls)
+				elif r.looping and r.seg_idx == r.segs.size() - 1:
+					# A lapping racer about to cross the line counts as close too.
+					gap = minf(gap, r.route().length - r.ls)
 			if gap > best_gap:
 				best_gap = gap
 				best_lane = lane

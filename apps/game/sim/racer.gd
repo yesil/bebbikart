@@ -85,8 +85,21 @@ var weather_seen := {}
 var trace: Array = []
 var last_progress_tick := -999
 
+# Laps (loop tracks only, e.g. sim/village_course.gd): the racer wraps from the last segment to
+# the first and keeps going. Splits and the trace restart each lap; the best lap's are kept.
+var looping := false
+var lap := 0                   # completed laps
+var lap_start_tick := 0
+var laps: Array[int] = []      # lap times, ms
+var best_lap := -1             # index into laps
+var best_splits := {}
+var best_trace: Array = []
+var pit_requested := false     # finish at the next line crossing
+var laps_max := 0
 
-func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course: Course, cfg: Dictionary, seed_: int) -> void:
+
+## `course` is sim/course.gd or sim/village_course.gd (same segment interface; a loop track has `loop`).
+func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, cfg: Dictionary, seed_: int) -> void:
 	run_id = p_run_id
 	player_id = p_player_id
 	build = p_build
@@ -105,6 +118,11 @@ func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course: C
 		offsets[i] = total_len
 		total_len += (sg["route"] as Route).length
 	seg = segs[0]
+	looping = course.get("loop") == true
+	if looping:
+		if not cfg.has("lapsPerRun"):
+			push_error("racer: loop track but config has no lapsPerRun")
+		laps_max = int(cfg.get("lapsPerRun", 0))
 	boosts_left = int(cfg.get("boostsPerRun", 3))
 	top = Tuning.TOP_SPEED_BASE + Tuning.TOP_SPEED_PER_STAR * st["speed"]
 	accel = Tuning.ACCEL_BASE * (1.0 - Tuning.ACCEL_STABILITY_PENALTY * st["stability"]) \
@@ -118,12 +136,22 @@ func gs() -> float:
 	return offsets[seg_idx] + ls
 
 
+## Fraction of the course (of the current lap on a loop track).
 func progress() -> float:
 	return clampf(gs() / total_len, 0.0, 1.0)
 
 
 func elapsed_ms() -> int:
 	return int(round(ticks * 1000.0 / Tuning.HZ))
+
+
+## Time on the current lap (the whole run on a point-to-point course).
+func lap_ms() -> int:
+	return int(round((ticks - lap_start_tick) * 1000.0 / Tuning.HZ))
+
+
+func best_lap_ms() -> int:
+	return laps[best_lap] if best_lap >= 0 else -1
 
 
 func route() -> Route:
@@ -335,10 +363,19 @@ func step(sim) -> void:
 	var was_water := in_water
 	while ls > route().length:
 		if seg_idx >= segs.size() - 1:
-			ls = route().length
-			_account(sim, dt, k, rain, exposure)
-			_finish(sim)
-			return
+			if not looping or _lap_done(sim):
+				ls = route().length
+				_account(sim, dt, k, rain, exposure)
+				_finish(sim)
+				return
+			ls -= route().length
+			prev_ls = -1.0
+			seg_idx = 0
+			seg = segs[0]
+			seg_id = seg["id"]
+			section = seg["section"]
+			stuck_best = 0.0
+			continue
 		ls -= route().length
 		prev_ls = -1.0
 		seg_idx += 1
@@ -393,7 +430,8 @@ func step(sim) -> void:
 		if stuck_t * 1000.0 >= float(sim.config.get("stuckTimeoutMs", 3000)):
 			_fail(sim, "stuck")
 			return
-	if elapsed_ms() >= int(sim.config.get("runTimeCapMs", 90000)):
+	# On a loop the cap is per lap: a lap that slow means the racer is in trouble.
+	if (lap_ms() if looping else elapsed_ms()) >= int(sim.config.get("runTimeCapMs", 90000)):
 		_fail(sim, "timeout")
 		return
 
@@ -402,10 +440,14 @@ func step(sim) -> void:
 		_trace_sample()
 	if ticks - last_progress_tick >= 12:
 		last_progress_tick = ticks
-		sim.emit("game.run.progress", {
+		var pr := {
 			"runId": run_id, "progress": snappedf(progress(), 0.001), "elapsedMs": elapsed_ms(),
 			"section": section, "boostsLeft": boosts_left,
-		})
+		}
+		if looping:
+			pr["lap"] = lap + 1
+			pr["lapMs"] = lap_ms()
+		sim.emit("game.run.progress", pr)
 
 
 func _land(sim) -> void:
@@ -558,20 +600,52 @@ func _trace_sample() -> void:
 
 func _summary() -> Dictionary:
 	events.sort_custom(func(a, b): return int(a["atMs"]) < int(b["atMs"]))
-	return {
+	var p := {
 		"runId": run_id, "section": section, "elapsedMs": elapsed_ms(), "splits": splits.duplicate(),
 		"events": events.duplicate(true), "boostsUsed": boosts_used, "weatherSeen": weather_seen.keys(),
 	}
+	if looping:
+		p["laps"] = laps.duplicate()
+		if best_lap >= 0:
+			p["bestLapMs"] = best_lap_ms()
+			p["splits"] = best_splits.duplicate()
+	return p
+
+
+## The racer crossed the line on a loop track: book the lap and say whether the run ends here
+## (pit requested or lap cap reached). Otherwise start the next lap.
+func _lap_done(sim) -> bool:
+	_close_split(sim)
+	_trace_sample()
+	var ms := lap_ms()
+	laps.append(ms)
+	lap += 1
+	var is_best := best_lap < 0 or ms < laps[best_lap]
+	if is_best:
+		best_lap = laps.size() - 1
+		best_splits = splits.duplicate()
+		best_trace = trace.duplicate()
+	sim.emit("game.run.lap", {"runId": run_id, "lap": lap, "lapMs": ms, "elapsedMs": elapsed_ms(),
+		"splits": splits.duplicate(), "isBest": is_best})
+	if pit_requested or (laps_max > 0 and lap >= laps_max):
+		return true
+	lap_start_tick = ticks
+	section_start_tick = ticks
+	splits = {}
+	trace = []
+	return false
 
 
 func _finish(sim) -> void:
 	_close_episode()
-	_close_split(sim)
-	_trace_sample()
+	if not looping:
+		_close_split(sim)
+		_trace_sample()
 	state = "finished"
 	var p := _summary()
 	p.erase("section")
-	p["trace"] = {"runId": run_id, "hz": 10, "samples": trace}
+	# On a loop the ghost is the best lap.
+	p["trace"] = {"runId": run_id, "hz": 10, "samples": best_trace if looping else trace}
 	sim.emit("game.run.finished", p)
 
 
