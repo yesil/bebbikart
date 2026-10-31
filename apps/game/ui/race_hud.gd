@@ -418,6 +418,11 @@ func _update_tags(order: Array, sim, views: Dictionary, delta: float) -> void:
 		tag.scale = Vector2(k, k)
 		shown.append({"tag": tag, "p": p, "dist": dist, "size": tag.get_combined_minimum_size() * k})
 	shown.sort_custom(func(a, b): return a["dist"] < b["dist"])
+	# A tag that would sit under a HUD panel is left out (half hidden behind a panel is noise).
+	var blockers: Array = []
+	for c in [_paddock_panel, _board_panel, _countdown, _podium]:
+		if c != null and c.visible:
+			blockers.append(c.get_global_rect())
 	var placed: Array = []
 	for s in shown:
 		var size: Vector2 = s["size"]
@@ -433,6 +438,9 @@ func _update_tags(order: Array, sim, views: Dictionary, delta: float) -> void:
 				break
 		placed.append(rect)
 		var tag: Control = s["tag"]
+		if blockers.any(func(b): return b.intersects(rect)):
+			tag.visible = false
+			continue
 		# Glide to the new spot (no jitter when two karts swap), jump on a camera cut.
 		if tag.position.distance_to(rect.position) > 220.0 or not tag.has_meta("placed"):
 			tag.position = rect.position
@@ -508,7 +516,8 @@ func _rebuild_paddock(sim) -> void:
 			return ra < rb
 		return _join_order.find(a) < _join_order.find(b))
 	var compact := pids.size() > PADDOCK_FULL_ROWS
-	var av := 34 if compact else 48
+	var av := 30 if compact else 48
+	_paddock.add_theme_constant_override("separation", 1 if compact else 4)
 	for pid in pids.slice(0, PADDOCK_MAX_ROWS):
 		var e: Dictionary = _roster[pid]
 		var col := color_for(pid)
@@ -528,7 +537,7 @@ func _rebuild_paddock(sim) -> void:
 		mid.add_theme_constant_override("separation", -4)
 		mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(mid)
-		var name := _label(_nick(pid), 19 if compact else 23, col.lightened(0.3))
+		var name := _label(_nick(pid), 18 if compact else 23, col.lightened(0.3))
 		name.clip_text = true
 		name.custom_minimum_size = Vector2(120, 0)
 		mid.add_child(name)
@@ -555,7 +564,7 @@ func _rebuild_paddock(sim) -> void:
 			mid.add_child(sl)
 		elif line != "":
 			name.text += "  ·  " + line
-		var best := _label(I18n.f("hud.best_time", [int(rank["bestTimeMs"]) / 1000.0]) if not rank.is_empty() else "", 19 if compact else 22, Color.WHITE)
+		var best := _label(I18n.f("hud.best_time", [int(rank["bestTimeMs"]) / 1000.0]) if not rank.is_empty() else "", 18 if compact else 22, Color.WHITE)
 		best.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		row.add_child(best)
 		if not bool(e.get("connected", true)):

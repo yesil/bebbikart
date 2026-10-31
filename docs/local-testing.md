@@ -45,6 +45,40 @@ macOS may ask whether `bun` may accept incoming connections: allow it, or phones
 
 `bun run fake-game` connects a stand-in game that "races" each run in about 12 s with fake splits, so you can test the phone flow on its own (run it instead of the Godot game; only one game connection is kept).
 
+## Several phones at once (sim-players)
+
+`bun run sim-players` drives N scripted phones over real HTTP and WebSocket, exactly like the phone
+site: device cookie, join, two sample drawings, the design job (real Claude), the big screen's
+renders, a random build, **Go** (all at once or staggered), **Boost** taps, the result, and racing
+again. It prints a timeline, then timings (join → racer ready, Go → on track, countdown green → on
+track, boost tap → seen, finish → result), message counts per phone and every error, and exits 1
+on any error.
+
+Use your own server so you don't touch anyone else's racers:
+
+```bash
+PORT=8090 BK_DATA_DIR=/tmp/bk-mp PUBLIC_URL=http://localhost:8090 bun apps/server/src/index.js
+```
+
+```bash
+godot --path apps/game --resolution 1920x1080 -- --server=ws://localhost:8090/ws --shots=/tmp/bk-shots --shot-every=2
+```
+
+```bash
+bun run sim-players -- --players 8 --url http://localhost:8090 --races 2
+```
+
+- Racers are kept between runs (`--state`, default `apps/server/data/.sim-players.json`): the second
+  run reuses them and designs nothing. `--fresh` makes new ones; `--max-new` (8) caps how many real
+  Claude designs one run may start.
+- `--stagger 700` presses Go 0.7 s apart (they still start together in the 3 s countdown);
+  `--join-stagger` spreads the joins; `--names Mia,Mia,Noah` tests duplicate names;
+  `--track village --pit` switches track over the admin API (new session) and taps Pit in.
+- With `bun run fake-game` instead of Godot, add `--renders 0` (the stand-in renders nothing).
+- `--shots=DIR` on the game saves a screenshot every `--shot-every` seconds while racers are on the
+  track or the grid (start, mid-race, finish).
+- Findings and numbers from the multiplayer rounds: [multiplayer-findings.md](multiplayer-findings.md).
+
 ## Village loop (laps)
 
 The game manager picks the track, laps and session length in the game's options menu on the big screen (phones never set options). Switching track ends the session and starts a new one with an empty leaderboard; racers stay. Scripts can do the same over the admin API (the track can't change while a session runs):
@@ -79,6 +113,7 @@ The garage has a **New drawings** button to redo a racer's photos without resett
 | `BK_ADMIN_PIN` | `1234` | Header `x-admin-pin` for `/api/admin/*` |
 | `BK_AUTOSTART` | `1` | Keep a session running: start one at boot and the next one when time runs out |
 | `BK_DATA_DIR` | `apps/server/data` | SQLite db, uploads and asset packages (git-ignored) |
+| `BK_DESIGN_CONCURRENCY` | `8` | Racers designed at once; more wait in line (the phone says so) |
 
 Handy admin calls:
 
