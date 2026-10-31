@@ -32,6 +32,7 @@ const MockNet = preload("res://net/mock_net.gd")
 const ServerNet = preload("res://net/server_net.gd")
 const RosterAssets = preload("res://net/roster_assets.gd")
 const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
+const RaceReactions = preload("res://racer_kit/race_reactions.gd")
 const WORLD_SCENE := "res://world/course_world.tscn"
 const DECOR_SCENE := "res://world/decor.tscn"
 const LIGHTING_SCENE := "res://world/environment.tscn"
@@ -200,6 +201,7 @@ func _build_scene() -> void:
 	if not audio.setup(sim, track, camera, args.has("mute")):
 		_result(I18n.t("log.audio_failed"))
 		hud.problem(I18n.t("log.audio_failed"))
+	add_child(RaceReactions.new(self))  # drivers react to overtakes, near bumps and the weather
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var panel := PanelContainer.new()
@@ -716,7 +718,10 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 		"sim.removed":
 			var v: Node = views.get(pl["runId"])
 			if v != null:
-				v.queue_free()
+				if v.has_method("leave"):
+					v.leave(pl["outcome"])  # kit racers cheer or slump a moment, then free themselves
+				else:
+					v.queue_free()
 				views.erase(pl["runId"])
 			if pl["outcome"] == "aborted":
 				net.run_gone(pl["runId"])

@@ -1,6 +1,8 @@
 extends Node3D
 ## A racer on the track built from its RacerSpec with the racer kit (drop-in for the placeholder
-## world/racer_view.gd: same setup/sync/nickname). Pose comes from the sim racer every frame.
+## world/racer_view.gd: same setup/sync/nickname). Pose and the driver's state (turns, jumps,
+## water, slips, boost) come from the sim racer every frame; when the run ends, leave() keeps the
+## racer a moment for its finish cheer or crash slump. Weather and overtakes: race_reactions.gd.
 
 const I18n = preload("res://ui/i18n.gd")
 const CameraHud = preload("res://ui/camera_hud.gd")
@@ -9,6 +11,18 @@ var racer = null   # sim/racer.gd
 var nickname := ""
 var parked := false  # waiting on the start grid for the countdown (main sets it from the sim)
 var toy: ToyRacer
+# Set by race_reactions.gd.
+var react_id := -1
+var react_cool := 0.0
+var brace_cool := 0.0
+var react_prev := Vector3.ZERO
+## "" while racing, else the outcome being shown ("finished" / "failed") before the view frees.
+var leaving := ""
+var _leave_t := 0.0
+var _leave_v := 0.0
+var _yaw_prev := 0.0
+var _turn := 0.0
+var _braced := false
 var _body: Node3D
 var _was_air := false
 var _was_bumped := false
@@ -41,7 +55,9 @@ func setup(p_racer, spec: Dictionary, drawing: Texture2D, p_nickname: String) ->
 	toy.show_name_tag(true)
 	toy.name_tag.layers = CameraHud.NAME_TAG_LAYER  # not drawn in the picture-in-picture inset
 	_box = RacerBuilder._aabb(toy, Transform3D.IDENTITY)
+	set_process(false)
 	sync()
+	_yaw_prev = racer.yaw()
 
 
 ## Where the big-screen HUD puts this racer's tag: just above the toy's head (its 3D name tag
@@ -80,19 +96,80 @@ func sync() -> void:
 	if not visible:
 		return
 	position = racer.world_pos()
-	_body.rotation = Vector3(racer.pitch(), racer.yaw(), racer.roll())
+	var yaw: float = racer.yaw()
+	_body.rotation = Vector3(racer.pitch(), yaw, racer.roll())
 	if toy == null:
 		return
-	toy.set_state({
-		"speed": racer.v,
-		"lean": clampf(racer.vd * 0.25, -1.0, 1.0),
-		"airborne": racer.airborne,
-		"boost": racer.boost_t > 0.0,
-	})
+	var dt := get_process_delta_time()
+	if dt > 0.0:
+		_turn = lerpf(_turn, clampf(wrapf(yaw - _yaw_prev, -PI, PI) / dt, -3.0, 3.0), minf(1.0, dt * 8.0))
+	_yaw_prev = yaw
+	toy.speed = racer.v
+	toy.lean = clampf(racer.vd * 0.25, -1.0, 1.0)
+	toy.airborne = racer.airborne
+	toy.boost = racer.boost_t > 0.0
+	toy.turn = _turn
+	toy.vy = racer.vy
+	toy.big_air = racer.jump_air
+	toy.in_water = racer.in_water
+	toy.slipping = racer.slipping
+	var r = racer.route()
+	toy.ahead_turn = wrapf(r.heading_at(minf(racer.ls + 9.0, r.length)) - r.heading_at(racer.ls), -PI, PI)
+	if racer.airborne and racer.vy < -0.5 and not _braced:
+		# Brace just before touching down.
+		if (racer.y - racer.course_ref.surface_y(racer.seg, racer.ls)) / -racer.vy < 0.22:
+			_braced = true
+			toy.gesture("brace")
 	if _was_air and not racer.airborne:
 		toy.land()
+		_braced = false
 	_was_air = racer.airborne
 	var bumped: bool = racer.bumped_t > 0.0
 	if bumped and not _was_bumped:
 		toy.bump()
 	_was_bumped = bumped
+
+
+## Forward on the road (world, unit).
+func forward() -> Vector3:
+	return _body.global_basis.z
+
+
+## The run ended (main.gd on sim.removed): the racer stays FINISH_STAY s (cheer, then a wave at
+## the camera) or FAIL_STAY s (spin and slump), coasts to a stop, pops away and frees itself.
+## An aborted run, or a view without a toy, goes at once.
+func leave(outcome: String) -> void:
+	if toy == null or outcome not in ["finished", "failed"]:
+		queue_free()
+		return
+	leaving = outcome
+	visible = true
+	_leave_v = racer.v
+	toy.slipping = false
+	toy.airborne = false
+	if outcome == "finished":
+		_leave_t = FINISH_STAY
+		toy.finish()
+	else:
+		_leave_t = FAIL_STAY
+		toy.fail()
+	set_process(true)
+
+
+const FINISH_STAY := 2.2
+const FAIL_STAY := 1.6
+const POP := 0.25
+
+
+func _process(delta: float) -> void:
+	if leaving == "":
+		return
+	_leave_t -= delta
+	_leave_v = maxf(0.0, _leave_v - delta * maxf(8.0, _leave_v * 2.5))
+	position += forward() * _leave_v * delta
+	toy.speed = _leave_v
+	toy.turn = 0.0
+	if _leave_t < POP:
+		scale = Vector3.ONE * maxf(0.001, _leave_t / POP)
+	if _leave_t <= 0.0:
+		queue_free()
