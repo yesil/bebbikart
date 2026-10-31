@@ -29,7 +29,11 @@ const EVENTS := ["wave", "cheer", "fist_pump", "glance_back", "slump", "dizzy", 
 	"ready", "tap", "scratch", "stretch", "salute", "clap", "bow", "spin", "peek", "twirl", "jive",
 	"taunt", "whoop", "flinch", "high_five", "shake_fist",
 	"state:rain", "state:wind", "state:air", "state:slip", "state:water", "state:boost",
-	"bump", "land", "fail", "celebrate", "finish", "look", "drive", "grid", "signature"]
+	"bump", "land", "fail", "celebrate", "finish", "look", "drive", "grid", "signature",
+	"mood:grumpy", "mood:cocky"]
+## In-game face expressions each event must show at some point (RacerFace.EXPRESSIONS).
+const FACE := {"flinch": "eek", "surprised": "eek", "taunt": "smug", "shake_fist": "smug",
+	"mood:grumpy": "grumpy", "mood:cocky": "smug"}
 ## Arm points (elbow, mid upper arm, forearm) deeper than this inside the head or body (0 at the
 ## surface, 1 at the centre) count as an arm through them.
 const ARM_BURY := 0.12
@@ -119,6 +123,8 @@ func _check(path: String) -> void:
 			r._process(DT)
 			_ride_extremes(r, ext)
 			_arm_bury(r, ext)
+			if r.face and r.face.expression != "":
+				ext["face:" + r.face.expression] = 1.0
 			var why := _frame_problem(r, i % 15 == 0)
 			if why != "":
 				_fail(who, ev, "t=%.2f s: %s" % [i * DT, why])
@@ -146,6 +152,9 @@ func _check(path: String) -> void:
 
 
 func _fire(r: ToyRacer, ev: String, on: bool) -> void:
+	if ev.begins_with("mood:"):
+		r.gestures.mood_mem = (-1.0 if ev == "mood:grumpy" else 1.0) if on else 0.0
+		return
 	if ev.begins_with("state:") or ev == "drive" or ev == "grid":
 		match ev:
 			"state:rain": r.rain = 1.0 if on else 0.0
@@ -195,6 +204,11 @@ func _nodes(r: ToyRacer) -> Array:
 	out.append_array(g._sw_node)
 	out.append_array(g._palm)
 	out.append_array(r.ride.nodes())
+	if r.face:
+		out.append_array(r.face._eyes)
+		out.append_array(r.face._brows)
+		out.append_array(r.face._pupil_all.filter(func(pu): return pu not in r.face._pupils))  # googly ones wobble
+		out.append_array(r.face._mouths.values())
 	return out
 
 
@@ -338,6 +352,8 @@ func _ride_problem(r: ToyRacer, ev: String, ext: Dictionary) -> String:
 			print("arm   %-44s %-12s %.2f" % [r.spec.get("title", "?"), ev, bury])
 	if bury > ARM_FAIL:
 		return "arm through the head or body: %.2f deep (limit %.2f)" % [bury, ARM_FAIL]
+	if FACE.has(ev) and not ext.has("face:" + str(FACE[ev])) and r.face:
+		return "face never showed \"%s\" (expressions seen: %s)" % [FACE[ev], ", ".join(ext.keys().filter(func(k): return str(k).begins_with("face:")))]
 	for x in _ride_expect(r, ev):
 		var got := float(ext.get(x[0], -INF))
 		if got < float(x[1]):

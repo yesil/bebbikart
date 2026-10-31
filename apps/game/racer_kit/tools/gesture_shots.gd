@@ -140,6 +140,12 @@ func _fire(r: ToyRacer, scene: String) -> float:
 		"taunt":
 			r.gesture("taunt")
 			return 0.4
+		"flinch":
+			r.gesture("flinch")
+			return 0.3
+		"grumpy", "cocky":
+			r.gestures.mood_mem = -1.0 if scene == "grumpy" else 1.0  # the mood memory's resting face
+			return 0.5
 		"wave":
 			r.wave()
 			r.look_at_node(cam, 2.0)

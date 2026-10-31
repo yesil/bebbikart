@@ -743,6 +743,22 @@ func remember(delta_mood: float) -> void:
 	mood_mem = clampf(mood_mem + delta_mood, -1.0, 1.0)
 
 
+## In-game face on top of the mood (RacerFace.EXPRESSIONS): "eek" while flinching or surprised,
+## "smug" while taunting or shaking a fist after a revenge pass, and at rest "grumpy" or "smug"
+## from the mood memory; "" for none.
+func expression_hint() -> String:
+	if _w[G.FLINCH] > 0.3 or _w[G.SURPRISED] > 0.5:
+		return "eek"
+	if _w[G.TAUNT] > 0.3 or _w[G.SHAKE_FIST] > 0.3:
+		return "smug"
+	if mood_hint() == "":
+		if mood_mem < -0.45:
+			return "grumpy"
+		if mood_mem > 0.45:
+			return "smug"
+	return ""
+
+
 ## Resting face from the mood memory: "determined" (a grumpy frown), "excited" (cocky), or "".
 func base_mood() -> String:
 	if mood_mem < -0.45:
@@ -875,6 +891,7 @@ func reset() -> void:
 		_held[g] = 0
 		_side[g] = int(SIDE[g])
 	_active = 0
+	mood_mem = 0.0
 	for v in ["_d_soft", "_v_soft", "_d_stiff", "_v_stiff", "_d_spring", "_v_spring", "_d_cape", "_v_cape", "_a_rig"]:
 		set(v, Vector3.ZERO)
 	_have_prev = false

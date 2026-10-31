@@ -312,6 +312,7 @@ func snap_pose(m := "happy") -> void:
 	reset_anim()
 	set_mood(m, true)
 	if face:
+		face.set_expression("")
 		face._blink = 0.0
 		face._blink_t = 99.0
 		face.tick(0.0)
@@ -327,6 +328,7 @@ func _process(delta: float) -> void:
 	if not _mood_locked:
 		_apply_mood(_auto_mood())
 	if face:
+		face.set_expression("" if _mood_locked else gestures.expression_hint())
 		face.tick(dt)
 	var moving := clampf(speed / 10.0, 0.0, 1.0)
 	ride.update(dt)

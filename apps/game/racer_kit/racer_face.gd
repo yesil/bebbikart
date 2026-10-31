@@ -3,6 +3,10 @@ extends Node3D
 ## Toy face on a head blob: eyes, brows, mouth, cheeks and a tear, with one set of
 ## overlays per mood (contracts §3 Mood). Built once; set_mood() only toggles visibility
 ## and transforms, so mood changes are free at runtime.
+## On top of the mood, an in-game expression (EXPRESSIONS, not part of the Mood contract):
+## "eek" (eyes wide, tiny pupils, brows up, a small round mouth), "smug" (half-lidded eyes, one
+## brow up, a lopsided smirk), "grumpy" (brows down hard, squint, a frown); set_expression("")
+## shows the mood again.
 ## Face-plane anchors use +Z out of the head surface, +X toward the racer's right.
 
 const P = preload("res://racer_kit/kit_parts.gd")
@@ -10,6 +14,8 @@ const PINK := Color("#ff8fa3")
 const TEAR := Color("#7fd3ff")
 
 var mood := "happy"
+const EXPRESSIONS := ["eek", "smug", "grumpy"]
+var expression := ""
 var eye_style := "big_round"
 var mouth_style := "smile"
 
@@ -25,6 +31,9 @@ var _blink_t := 2.0
 var _blink := 0.0
 var _time := 0.0
 var _has_cheeks := false
+var _eye_y := 1.0                    # eye height factor (squint / half lids), for tick()
+var _pupil_all: Array[Node3D] = []   # every pupil (eek shrinks them)
+var _mouth_rest := {}                # mouth name -> rest transform (smirk, small o)
 
 
 ## p = head blob params; face = normalised spec.character.face; colors = palette Colors.
@@ -68,12 +77,30 @@ func setup(p: Dictionary, face: Dictionary, colors: Array[Color], skin: Color) -
 	var drop := P.mi(KitMesh.sphere(0.022), TEAR, Vector3.ZERO, 0.3)
 	drop.scale = Vector3(0.8, 1.3, 0.6)
 	_tear.add_child(drop)
+	for k in _mouths:
+		_mouth_rest[k] = (_mouths[k] as Node3D).transform
 	set_mood("happy")
 
 
 func set_mood(m: String) -> void:
 	mood = m if m in KitCatalog.MOODS else "happy"
-	var eyes_open := mood not in ["dizzy", "cheering"]
+	_apply()
+
+
+## An expression on top of the mood (EXPRESSIONS), or "" for none. False (and an error) for an
+## unknown name.
+func set_expression(x: String) -> bool:
+	if x != "" and x not in EXPRESSIONS:
+		push_error("RacerFace: unknown expression \"%s\" (known: %s)" % [x, ", ".join(EXPRESSIONS)])
+		return false
+	if x != expression:
+		expression = x
+		_apply()
+	return true
+
+
+func _apply() -> void:
+	var eyes_open := mood not in ["dizzy", "cheering"] or expression != ""
 	for e in _eyes:
 		e.visible = eyes_open
 	for e in _eyes:
@@ -81,9 +108,21 @@ func set_mood(m: String) -> void:
 		match mood:
 			"excited": k = 1.25
 			"sad": k = 0.9
-		e.scale = Vector3(k, k * (0.6 if mood == "determined" else 1.0), k)
+		_eye_y = 0.6 if mood == "determined" else 1.0
+		match expression:
+			"eek":
+				k = 1.4
+				_eye_y = 1.15
+			"smug":
+				_eye_y = 0.5
+			"grumpy":
+				k = 0.95
+				_eye_y = 0.5
+		e.scale = Vector3(k, k * _eye_y, k)
+	for pu in _pupil_all:
+		pu.scale = Vector3.ONE * (0.55 if expression == "eek" else 1.0)
 	for key in _overlays:
-		var on: bool = (key == "spiral" and mood == "dizzy") or (key == "arc" and mood == "cheering")
+		var on: bool = expression == "" and ((key == "spiral" and mood == "dizzy") or (key == "arc" and mood == "cheering"))
 		for o in _overlays[key]:
 			o.visible = on
 	for b in _brows:
@@ -95,6 +134,16 @@ func set_mood(m: String) -> void:
 			"sad": tilt = -0.4
 			"excited", "cheering": lift = 0.025
 			"dizzy": tilt = 0.25 * side
+		match expression:
+			"eek":
+				tilt = -0.3
+				lift = 0.045
+			"smug":
+				tilt = 0.0 if side > 0.0 else 0.35  # one brow up, one down
+				lift = 0.03 if side > 0.0 else -0.005
+			"grumpy":
+				tilt = 0.65
+				lift = -0.015
 		b.rotation.z = -tilt * side
 		b.position = b.get_meta("base_pos", b.position)
 		b.set_meta("base_pos", b.position)
@@ -106,13 +155,24 @@ func set_mood(m: String) -> void:
 			"sad": shown = "frown"
 			"dizzy": shown = "wavy"
 			"determined": shown = "fangs" if mouth_style == "fangs" else "flat"
+		match expression:
+			"eek": shown = "open"
+			"smug": shown = "smile"
+			"grumpy": shown = "fangs" if mouth_style == "fangs" else "frown"
 	for k in _mouths:
 		_mouths[k].visible = k == shown
+		_mouths[k].transform = _mouth_rest.get(k, _mouths[k].transform)
+	if expression == "eek" and shown == "open":
+		_mouths.open.scale = Vector3(0.7, 1.2, 1.0)  # a small round "o"
+	if expression == "smug" and shown == "smile":
+		var w: float = _p.ax * 0.4
+		_mouths.smile.rotation.z = 0.3  # a lopsided smirk
+		_mouths.smile.position.x += w * 0.25
 	if mouth_style == "beak" and _mouths.has("beak"):
-		_mouths.beak.scale = Vector3.ONE * (1.15 if mood in ["excited", "cheering"] else 1.0)
+		_mouths.beak.scale = Vector3.ONE * (1.15 if mood in ["excited", "cheering"] or expression == "eek" else 1.0)
 	for c in _cheeks:
-		c.visible = _has_cheeks or mood in ["cheering", "excited"]
-	_tear.visible = mood == "sad"
+		c.visible = _has_cheeks or (mood in ["cheering", "excited"] and expression != "grumpy") or expression == "smug"
+	_tear.visible = mood == "sad" and expression == ""
 
 
 ## Called every frame by ToyRacer.
@@ -125,9 +185,8 @@ func tick(delta: float) -> void:
 	if _blink > 0.0:
 		_blink -= delta
 	var lid := 0.12 if _blink > 0.0 and eye_style != "visor" else 1.0
-	var squint := 0.6 if mood == "determined" else 1.0
 	for e in _eyes:
-		e.scale.y = e.scale.x * squint * lid
+		e.scale.y = e.scale.x * _eye_y * lid
 	for pu in _pupils:
 		pu.position = Vector3(sin(_time * 9.0) * 0.012, cos(_time * 7.0) * 0.01, pu.position.z)
 	for o in _overlays.get("spiral", []):
@@ -189,6 +248,7 @@ func _build_eye(a: Node3D, col: Color, skin: Color) -> void:
 			a.add_child(white)
 			var pr := r * (0.4 if eye_style == "googly" else 0.58)
 			var pupil := P.node("Pupil", Vector3(0, -r * 0.08, r * 0.38))
+			_pupil_all.append(pupil)
 			var pm: MeshInstance3D
 			if eye_style == "star":
 				pm = P.mi(KitMesh.puffy(KitMesh.star_outline(5, pr * 1.35, pr * 0.62), pr * 0.5, "eye_star%.3f" % pr), col)
