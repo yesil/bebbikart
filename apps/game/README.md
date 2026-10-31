@@ -111,6 +111,8 @@ Sweep flags:
 - `ui/race_hud.gd`: the big-screen race HUD for groups: a place + name tag over every kart (pushed apart, never overlapping), the race board (top right: place, avatar, lap or section, time; finishers keep their time until the group is home), the standings (top left: everyone by best time, or what the designer is doing), finish and oops banners, problems in red, and the podium when a session ends. Colours come from its palette in join order and are shared with the camera's name tags.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
+- `tools/start_crowd_check.gd`: groups of 4, 6 and 8 pressing Go together on both tracks (with the start countdown), with early Boost taps: start bumps, early crashes and release spread; exits 1 if the crowd knocks racers off. `--boost=onetap` is the gameplay thread's one-tap regression mode.
+- `tools/hud_check.gd` (windowed): renders the race HUD's podium, a 20-racer standings and a 16-racer race board from test data; exits 1 if they run into the camera HUD's corners.
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
 - `world/landscape.gd`: the terrain features each fork alternative is built around (pond, inflow stream, jump dip, knoll, valley, hills), anchored to the course.
 
