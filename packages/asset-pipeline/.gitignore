@@ -5,3 +5,4 @@ node_modules/
 out-before/
 out-after/
 *.log
+out-*/
