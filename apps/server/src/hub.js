@@ -87,6 +87,8 @@ export function createHub({ settings, log = console.log }) {
             } catch (err) {
               sendError(ws, out, err.code ?? "bad_request", err.message, id);
             }
+          } else if (type === "phone.watch") {
+            game.watch(p.id, payload.runId);
           }
         }
       },

@@ -169,6 +169,14 @@ test("phone → drawings → racer on the big screen → race → result", async
   await phone.wait("run.started");
   phone.send("phoneToServer", "phone.boost", { runId });
   await game.wait("run.boost", (p) => p.runId === runId);
+  // "Show me on the big screen" reaches the game; the game's camera cut reaches the phones.
+  phone.send("phoneToServer", "phone.watch", { runId });
+  await game.wait("run.watch", (p) => p.runId === runId);
+  game.send("gameToServer", "game.camera", { runId });
+  const onCamera = await phone.wait("camera.updated", (p) => p.runId === runId);
+  expect(onCamera.payload.playerId).toBe(player.id);
+  game.send("gameToServer", "game.camera", {});
+  await phone.wait("camera.updated", (p) => p.playerId === undefined);
   game.send("gameToServer", "game.run.section", { runId, section: "hills", splitMs: 8000 });
   await phone.wait("run.section");
   game.send("gameToServer", "game.run.finished", {
