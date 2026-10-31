@@ -145,7 +145,7 @@ describe("runDesignJob (mock)", () => {
         { client },
       );
       expect(r.status).toBe("failed");
-      expect(r.error).toContain("invalid twice");
+      expect(r.error).toContain("invalid 3 times");
     } finally {
       await rm(out, { recursive: true, force: true });
     }

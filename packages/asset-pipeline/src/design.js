@@ -52,6 +52,9 @@ function effortFromEnv(v) {
   return { look, design, critique, refine };
 }
 
+/** Tries per pass; each retry carries the validation errors. Text passes take ~10 s, so 3 is cheap. */
+const ATTEMPTS = 3;
+
 class StageFailed extends Error {}
 
 /**
@@ -110,7 +113,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
   async function pass(stage, messages, opts, validate) {
     const started = Date.now();
     let errors = null;
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       let content;
       try {
         content = await client.complete(messages(errors), opts, { ...ctx, stage, attempt });
@@ -129,7 +132,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       log(`${stage} attempt ${attempt}: ${errors.slice(0, 3).join("; ")}`);
     }
     throw new StageFailed(
-      `DeepSeek ${stage} reply was invalid twice: ${(errors ?? []).slice(0, 3).join("; ")}`,
+      `DeepSeek ${stage} reply was invalid ${ATTEMPTS} times: ${(errors ?? []).slice(0, 3).join("; ")}`,
     );
   }
 
