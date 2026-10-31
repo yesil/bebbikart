@@ -128,7 +128,7 @@ describe("runDesignJob (mock)", () => {
         if (r.status === "ready") {
           const onDisk = JSON.parse(await readFile(r.file, "utf8"));
           expect(RacerSpecSchema.safeParse(onDisk).success).toBe(true);
-          expect(statuses).toEqual(["looking", "critiquing", "ready"]);
+          expect(statuses).toEqual(["looking", "designing", "critiquing", "refining", "ready"]);
         }
       }
       const files = (await readdir(out)).filter((f) => f.endsWith(".spec.json"));

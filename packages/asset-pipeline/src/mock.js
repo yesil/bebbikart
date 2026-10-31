@@ -473,7 +473,9 @@ const MOCK_LOOK_EXTRAS = {
 export function createMockClient({ designId } = {}) {
   return {
     name: designId ? `mock:${designId}` : "mock",
-    async complete(_messages, _opts, ctx) {
+    async complete(_messages, opts, ctx) {
+      // Like the real client: the reply text starts after "thinking".
+      opts?.onText?.();
       const id = designId ?? mockDesignId(ctx.characterPath, ctx.vehiclePath);
       const design = id ? MOCK_DESIGNS[id] : null;
       if (ctx.stage === "review") {
