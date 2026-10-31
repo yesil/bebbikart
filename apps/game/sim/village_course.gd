@@ -66,7 +66,9 @@ func _error(msg: String) -> void:
 func _build(hill: float, north: float) -> void:
 	# Dorfplatz: the start/finish straight in front of the inn.
 	var p := _draw_ops(Vector3.ZERO, 0.0, [["S", 14.0]], [[0.0, 0.0]])
-	_add("start", "hills", "", "", p, 5.0, {})
+	# Boost out of the square: a boost before the downhill corners after the church sent
+	# racers off the road.
+	_add("start", "hills", "", "", p, 5.0, {"boosts": [[3.0, 12.0]]})
 	# Main street: a gentle S between the chalets, then right up the church hill.
 	var ops := [["S", 3.0], ["A", 22.0, 16.0], ["A", 22.0, -16.0], ["S", 2.0], ["A", 18.0, LEG_CHURCH], ["S", 4.0]]
 	var l1 := 3.0 + deg_to_rad(32.0) * 22.0 + 2.0 + deg_to_rad(LEG_CHURCH) * 18.0 + 4.0
@@ -84,10 +86,13 @@ func _build(hill: float, north: float) -> void:
 	})
 	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {})
 	# Over the hill top, then right and down to the brook.
-	ops = [["S", hill], ["A", 18.0, LEG_BROOK - LEG_CHURCH], ["S", 12.0]]
-	var l2 := hill + deg_to_rad(LEG_BROOK - LEG_CHURCH) * 18.0 + 12.0
+	# Two easier half-turns with a breather between: one long 100-degree arc downhill threw
+	# daring racers off in the rain.
+	var half := (LEG_BROOK - LEG_CHURCH) * 0.5
+	ops = [["S", hill], ["A", 24.0, half], ["S", 5.0], ["A", 24.0, half], ["S", 8.0]]
+	var l2 := hill + deg_to_rad(half * 2.0) * 24.0 + 13.0
 	p = _draw_ops(_end("ramp_jump"), _heading("ramp_jump"), ops, [[0.0, 3.0], [hill, 3.0], [l2, 0.4]])
-	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[1.0, 1.0 + clampf(hill - 2.0, 4.0, 10.0)]]})
+	_add("hills2", "hills", "", "", p, 4.0, {})
 	# Pond fork. Bridge: the lane swings left over the inflow brook on a covered wooden bridge.
 	# Water: a stone ford straight through the duck pond.
 	var j3 := _end("hills2")
