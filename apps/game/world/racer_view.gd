@@ -65,6 +65,16 @@ func setup(p_racer, p_color: Color, p_nickname: String) -> void:
 	sync()
 
 
+## Where the big-screen HUD puts this racer's tag (the 3D label's spot).
+func tag_anchor() -> Vector3:
+	return _label.global_position
+
+
+## The HUD draws its own tags; the 3D label is off then.
+func show_name_tag(on: bool) -> void:
+	_label.visible = on
+
+
 func _part(mesh: Mesh, m: Material, pos: Vector3) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh

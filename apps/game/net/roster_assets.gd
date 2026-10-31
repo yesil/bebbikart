@@ -6,6 +6,7 @@ extends Node
 ##   assets.update(roster)          # on every roster.updated
 ##   assets.spec_for(player_id)     # {} when the racer has no package yet
 ##   assets.drawing_for(player_id)  # Texture2D or null
+##   assets.avatar_for(player_id)   # Texture2D (happy face, for the big-screen HUD) or null
 ## Signals: racer_ready(player_id) when a player's package is first seen (for a "new racer" moment),
 ## problem(text) when something fails (no fallbacks: main shows it on screen, and it is logged).
 
@@ -17,6 +18,8 @@ var game_key := ""
 
 var entries := {}        # playerId -> RosterEntry
 var _drawings := {}      # packageId -> Texture2D
+var _avatars := {}       # playerId -> Texture2D (avatar_happy)
+var _avatar_urls := {}   # playerId -> avatar_happy URL downloaded or being downloaded
 var _requested := {}     # packageId -> true (download started)
 var _rendered := {}      # packageId -> true (render queued or done)
 var _queue: Array = []   # playerIds waiting for a render
@@ -47,6 +50,11 @@ func update(roster: Array) -> void:
 			_requested[pkg] = true
 			_download_drawing(pkg, String(asset.get("drawings", {}).get("vehicle", "")))
 		var renders: Dictionary = asset.get("renders", {})
+		# Rendered by an earlier run of the game (or before a reroll): fetch the avatar.
+		var av_url := String(renders.get("avatar_happy", ""))
+		if av_url != "" and _avatar_urls.get(pid, "") != av_url and not _rendered.has(pkg):
+			_avatar_urls[pid] = av_url
+			_download_avatar(pid, av_url)
 		if not renders.has("hero") and not _rendered.has(pkg):
 			_rendered[pkg] = true
 			_queue.append(pid)
@@ -56,6 +64,8 @@ func update(roster: Array) -> void:
 	for pid in entries.keys():
 		if not seen.has(pid):
 			entries.erase(pid)
+			_avatars.erase(pid)
+			_avatar_urls.erase(pid)
 
 
 func nickname(player_id: String) -> String:
@@ -69,6 +79,10 @@ func spec_for(player_id: String) -> Dictionary:
 func drawing_for(player_id: String) -> Texture2D:
 	var pkg := String(entries.get(player_id, {}).get("asset", {}).get("packageId", ""))
 	return _drawings.get(pkg)
+
+
+func avatar_for(player_id: String) -> Texture2D:
+	return _avatars.get(player_id)
 
 
 func _url(path: String) -> String:
@@ -99,6 +113,26 @@ func _download_drawing(pkg: String, path: String) -> void:
 	_drawings[pkg] = ImageTexture.create_from_image(img)
 
 
+func _download_avatar(pid: String, path: String) -> void:
+	var req := HTTPRequest.new()
+	add_child(req)
+	if req.request(_url(path)) != OK:
+		req.queue_free()
+		_fail("avatar download for %s could not start (%s)" % [nickname(pid), _url(path)])
+		return
+	var res: Array = await req.request_completed
+	req.queue_free()
+	if res[0] != HTTPRequest.RESULT_SUCCESS or res[1] != 200:
+		_fail("avatar download failed for %s: result %d, HTTP %d (%s)" % [nickname(pid), res[0], res[1], _url(path)])
+		return
+	var img := Image.new()
+	if img.load_png_from_buffer(res[3]) != OK:
+		_fail("avatar for %s is not a PNG (%s)" % [nickname(pid), _url(path)])
+		return
+	if _avatar_urls.get(pid, "") == path:
+		_avatars[pid] = ImageTexture.create_from_image(img)
+
+
 ## One render at a time: each takes a few frames of the offscreen viewport.
 func _pump() -> void:
 	if _rendering or _queue.is_empty():
@@ -125,6 +159,12 @@ func _pump() -> void:
 		var paths: Dictionary = await _renderer.render_all(spec, pid, drawing_for(pid))
 		if paths.size() != 4:
 			_fail("rendering %s produced %d of 4 images" % [nickname(pid), paths.size()])
+		if paths.has("avatar_happy"):
+			var img := Image.load_from_file(String(paths["avatar_happy"]))
+			if img == null or img.is_empty():
+				_fail("can't read the avatar just rendered for %s (%s)" % [nickname(pid), paths["avatar_happy"]])
+			else:
+				_avatars[pid] = ImageTexture.create_from_image(img)
 		var ok: int = await _renderer.upload_all(pid, paths)
 		if ok != paths.size():
 			_fail("uploaded %d of %d images for %s to %s" % [ok, paths.size(), nickname(pid), http_base])

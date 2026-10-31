@@ -39,6 +39,20 @@ func setup(p_racer, spec: Dictionary, drawing: Texture2D, p_nickname: String) ->
 	sync()
 
 
+## Where the big-screen HUD puts this racer's tag: just above the toy's head (its 3D name tag
+## spot), or above the error text for an invalid spec.
+func tag_anchor() -> Vector3:
+	if toy != null and toy.name_tag != null:
+		return toy.name_tag.global_position
+	return global_position + Vector3(0, 1.8, 0)
+
+
+## The HUD draws its own tags (place + name, never overlapping); the 3D one is off then.
+func show_name_tag(on: bool) -> void:
+	if toy != null:
+		toy.show_name_tag(on)
+
+
 func sync() -> void:
 	if racer == null:
 		return

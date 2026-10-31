@@ -5,10 +5,12 @@ extends CanvasLayer
 ##    they never overlap (side by side on the grid, bunched up in a bend).
 ##  - Race board (right): place, avatar, name, lap or section, time. Finishers stay with their
 ##    time while the rest of the field comes home, so the group sees its own results.
-##  - Paddock (bottom): everyone in the session, by rank: avatar, best time, or what the designer
+##  - Paddock (left): everyone in the session, by rank: avatar, best time, or what the designer
 ##    is doing while their racer is made.
-##  - Banners (top): each finish and each oops as it happens.
-##  - Problems (bottom left, red): errors for the facilitator. No fallbacks: shown, never hidden.
+##  - Banners (top centre): each finish and each oops as it happens.
+##  - Problems (top centre, red): errors for the facilitator. No fallbacks: shown, never hidden.
+## The bottom of the screen belongs to the camera director (on-camera name tag bottom left,
+## picture-in-picture bottom right, the name pop after a cut at 56 % down).
 ## main.gd feeds it (set_roster, set_leaderboard, run_result, run_gone, problem) and calls
 ## update() every frame with the sim and the racer views.
 
@@ -22,7 +24,9 @@ const PALETTE := [
 ]
 const BOARD_ROWS := 10
 const BOARD_W := 480
-const PADDOCK_ROW := 10          # cards per paddock row; more racers wrap to a second, smaller row
+const PADDOCK_W := 330
+const PADDOCK_FULL_ROWS := 10    # more racers than this: compact one-line rows
+const PADDOCK_MAX_ROWS := 20
 const RESULT_HOLD_S := 25.0     # a finisher stays on the board this long at most
 const EMPTY_HOLD_S := 10.0      # ...or this long after the last racer left the track
 const BANNER_S := 3.5
@@ -51,7 +55,9 @@ var _board_panel: PanelContainer
 var _board_title: Label
 var _board_rows: Array = []     # [{root, place, chip, avatar, initial, name, info, time}]
 var _board_more: Label
-var _paddock: HFlowContainer
+var _paddock: VBoxContainer
+var _paddock_panel: PanelContainer
+var _paddock_title: Label
 var _paddock_dirty := true
 var _paddock_t := 0.0
 var _banners: VBoxContainer
@@ -79,12 +85,10 @@ func _ready() -> void:
 	_banners.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_banners)
 	_problems = VBoxContainer.new()
-	_problems.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	_problems.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_problems.offset_left = 16
-	_problems.offset_right = 916
-	_problems.offset_top = -160
-	_problems.offset_bottom = -160
+	_problems.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_problems.offset_left = -380
+	_problems.offset_right = 380
+	_problems.offset_top = 300
 	_problems.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_problems)
 
@@ -168,11 +172,11 @@ func run_gone(run_id: String) -> void:
 		_tags.erase(run_id)
 
 
-## An error the facilitator must see (red, bottom left, for PROBLEM_S).
+## An error the facilitator must see (red, top centre, for PROBLEM_S).
 func problem(text: String) -> void:
 	var l := _label(text, 20, Color(1, 0.92, 0.9))
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(900, 0)
+	l.custom_minimum_size = Vector2(740, 0)
 	var p := _panel(Color(0.55, 0.05, 0.05, 0.88), 8)
 	p.add_child(l)
 	p.set_meta("until", _t + PROBLEM_S)
@@ -444,31 +448,30 @@ func _make_tag(pid: String) -> PanelContainer:
 	return tag
 
 
-# ---------------------------------------------------------------- paddock
+# ---------------------------------------------------------------- paddock (standings tower)
 
 func _build_paddock() -> void:
-	var panel := _panel(Color(0.06, 0.07, 0.1, 0.6), 10)
-	panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	panel.offset_left = 16
-	panel.offset_right = -16
-	panel.offset_top = -12
-	panel.offset_bottom = -12
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(panel)
-	_paddock = HFlowContainer.new()
-	_paddock.add_theme_constant_override("h_separation", 10)
-	_paddock.add_theme_constant_override("v_separation", 8)
-	_paddock.alignment = FlowContainer.ALIGNMENT_CENTER
-	panel.add_child(_paddock)
-	set_meta("paddock_panel", panel)
+	_paddock_panel = _panel(Color(0.06, 0.07, 0.1, 0.62), 14)
+	_paddock_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_paddock_panel.offset_left = 16
+	_paddock_panel.offset_top = 16
+	_paddock_panel.offset_right = 16 + PADDOCK_W
+	_paddock_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_paddock_panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	_paddock_panel.add_child(box)
+	_paddock_title = _label(I18n.t("hud.paddock"), 24, Color(1, 0.86, 0.3))
+	box.add_child(_paddock_title)
+	_paddock = VBoxContainer.new()
+	_paddock.add_theme_constant_override("separation", 4)
+	box.add_child(_paddock)
 
 
 func _rebuild_paddock(sim) -> void:
 	_paddock_dirty = false
 	_paddock_t = 0.5  # avatars arrive and racers start and stop: refresh twice a second
-	var panel: Control = get_meta("paddock_panel")
-	panel.visible = not _roster.is_empty()
+	_paddock_panel.visible = not _roster.is_empty()
 	for c in _paddock.get_children():
 		c.queue_free()
 	var on_track := {}
@@ -484,31 +487,31 @@ func _rebuild_paddock(sim) -> void:
 		if ra != rb:
 			return ra < rb
 		return _join_order.find(a) < _join_order.find(b))
-	var n := pids.size()
-	var compact := n > PADDOCK_ROW
-	var per_row := mini(n, PADDOCK_ROW)
-	var w := clampf((1868.0 - 10.0 * (per_row - 1)) / maxf(1.0, per_row), 150.0, 260.0)
-	var av := 40 if compact else 64
-	for pid in pids:
+	var compact := pids.size() > PADDOCK_FULL_ROWS
+	var av := 34 if compact else 48
+	for pid in pids.slice(0, PADDOCK_MAX_ROWS):
 		var e: Dictionary = _roster[pid]
 		var col := color_for(pid)
-		var card := _panel(Color(col.r, col.g, col.b, 0.22), 8, col, 2)
-		card.custom_minimum_size = Vector2(w, 52 if compact else 84)
+		var rank: Dictionary = _ranks.get(pid, {})
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
-		card.add_child(row)
+		var place := _label(str(int(rank["rank"])) if not rank.is_empty() and int(rank["rank"]) > 0 else "", 20 if compact else 24, Color.WHITE)
+		place.custom_minimum_size = Vector2(30, 0)
+		place.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		if not rank.is_empty():
+			place.add_theme_color_override("font_color", _place_color(int(rank["rank"])))
+		row.add_child(place)
 		var chip := _avatar_chip(av)
 		_fill_chip(chip, pid, col)
 		row.add_child(chip["root"])
-		var col_box := VBoxContainer.new()
-		col_box.add_theme_constant_override("separation", 0)
-		col_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(col_box)
-		var rank: Dictionary = _ranks.get(pid, {})
-		var name := _label(("#%d " % int(rank["rank"]) if not rank.is_empty() and int(rank["rank"]) > 0 else "") + _nick(pid), 18 if compact else 22, Color.WHITE)
+		var mid := VBoxContainer.new()
+		mid.add_theme_constant_override("separation", -4)
+		mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(mid)
+		var name := _label(_nick(pid), 19 if compact else 23, col.lightened(0.3))
 		name.clip_text = true
-		name.custom_minimum_size = Vector2(w - av - 28, 0)
-		col_box.add_child(name)
+		name.custom_minimum_size = Vector2(120, 0)
+		mid.add_child(name)
 		var status := String(e.get("status", "ready"))
 		var line := ""
 		var line_col := Color(0.85, 0.88, 0.95)
@@ -516,29 +519,43 @@ func _rebuild_paddock(sim) -> void:
 			var stage := String(e.get("stage", ""))
 			line = I18n.t("making." + stage) if stage != "" else I18n.t("hud.queued_design")
 			line_col = Color(1, 0.86, 0.3)
-		elif status == "ready" or status == "":
+		elif status == "ready":
 			if on_track.has(pid):
 				line = I18n.t("hud.racing")
 				line_col = Color(0.5, 1, 0.6)
-			elif not rank.is_empty():
-				line = I18n.f("hud.best", [int(rank["bestTimeMs"]) / 1000.0])
-			else:
+			elif rank.is_empty():
 				line = I18n.t("hud.ready")
 		else:
-			line = I18n.t("hud.status_" + status)
+			line = _status_text(status)
 			line_col = Color(1, 0.6, 0.5)
-		var sl := _label(line, 15 if compact else 17, line_col)
-		sl.clip_text = compact
-		if not compact:
-			sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sl.custom_minimum_size = Vector2(w - av - 28, 0)
-		col_box.add_child(sl)
+		if line != "" and not compact:
+			var sl := _label(line, 15, line_col)
+			sl.clip_text = true
+			sl.custom_minimum_size = Vector2(120, 0)
+			mid.add_child(sl)
+		elif line != "":
+			name.text += "  ·  " + line
+		var best := _label(I18n.f("hud.best_time", [int(rank["bestTimeMs"]) / 1000.0]) if not rank.is_empty() else "", 19 if compact else 22, Color.WHITE)
+		best.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(best)
 		if not bool(e.get("connected", true)):
-			card.modulate.a = 0.45
-		_paddock.add_child(card)
+			row.modulate.a = 0.45
+		_paddock.add_child(row)
+	if pids.size() > PADDOCK_MAX_ROWS:
+		_paddock.add_child(_label(I18n.f("hud.more", [pids.size() - PADDOCK_MAX_ROWS]), 18, Color(0.8, 0.84, 0.92)))
 
 
 # ---------------------------------------------------------------- helpers
+
+## A racer that can't race yet: what it needs (PlayerStatus draft, rejected, needs_review).
+func _status_text(status: String) -> String:
+	match status:
+		"draft": return I18n.t("hud.status_draft")
+		"rejected": return I18n.t("hud.status_rejected")
+		"needs_review": return I18n.t("hud.status_needs_review")
+	push_error("race HUD: unknown player status \"%s\"" % status)
+	return status
+
 
 func _nick(pid: String) -> String:
 	return String(_roster.get(pid, {}).get("nickname", "?"))
