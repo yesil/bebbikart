@@ -585,18 +585,20 @@ A **pure JS function** run by the server, which sends the result to the phone in
 interface CoachTip {
   key: string;
   text: string;
-  section?: SectionId;
+  stretch?: StretchId; // the stretch it is about (the phone highlights it, §2d)
   ability?: Ability;
   route?: { fork: ForkId; choice: string };
 }
-function coachTip(run: Run, build: Build, best: Run | undefined, language: Language): CoachTip; // throws on an unknown language
+function coachTip(run: Run, build: Build, best: Run | undefined, language: Language, stretches: StretchResult[]): CoachTip; // throws on an unknown language or track, or a finished run without stretches
 function abortTip(language: Language): CoachTip; // key "aborted", for runs that were stopped
 ```
 
 Rules, in priority order:
-1. Failed → a tip about the fail: `{reason, section, events}`. E.g. `off_track` in `bends` with `slip` events → "Slipped on the rainbow bend! Try +1 grip or Careful style."
-2. Finished, best exists → find the section with the largest loss vs best. Use that section's dominant event to suggest a star, route or style change.
-3. Finished, first time / new best → a cheer plus one experiment to try ("New best! Brave enough to try the water shortcut?").
+1. Failed → a tip about the fail, naming the **stretch where it ended** (`failStretch`), from the reason and that stretch's dominant event. E.g. `off_track` on `farm` with `slip` events → "Slipped on the muddy farm track! Try +2 grip or Careful style."
+2. Finished slower than your best → the **stretch with the biggest loss against your best on it** (≥ 300 ms; on your first run: against the session's fastest racer on it, if that is someone else). Its tip: an off-zone boost, bumps or a missed exit there keep their own tip; else the stretch's star ("Lost 1.3 s on the muddy farm track. Try +2 grip!"), or on a fork's safe alternative the other route ("Try the ford next time!"; on the covered bridge in the rain, "Lost 1.5 s on the wet, slippery bridge. Try the ford!"). Within a hair of your best everywhere → "So close to your best! Go again?".
+3. Finished, first time (nobody faster) / new best → a cheer plus one experiment to try ("New best! Brave enough to try the water shortcut?").
+
+Stretch names are per track and language (`STRETCH_NAMES`, with their preposition; `ROUTE_NAMES` for the other route).
 
 Text is short (≤ 70 chars), positive and kid-readable, in `config.language` (§2b). The full copy table, one per language, lives in `coach.js` so it is reviewed in one place.
 
