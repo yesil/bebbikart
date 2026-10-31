@@ -26,6 +26,7 @@ const RosterAssets = preload("res://net/roster_assets.gd")
 const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
 const WORLD_SCENE := "res://world/course_world.tscn"
 const DECOR_SCENE := "res://world/decor.tscn"
+const LIGHTING_SCENE := "res://world/environment.tscn"
 const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
@@ -47,6 +48,9 @@ var nicks := {}            # playerId -> nickname
 var results: Array = []    # recent finished/failed lines
 var camera: CameraRig
 var fx: WeatherFx
+var env: Environment
+var world_env: WorldEnvironment
+var sun: DirectionalLight3D
 var overlay: Label
 var follow_run := ""
 var run_time := 0.0
@@ -99,7 +103,7 @@ func _ready() -> void:
 
 
 func _build_scene() -> void:
-	var env := Environment.new()
+	env = Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sm := ProceduralSkyMaterial.new()
@@ -108,10 +112,10 @@ func _build_scene() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.fog_light_color = Color(0.6, 0.63, 0.7)
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-	var sun := DirectionalLight3D.new()
+	world_env = WorldEnvironment.new()
+	world_env.environment = env
+	add_child(world_env)
+	sun = DirectionalLight3D.new()
 	sun.rotation = Vector3(deg_to_rad(-50), deg_to_rad(-140), 0)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 150.0
@@ -153,10 +157,28 @@ func _build_scene() -> void:
 ## The countryside course world: baked from course.gd by tools/bake_world.gd, plus the
 ## hand-placed landmarks in decor.tscn. Returns false (and quits with an error) if it is broken.
 func _load_countryside_world() -> bool:
+	for path in [WORLD_SCENE, DECOR_SCENE, LIGHTING_SCENE]:
+		if not ResourceLoader.exists(path):
+			push_error("countryside world: %s is missing (see apps/game/README.md, World pipeline)" % path)
+			get_tree().quit(1)
+			return false
 	var world: Node3D = (load(WORLD_SCENE) as PackedScene).instantiate()
 	add_child(world)
-	if ResourceLoader.exists(DECOR_SCENE):
-		add_child((load(DECOR_SCENE) as PackedScene).instantiate())
+	add_child((load(DECOR_SCENE) as PackedScene).instantiate())
+	# The countryside sky, sun and post-processing replace the default ones.
+	var lighting: Node = (load(LIGHTING_SCENE) as PackedScene).instantiate()
+	var we: WorldEnvironment = lighting.get_node_or_null("WorldEnvironment")
+	var lit_sun: DirectionalLight3D = lighting.get_node_or_null("Sun")
+	if we == null or lit_sun == null:
+		push_error("%s needs WorldEnvironment and Sun nodes" % LIGHTING_SCENE)
+		get_tree().quit(1)
+		return false
+	world_env.queue_free()
+	sun.queue_free()
+	add_child(lighting)
+	world_env = we
+	env = we.environment
+	sun = lit_sun
 	var terrain := world.get_node_or_null("Terrain")
 	if terrain == null:
 		push_error("%s has no Terrain node; re-run tools/bake_world.gd" % WORLD_SCENE)

@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://world/vegetation/meshes/grass_wispy_tall.res" id="1_kttu1"]
+
+[node name="Grass_Wispy_Tall" type="MeshInstance3D" unique_id=93040082]
+mesh = ExtResource("1_kttu1")

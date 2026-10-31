@@ -1,11 +1,20 @@
 extends Node3D
 ## Weather visuals driven by the sim weather state: rain particles + darker sky + wet look,
 ## wind streaks blowing along the wind direction, warning tint before a phase starts.
+## Also publishes the global shader parameters the world materials read: road_wetness (wet
+## roads, rain ripples on water), wind_strength and wind_dir (trees, grass and flags sway).
+## Everything eases towards its target over seconds: no sudden flashes.
 
 var weather = null   # sim/weather.gd
 var env: Environment
 var sun: DirectionalLight3D
-var sky_mat: ProceduralSkyMaterial
+var sky_mat: Material              # ProceduralSkyMaterial, or the world's sky shader (gloom)
+var _base_sun := 1.0
+var _base_ambient := 1.0
+var _base_fog := 0.0
+var _gloom := 0.0
+var _wet := 0.0
+var _wind_vis := 0.0
 var follow: Node3D   # rain volume follows this (usually the camera)
 
 var _rain: CPUParticles3D
@@ -23,6 +32,9 @@ func setup(p_weather, p_env: Environment, p_sun: DirectionalLight3D) -> void:
 	env = p_env
 	sun = p_sun
 	sky_mat = env.sky.sky_material
+	_base_sun = sun.light_energy
+	_base_ambient = env.ambient_light_energy
+	_base_fog = env.fog_density if env.fog_enabled else 0.0
 	_rain = CPUParticles3D.new()
 	_rain.amount = 2500
 	_rain.lifetime = 1.2
@@ -87,10 +99,21 @@ func _process(delta: float) -> void:
 	var gloom := clampf(_rain_vis * 0.9 + wind_s * 0.3, 0.0, 1.0)
 	if weather.phase("rain") == "warning" or weather.phase("wind") == "warning":
 		gloom = maxf(gloom, 0.25)
-	sky_mat.sky_top_color = SKY_TOP.lerp(STORM_TOP, gloom)
-	sky_mat.sky_horizon_color = SKY_HORIZON.lerp(STORM_HORIZON, gloom)
-	sky_mat.ground_horizon_color = SKY_HORIZON.lerp(STORM_HORIZON, gloom)
-	sun.light_energy = lerpf(1.25, 0.45, gloom)
-	env.fog_enabled = gloom > 0.05
-	env.fog_density = 0.004 + 0.012 * gloom
-	env.ambient_light_energy = lerpf(1.0, 0.7, gloom)
+	_gloom = move_toward(_gloom, gloom, delta * 0.25)
+	if sky_mat is ShaderMaterial:
+		(sky_mat as ShaderMaterial).set_shader_parameter("gloom", _gloom)
+	else:
+		var pm := sky_mat as ProceduralSkyMaterial
+		pm.sky_top_color = SKY_TOP.lerp(STORM_TOP, _gloom)
+		pm.sky_horizon_color = SKY_HORIZON.lerp(STORM_HORIZON, _gloom)
+		pm.ground_horizon_color = SKY_HORIZON.lerp(STORM_HORIZON, _gloom)
+	sun.light_energy = _base_sun * lerpf(1.0, 0.38, _gloom)
+	env.ambient_light_energy = _base_ambient * lerpf(1.0, 0.75, _gloom)
+	env.fog_enabled = _base_fog > 0.0 or _gloom > 0.05
+	env.fog_density = _base_fog + 0.01 * _gloom
+	# Roads get wet quickly and dry slowly; wind eases in and out.
+	_wet = move_toward(_wet, _rain_vis, delta * (0.4 if _rain_vis > _wet else 0.05))
+	_wind_vis = move_toward(_wind_vis, wind_s, delta * 0.5)
+	RenderingServer.global_shader_parameter_set("road_wetness", _wet)
+	RenderingServer.global_shader_parameter_set("wind_strength", _wind_vis)
+	RenderingServer.global_shader_parameter_set("wind_dir", Vector2(wdir.x, wdir.z))

@@ -116,10 +116,12 @@ func _process_transforms(transforms, domain, seed) -> void:
 				spawn_points.push_back(t)
 
 				var index: int
+				# BebbiKart patch: row stride is the grid width (x), not depth (z); upstream
+				# indexing only worked for square bounds.
 				if restrict_height:
-					index = _cell_x + _cell_z * _grid_size.z
+					index = _cell_x + _cell_z * _grid_size.x
 				else:
-					index = _cell_x + (_grid_size.y * _cell_y) + (_grid_size.x * _grid_size.y * _cell_z)
+					index = _cell_x + (_grid_size.x * _cell_y) + (_grid_size.x * _grid_size.y * _cell_z)
 
 				if index < _grid.size():
 					_grid[index] = _points.size() - 1
@@ -193,14 +195,14 @@ func _is_valid(candidate: Vector3) -> bool:
 	if restrict_height:
 		for x in range(search_start_x, search_end_x + 1):
 			for z in range(search_start_z, search_end_z + 1):
-				var point_index = _grid[x + z * _grid_size.z]
+				var point_index = _grid[x + z * _grid_size.x]  # BebbiKart patch (see above)
 				if _is_point_too_close(candidate, point_index):
 					return false
 	else:
 		for x in range(search_start_x, search_end_x + 1):
 			for y in range(search_start_y, search_end_y + 1):
 				for z in range(search_start_z, search_end_z + 1):
-					var point_index = _grid[x + (_grid_size.y * y) + (_grid_size.x * _grid_size.y * z)]
+					var point_index = _grid[x + (_grid_size.x * y) + (_grid_size.x * _grid_size.y * z)]  # BebbiKart patch
 					if _is_point_too_close(candidate, point_index):
 						return false
 

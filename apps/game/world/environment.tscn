@@ -1,0 +1,64 @@
+[gd_scene format=3]
+
+[ext_resource type="Shader" path="res://world/materials/sky.gdshader" id="1_t8svt"]
+[ext_resource type="Texture2D" path="res://assets/sky/kloofendal_48d_partly_cloudy_puresky_2k.hdr" id="2_3w7aa"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_mxeo0"]
+shader = ExtResource("1_t8svt")
+shader_parameter/panorama = ExtResource("2_3w7aa")
+shader_parameter/exposure = 1.0
+shader_parameter/gloom = null
+shader_parameter/overcast_top = null
+shader_parameter/overcast_horizon = null
+shader_parameter/ground_color = null
+
+[sub_resource type="Sky" id="Sky_l28e7"]
+sky_material = SubResource("ShaderMaterial_mxeo0")
+
+[sub_resource type="Environment" id="Environment_rb11j"]
+background_mode = 2
+sky = SubResource("Sky_l28e7")
+ambient_light_source = 3
+reflected_light_source = 2
+tonemap_mode = 3
+tonemap_exposure = 1.05
+tonemap_white = 6.0
+ssao_enabled = true
+ssao_radius = 1.6
+ssao_intensity = 1.6
+ssao_power = 1.4
+glow_enabled = true
+glow_intensity = 0.35
+glow_bloom = 0.04
+glow_blend_mode = 2
+glow_hdr_threshold = 1.1
+fog_enabled = true
+fog_light_color = Color(0.7, 0.78, 0.88, 1)
+fog_sun_scatter = 0.15
+fog_density = 0.0018
+fog_aerial_perspective = 0.6
+fog_sky_affect = 0.25
+adjustment_enabled = true
+adjustment_contrast = 1.06
+adjustment_saturation = 1.08
+
+[node name="Lighting" type="Node3D" unique_id=422742707]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1170956820]
+environment = SubResource("Environment_rb11j")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=927588622]
+transform = Transform3D(-0.9396926, -0.2288562, 0.25417054, 0, 0.7431448, 0.6691306, -0.3420202, 0.6287771, -0.6983277, 0, 0, 0)
+light_color = Color(1, 0.94, 0.84, 1)
+light_energy = 1.35
+light_angular_distance = 0.8
+shadow_enabled = true
+shadow_bias = 0.04
+shadow_normal_bias = 1.2
+shadow_blur = 1.2
+directional_shadow_split_1 = 0.06
+directional_shadow_split_2 = 0.18
+directional_shadow_split_3 = 0.45
+directional_shadow_blend_splits = true
+directional_shadow_fade_start = 0.85
+directional_shadow_max_distance = 170.0

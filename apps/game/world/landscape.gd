@@ -34,7 +34,7 @@ const KNOLL_HEIGHT := 3.0
 ## middle, rim half width, floor y. The head is added relative to the hedged lane.
 const VALLEY_WEST: Array[Vector4] = [
 	Vector4(-180, -23, 22, -4.0), Vector4(-110, -13, 19, -3.4), Vector4(-60, -6, 16, -2.9),
-	Vector4(-20, -1.3, 13, -2.5), Vector4(0, 0, 12, -2.2),
+	Vector4(-20, -1.3, 11, -2.5), Vector4(0, 0, 9, -2.2),
 ]
 const VALLEY_HEAD_HW := 3.5
 const VALLEY_HEAD_FLOOR := -0.6

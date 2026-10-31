@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://world/materials/flag.gdshader" id="1_c0mv1"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_c0mv1")
+shader_parameter/color = Color(0.15, 0.45, 0.9, 1)
+shader_parameter/color2 = Color(1, 1, 1, 1)
+shader_parameter/stripes = 0.0
+shader_parameter/amplitude = 0.12

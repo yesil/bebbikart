@@ -25,3 +25,7 @@ The village (`../world/village/`) recolours the Kenney colour map to a Swiss pal
 The terrain textures are channel-packed for Terrain3D by `tools/pack_textures.gd`: `*_albedo_height.webp` holds albedo in RGB and height in A, and `*_normal_rough.webp` holds the OpenGL normal in RGB and roughness in A.
 
 Editor and runtime add-ons live in `../addons/` and keep their own licence files: Terrain3D (MIT), Godot Road Generator (MIT) and ProtonScatter (MIT).
+
+Local changes to add-ons:
+- `addons/proton_scatter/src/modifiers/project_on_terrain3d.gd`: Terrain3D's `extras/3rd_party/project_on_terrain3d.gd`, installed and uncommented as its header instructs.
+- `addons/proton_scatter/src/modifiers/create_inside_poisson.gd`: grid index fix (row stride used the grid depth instead of its width, so non-square scatter areas indexed out of bounds). Marked "BebbiKart patch".

@@ -76,7 +76,15 @@ func cylinder(at: Vector3, radius: float, height: float, n := 8, top_radius := -
 
 
 ## Ribbon strip through `left`/`right` edge points (same count); v runs along the strip.
-func ribbon(left: PackedVector3Array, right: PackedVector3Array) -> void:
+## `facing` is roughly the direction the visible side should face (e.g. Vector3.UP for a deck);
+## the strip is flipped if needed, so callers never have to reason about winding.
+func ribbon(left: PackedVector3Array, right: PackedVector3Array, facing := Vector3.ZERO) -> void:
+	if facing != Vector3.ZERO and left.size() > 1:
+		var n := (right[0] - left[0]).cross(left[1] - left[0])
+		if n.dot(facing) < 0.0:
+			var tmp := left
+			left = right
+			right = tmp
 	var v := 0.0
 	for i in left.size() - 1:
 		var dv := (left[i + 1] - left[i]).length()

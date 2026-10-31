@@ -55,13 +55,14 @@ func _init() -> void:
 		{"water": [[10.0, 90.0]]})
 	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true})
 	# Exposed: a low causeway straight across a shallow valley. Sheltered: a hedged lane that
-	# loops right round the valley head.
+	# loops right round the valley head. The causeway only starts to climb once the lane has
+	# split off, so the two never overlap at different heights.
 	var j4 := _end("pond_water")
 	var shelter_ops := [["S", 3.0], ["A", 14.0, 64.6], ["A", 14.0, -64.6], ["S", 7.0], ["A", 14.0, -64.6], ["A", 14.0, 64.6], ["S", 3.0]]
 	var shelter_pts := _draw("cross_sheltered", j4, shelter_ops, [[0.0, 0.4]])
 	var xl := _forward_pts(shelter_pts)
 	_add("cross_exposed", "crossing", "crossing", "exposed", _draw("cross_exposed", j4, [["S", xl]],
-		[[0.0, 0.4], [3.0, 0.4], [13.0, 1.4], [xl - 13.0, 1.4], [xl - 3.0, 0.4], [xl, 0.4]]), 2.6,
+		[[0.0, 0.4], [12.0, 0.4], [22.0, 1.4], [xl - 22.0, 1.4], [xl - 12.0, 0.4], [xl, 0.4]]), 2.6,
 		{"exposure": 1.0, "edge": Tuning.OFF_TRACK_MARGIN_RAILS})
 	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
 	# Rainbow bends: two mirrored chicanes, then the finish straight.

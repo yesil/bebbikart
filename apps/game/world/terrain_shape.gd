@@ -194,6 +194,13 @@ func corridor_target(seg: Dictionary, s: float) -> float:
 
 
 func _stamp_roads() -> void:
+	# Where roads overlap or meet (the shared stub of a Y-split), the ground within 1 m of their
+	# edges follows the lowest of them, whatever the stamping order, so it never pokes through.
+	var on_road_y := PackedFloat32Array()
+	on_road_y.resize(w * h)
+	on_road_y.fill(INF)
+	var on_road_structure := PackedByteArray()
+	on_road_structure.resize(w * h)
 	for id in course.ordered_ids:
 		var seg: Dictionary = course.segments[id]
 		var r: Route = seg["route"]
@@ -212,11 +219,19 @@ func _stamp_roads() -> void:
 					var p := cell_pos(i, j)
 					var e := p.distance_to(Vector2(c.x, c.z)) - hw
 					var k := j * w + i
+					var y := c.y if is_nan(target) else target
+					if e <= 1.0 and y < on_road_y[k]:
+						on_road_y[k] = y
+						on_road_structure[k] = 1 if is_nan(target) else 0
 					if e < road_edge[k]:
 						road_edge[k] = e
-						road_y[k] = c.y if is_nan(target) else target
+						road_y[k] = y
 						structure[k] = 1 if is_nan(target) else 0
 			s += 0.5
+	for k in w * h:
+		if on_road_y[k] < INF:
+			road_y[k] = on_road_y[k]
+			structure[k] = on_road_structure[k]
 
 
 func _with_road(k: int, nat: float) -> float:

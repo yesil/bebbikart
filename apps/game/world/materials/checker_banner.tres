@@ -1,0 +1,12 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://world/materials/checker.gdshader" id="1_f35ga"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_f35ga")
+shader_parameter/color_a = null
+shader_parameter/color_b = null
+shader_parameter/cells = Vector2(24, 2)
+shader_parameter/roughness = null
+shader_parameter/depth_pull = 0.0

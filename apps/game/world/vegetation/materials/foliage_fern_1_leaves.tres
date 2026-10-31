@@ -1,0 +1,20 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://world/materials/foliage.gdshader" id="1_6mesu"]
+[ext_resource type="Texture2D" path="res://assets/nature/quaternius/Leaves.png" id="2_i5qqn"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_6mesu")
+shader_parameter/albedo_tex = ExtResource("2_i5qqn")
+shader_parameter/tint = Color(1, 1, 1, 1)
+shader_parameter/alpha_cut = null
+shader_parameter/sway = 0.09
+shader_parameter/sway_height = 1.5
+shader_parameter/backlight_color = null
+shader_parameter/roughness = null
+shader_parameter/crown_center = Vector3(0, -2, 0)
+shader_parameter/normal_bend = 0.35
+shader_parameter/recolor = 0.0
+shader_parameter/recolor_tint = null
+shader_parameter/variation = null

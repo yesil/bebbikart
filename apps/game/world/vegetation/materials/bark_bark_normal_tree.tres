@@ -1,0 +1,11 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/nature/quaternius/Bark_NormalTree.png" id="1_s1w6n"]
+[ext_resource type="Texture2D" path="res://assets/nature/quaternius/Bark_NormalTree_Normal.png" id="2_ns8r0"]
+
+[resource]
+albedo_color = Color(0.85, 0.78, 0.72, 1)
+albedo_texture = ExtResource("1_s1w6n")
+roughness = 0.9
+normal_enabled = true
+normal_texture = ExtResource("2_ns8r0")
