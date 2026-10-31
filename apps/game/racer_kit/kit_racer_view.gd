@@ -3,6 +3,7 @@ extends Node3D
 ## world/racer_view.gd: same setup/sync/nickname). Pose comes from the sim racer every frame.
 
 const I18n = preload("res://ui/i18n.gd")
+const CameraHud = preload("res://ui/camera_hud.gd")
 
 var racer = null   # sim/racer.gd
 var nickname := ""
@@ -10,6 +11,7 @@ var toy: ToyRacer
 var _body: Node3D
 var _was_air := false
 var _was_bumped := false
+var _box := AABB()   # the toy's bounds at rest, in its own space (frames the inset camera)
 
 
 func setup(p_racer, spec: Dictionary, drawing: Texture2D, p_nickname: String) -> void:
@@ -36,7 +38,24 @@ func setup(p_racer, spec: Dictionary, drawing: Texture2D, p_nickname: String) ->
 	_body.add_child(toy)
 	toy.set_name_tag(nickname)
 	toy.show_name_tag(true)
+	toy.name_tag.layers = CameraHud.NAME_TAG_LAYER  # not drawn in the picture-in-picture inset
+	_box = RacerBuilder._aabb(toy, Transform3D.IDENTITY)
 	sync()
+
+
+## Where the second camera (ui/camera_hud.gd) looks, in world space; {} without a built toy.
+func shot_frame() -> Dictionary:
+	if toy == null:
+		return {}
+	var head := toy.head_pivot.get_child(0) as Node3D
+	return {
+		"root": global_position,
+		"head": head.global_position,
+		"head_r": 0.42 * head.global_basis.get_scale().y,  # as the avatar renderer frames it
+		"center": toy.global_transform * _box.get_center(),
+		"radius": _box.size.length() * 0.5 * toy.global_basis.get_scale().x,
+		"fwd": _body.global_basis.z.normalized(),
+	}
 
 
 func sync() -> void:
