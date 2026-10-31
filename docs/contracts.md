@@ -420,6 +420,7 @@ interface RosterEntry {
   nickname: string;
   connected: boolean;
   status: PlayerStatus;
+  stage?: "looking" | "designing" | "critiquing" | "refining"; // status processing: the design step now; the big screen shows it
   assetBaseUrl: string;
   asset?: AssetManifest;
   bestTimeMs?: number;

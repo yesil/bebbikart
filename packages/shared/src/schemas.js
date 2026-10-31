@@ -156,6 +156,7 @@ export const RosterEntrySchema = z.object({
   nickname: z.string(),
   connected: z.boolean(),
   status: PlayerStatusSchema,
+  stage: z.enum(JOB_STAGES).optional(), // status processing: the design step now (AssetJob.stage)
   assetBaseUrl: z.string(),
   asset: AssetManifestSchema.optional(),
   bestTimeMs: ms.optional(),

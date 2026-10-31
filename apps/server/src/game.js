@@ -149,6 +149,8 @@ export function createGame({ db, settings, hub, log = console.log }) {
     };
     const a = manifests.get(p.id);
     if (a) e.asset = a;
+    const stage = p.status === "processing" ? latestJob(p.id)?.stage : undefined;
+    if (stage) e.stage = stage;
     if (p.bestTimeMs !== undefined) e.bestTimeMs = p.bestTimeMs;
     return e;
   }
@@ -684,6 +686,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     // assets
     saveJob,
     pushPlayer,
+    pushRoster,
     setPlayerStatus,
     setManifest,
     setRender,

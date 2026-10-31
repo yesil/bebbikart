@@ -65,6 +65,13 @@ var assets = null          # net/roster_assets.gd, server mode only
 var views := {}            # runId -> RacerView
 var colors := {}           # playerId -> Color
 var nicks := {}            # playerId -> nickname
+var making := {}           # playerId -> design stage last shown (roster stage)
+const MAKING_LINES := {
+	"looking": "studying the drawing",
+	"designing": "building the racer",
+	"critiquing": "checking it against the drawing",
+	"refining": "adding the finishing touches",
+}
 var results: Array = []    # recent finished/failed lines
 var camera: CameraRig
 var fx: WeatherFx
@@ -481,6 +488,14 @@ func _on_roster(roster: Array) -> void:
 		if not still.has(pid):
 			_result("LEFT  %s" % nicks[pid])
 			nicks.erase(pid)
+			making.erase(pid)
+	# Racers being made: one line per design step (looking, designing, critiquing, refining).
+	for e in roster:
+		var mpid := String(e["playerId"])
+		var stage := String(e.get("stage", ""))
+		if stage != "" and making.get(mpid, "") != stage:
+			_result("MAKING  %s · %s" % [e["nickname"], MAKING_LINES.get(stage, stage)])
+		making[mpid] = stage
 	for e in roster:
 		var pid: String = e["playerId"]
 		nicks[pid] = e["nickname"]

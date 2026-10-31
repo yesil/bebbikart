@@ -128,6 +128,11 @@ test("phone → drawings → racer on the big screen → race → result", async
     phone.msgs.some((m) => m.type === "player.updated" && m.payload.job?.stage === "designing"),
   ).toBe(true);
   expect(ready.payload.job.stage).toBeUndefined();
+  // The big screen saw the steps too (roster stage), in order.
+  const seen = game.msgs
+    .filter((m) => m.type === "roster.updated")
+    .flatMap((m) => m.payload.map((e) => e.stage).filter(Boolean));
+  expect(seen.length).toBeGreaterThan(0);
   expect(ready.payload.asset.spec.title).toBe("The Purple Flash");
   const roster = await game.wait("roster.updated", (r) => r.some((e) => e.status === "ready"));
   const entry = roster.payload.find((e) => e.playerId === player.id);

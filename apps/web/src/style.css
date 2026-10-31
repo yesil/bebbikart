@@ -311,30 +311,131 @@ h2 {
     opacity: 0;
   }
 }
-.stages {
+.making-art {
   display: flex;
   justify-content: center;
-  gap: 10px;
-  margin-top: 6px;
+  gap: 12px;
+  min-height: 150px;
+  margin-bottom: 8px;
 }
-.stages i {
-  width: 14px;
-  height: 14px;
+.scan {
+  position: relative;
+  width: 42%;
+  max-width: 170px;
+  border-radius: 14px;
+  overflow: hidden;
+  transform: rotate(-3deg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  animation: bob 2.4s ease-in-out infinite;
+}
+.scan.late {
+  transform: rotate(3deg);
+  animation-delay: 1.2s;
+}
+.scan img {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+}
+/* A light sweeps over the drawings while the racer is made. */
+.scan::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 30%;
+  top: -30%;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  animation: sweep 1.8s linear infinite;
+}
+.stage-critiquing .scan::after {
+  background: linear-gradient(180deg, transparent, rgba(255, 200, 60, 0.7), transparent);
+}
+.stage-refining .scan::after {
+  background: linear-gradient(180deg, transparent, rgba(255, 120, 200, 0.6), transparent);
+}
+@keyframes sweep {
+  to {
+    top: 100%;
+  }
+}
+@keyframes bob {
+  50% {
+    translate: 0 -6px;
+  }
+}
+.big-icon {
+  font-size: 4.5rem;
+  animation: bob 1.6s ease-in-out infinite;
+}
+.fun-line {
+  min-height: 2.6em;
+  margin: 14px 0 10px;
+  font-size: 1.5rem;
+  font-weight: 900;
+  background: linear-gradient(90deg, var(--accent), #ff4fa0, var(--accent-2), var(--accent));
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation:
+    pop-line 0.5s cubic-bezier(0.2, 1.6, 0.4, 1),
+    shimmer 3s linear infinite;
+}
+@keyframes pop-line {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.85) rotate(-2deg);
+  }
+}
+@keyframes shimmer {
+  to {
+    background-position: 300% 0;
+  }
+}
+.stage-track {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+.stage-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.stage-step .stage-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--line);
+  font-size: 1.2rem;
 }
-.stages i.done {
-  background: var(--accent);
+.stage-step.done .stage-icon {
+  background: var(--accent-2);
+  color: var(--ink);
 }
-.stages i.on {
+.stage-step.on {
+  color: var(--ink);
+}
+.stage-step.on .stage-icon {
   background: var(--accent);
-  animation: pulse 1s ease-in-out infinite alternate;
+  animation: pulse 0.9s ease-in-out infinite alternate;
 }
 @keyframes pulse {
   to {
-    transform: scale(1.35);
-    opacity: 0.6;
+    transform: scale(1.18);
   }
+}
+.clock {
+  font-variant-numeric: tabular-nums;
 }
 .tagline {
   font-size: 1.15rem;

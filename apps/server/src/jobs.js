@@ -78,6 +78,7 @@ export function createJobs({ game, settings, log = console.log, logError = conso
       if (!JOB_STAGES.includes(stage) || done) return;
       job = update(game.jobs.get(job.id) ?? job, { stage });
       game.pushPlayer(job.playerId);
+      game.pushRoster(); // the big screen shows who is being made, and the step
       log(`[job] ${job.id} ${stage}…`);
     };
     let result;

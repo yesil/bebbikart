@@ -126,36 +126,66 @@ export function Create({ ctx, only }) {
   `;
 }
 
-export function Making({ ctx, review }) {
-  const job = ctx.s.me?.job;
-  const [tick, setTick] = useState(0);
+function useObjectUrl(file) {
+  const [url, setUrl] = useState(null);
   useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 2500);
+    if (!file) return setUrl(null);
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return url;
+}
+
+const STAGE_ICONS = { looking: "👀", designing: "🔧", critiquing: "🔍", refining: "✨" };
+
+/** The racer is being made: a lively line per pipeline stage, rotating, with the drawings. */
+export function Making({ ctx, review }) {
+  const me = ctx.s.me;
+  const job = me?.job;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const stage = job?.status === "designing" ? job.stage : undefined;
-  const text = review
-    ? COPY.making.review
+  const stage = job?.status === "designing" ? (job.stage ?? "looking") : undefined;
+  const lines = review
+    ? [COPY.making.review]
     : job?.status === "queued"
-      ? COPY.making.queued
-      : stage
-        ? COPY.making.stages[stage]
-        : tick % 2 === 0
-          ? COPY.making.designing
-          : COPY.making.building;
+      ? COPY.making.queuedLines
+      : (COPY.making.lines[stage] ?? COPY.making.lines.looking);
+  // A new line every ~2.8 s; the key restarts the pop-in animation.
+  const n = Math.floor(now / 2800);
+  const line = lines[n % lines.length];
   const step = stage ? STAGES.indexOf(stage) : -1;
-  const drawing = ctx.s.me?.asset?.drawings?.character;
+  const startedAt = job ? Date.parse(job.createdAt) : now;
+  const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const character = useObjectUrl(photos.character) ?? me?.asset?.drawings?.character;
+  const vehicle = useObjectUrl(photos.vehicle) ?? me?.asset?.drawings?.vehicle;
   return html`
-    <div class="card center making">
-      ${drawing ? html`<img class="drawing" src=${drawing} alt="" />` : null}
-      <div class="spinner"></div>
-      <h2>${text}</h2>
+    <div class=${`card center making stage-${stage ?? "wait"}`}>
+      <div class="making-art">
+        ${character ? html`<div class="scan"><img src=${character} alt="" /></div>` : null}
+        ${vehicle ? html`<div class="scan late"><img src=${vehicle} alt="" /></div>` : null}
+        ${!character && !vehicle ? html`<div class="big-icon">${STAGE_ICONS[stage] ?? "🎨"}</div>` : null}
+      </div>
+      <h2 class="fun-line" key=${`${stage}-${n}`}>${line}</h2>
       ${
         step >= 0
-          ? html`<div class="stages">${STAGES.map((_stage, i) => html`<i class=${i < step ? "done" : i === step ? "on" : ""}></i>`)}</div>`
+          ? html`<div class="stage-track">
+              ${STAGES.map(
+                (
+                  st,
+                  i,
+                ) => html`<div class=${`stage-step ${i < step ? "done" : i === step ? "on" : ""}`}>
+                  <span class="stage-icon">${i < step ? "✓" : STAGE_ICONS[st]}</span>
+                  <span class="name">${COPY.making.stageNames[st]}</span>
+                </div>`,
+              )}
+            </div>`
           : null
       }
-      ${step >= 0 ? html`<p class="hint">${COPY.making.slow}</p>` : null}
+      <p class="hint">${COPY.making.slow} <b class="clock">${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}</b></p>
     </div>
   `;
 }

@@ -17,16 +17,41 @@ export const COPY = {
     cancel: "Keep my racer",
   },
   making: {
-    queued: "Waiting in line…",
-    designing: "Looking at your drawing…",
-    building: "Building your racer…",
-    stages: {
-      looking: "Looking at your drawing…",
-      designing: "Dreaming up your racer…",
-      critiquing: "Checking it looks like your drawing…",
-      refining: "Adding the finishing touches…",
+    queuedLines: [
+      "Waiting in line…",
+      "Your racer is next in the workshop!",
+      "Warming up the crayons…",
+    ],
+    // Rotating lines per design stage (AssetJob.stage): looking, designing, critiquing, refining.
+    lines: {
+      looking: [
+        "Studying your masterpiece…",
+        "Counting every whisker…",
+        "Mixing your crayon colours…",
+        "Ooh, look at those wheels…",
+        "Taking a really close look…",
+      ],
+      designing: [
+        "Building your driver…",
+        "Bolting on the wheels…",
+        "Giving your driver a personality…",
+        "Picking the perfect paint…",
+        "Choosing a funny horn…",
+      ],
+      critiquing: [
+        "Checking it against your drawing…",
+        "Squinting very hard…",
+        "Does it look like yours? Hmm…",
+      ],
+      refining: [
+        "Adding the finishing touches…",
+        "Polishing the paint…",
+        "Tuning the horn…",
+        "Pumping up the tyres…",
+      ],
     },
-    slow: "Making a racer takes a minute or two.",
+    stageNames: { looking: "Look", designing: "Build", critiquing: "Check", refining: "Polish" },
+    slow: "Making a racer takes about a minute.",
     review: "A grown-up is checking it, one moment.",
     failed: "We couldn't make your racer from these drawings.",
     failedHint: "Tell a grown-up what it says, then try again:",
