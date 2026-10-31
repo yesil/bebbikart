@@ -6,8 +6,10 @@ extends SceneTree
 ##          --trace=jump:3,ramp:jump[,weather:rain]  run one build and print its splits + events
 ## Village loop balance (lap 2 of 2, solo, boosts on the zones), a few minutes:
 ##   godot --headless --path apps/game --script res://tools/sweep.gd -- --track=village [--builds=300 --seeds=3]
-## Builds are ranked by their expected lap: the mean over the seeds of lap 2 as driven (missed exits
-## and slips included), a fail counting as a lap of runTimeCapMs. Best build per weather (random
+## Builds are ranked by their expected lap: the mean over the seeds of the clean lap 2 (slips
+## included, a missed exit's extra circle taken out) plus the missed-exit risk priced exactly (the
+## racer's chance at the exit x the time of one more circle), a fail counting as a lap of
+## runTimeCapMs. Best build per weather (random
 ## screen + hill-climb: move stars, flip a route, change style), a cross table of those builds in
 ## every weather, the best build held to each fork choice and to each style with its gap to the
 ## best, each stretch's 0-vs-10-star gain for the ability it tests, the fork-by-stars tables, fail
@@ -20,6 +22,7 @@ const Builds = preload("res://sim/builds.gd")
 const Messages = preload("res://net/messages.gd")
 const VillageCourse = preload("res://sim/village_course.gd")
 const Tuning = preload("res://sim/tuning.gd")
+const Route = preload("res://sim/route.gd")
 
 const WEATHERS := {
 	"calm": [0.0, 0.0],
@@ -370,12 +373,19 @@ func vrun(build: Dictionary, weather: String, k: int) -> Dictionary:
 	var cur := ""
 	var cur_t := 0
 	var detour_ticks := 0
+	var risk_ms := 0.0
+	var loop_len: float = (village.segments["roundabout_loop"]["route"] as Route).length
 	for i in 60 * 400:
 		if r.boosts_left > 0 and r.boost_t <= 0.0 and not r.airborne and Course.in_ranges(r.seg["boosts"], r.ls):
 			r.boost(sim)
 		sim.step()
 		if r.lap == 1 and not r.detour.is_empty():
 			detour_ticks += 1
+		if r.miss_chance >= 0.0:
+			# One more circle at the speed it reaches the exit (the autopilot drives it at 0.85).
+			if r.lap == 1:
+				risk_ms += r.miss_chance * loop_len / maxf(1.0, 0.85 * r.v) * 1000.0
+			r.miss_chance = -1.0
 		if r.lap == 1 and r.seg_id != cur:
 			if cur != "":
 				seg_ms[cur] = float(seg_ms.get(cur, 0.0)) + (r.ticks - cur_t) * 1000.0 / Tuning.HZ
@@ -386,7 +396,7 @@ func vrun(build: Dictionary, weather: String, k: int) -> Dictionary:
 			if m["type"] == "game.run.finished":
 				# "clean": a missed roundabout exit's extra circle taken out.
 				var dms := detour_ticks * 1000.0 / Tuning.HZ
-				return {"ms": float(p["laps"][1]), "clean": float(p["laps"][1]) - dms, "seg": seg_ms, "reason": "", "missed": detour_ticks > 0}
+				return {"ms": float(p["laps"][1]) - dms + risk_ms, "clean": float(p["laps"][1]) - dms, "seg": seg_ms, "reason": "", "missed": detour_ticks > 0}
 			if m["type"] == "game.run.failed":
 				return {"ms": -1.0, "seg": {}, "reason": "%s@%s" % [p["reason"], r.seg_id], "missed": false}
 		sim.outbox.clear()
@@ -504,7 +514,7 @@ func _village() -> bool:
 	vcfg = Messages.default_config()
 	vcfg["lapsPerRun"] = 2
 	vcfg["startCountdownMs"] = 0
-	print("== Village loop: expected lap 2 of 2 (* = a fail in it, priced as a %.0f s lap; ~ = a missed exit), solo, boosts on the zones, %d seeds, wind %.1f from spread directions ==" % [float(vcfg["runTimeCapMs"]) / 1000.0, seeds, WEATHERS["wind"][1]])
+	print("== Village loop: expected lap 2 of 2 (missed-exit risk priced in; * = a fail in it, priced as a %.0f s lap; ~ = a missed exit happened), solo, boosts on the zones, %d seeds, wind %.1f from spread directions ==" % [float(vcfg["runTimeCapMs"]) / 1000.0, seeds, WEATHERS["wind"][1]])
 	var weathers: Array = WEATHERS.keys()
 	var line := ""
 	# Single-ability tables keep speed and grip at default and trade the other abilities first.
@@ -614,7 +624,7 @@ func _village() -> bool:
 		print(line + builds)
 
 	# Fork by stars: default-ish build with the fork's ability at 0..10, each choice.
-	print("\n== Fork by stars: default build with <ability> at x stars; lap Δ = first choice - second ==")
+	print("\n== Fork by stars: default build with <ability> at x stars; clean lap Δ = first choice - second (* = fails) ==")
 	for f in FORK_STAT:
 		var ch: Array = Protocol.FORK_CHOICES[f]
 		print("  %s (%s - %s, by %s stars)" % [f, ch[0], ch[1], FORK_STAT[f]])
@@ -624,7 +634,8 @@ func _village() -> bool:
 				var b := _build_with(FORK_STAT[f], x, order)
 				var ma := vmeasure(_with_route(b, f, ch[0]), w)
 				var mb := vmeasure(_with_route(b, f, ch[1]), w)
-				var dl := "%+.2f%s" % [(float(ma["mean"]) - float(mb["mean"])) / 1000.0, "*" if int(ma["fails"]) + int(mb["fails"]) > 0 else ""]
+				# Clean laps here: a missed exit is luck, not the fork.
+				var dl := "%+.2f%s" % [(float(ma["clean"]) - float(mb["clean"])) / 1000.0, "*" if int(ma["fails"]) + int(mb["fails"]) > 0 else ""]
 				line += "  %2d:%-7s" % [x, dl]
 			print(line)
 
