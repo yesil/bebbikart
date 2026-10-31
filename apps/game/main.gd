@@ -105,20 +105,11 @@ func _build_scene() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 150.0
 	add_child(sun)
-	# Baked from course.gd by tools/bake_world.gd; hand-placed landmarks live in decor.tscn.
-	var world: Node3D = (load(WORLD_SCENE) as PackedScene).instantiate()
-	add_child(world)
-	if ResourceLoader.exists(DECOR_SCENE):
-		add_child((load(DECOR_SCENE) as PackedScene).instantiate())
 	camera = CameraRig.new()
 	add_child(camera)
 	camera.make_current()
-	var terrain := world.get_node_or_null("Terrain")
-	if terrain == null:
-		push_error("%s has no Terrain node; re-run tools/bake_world.gd" % WORLD_SCENE)
-		get_tree().quit(1)
+	if not _load_countryside_world():
 		return
-	terrain.call("set_camera", camera)
 	camera.mode = {"follow": CameraRig.Mode.FOLLOW, "wide": CameraRig.Mode.WIDE, "forks": CameraRig.Mode.FORKS}.get(args.get("cam", "follow"), CameraRig.Mode.FOLLOW)
 	camera.fork_shots = [
 		[Vector3(18, 9, 60), Vector3(3, 0, 78)],      # ramp: jump vs around
@@ -143,6 +134,22 @@ func _build_scene() -> void:
 	overlay.add_theme_font_override("font", SystemFont.new())
 	(overlay.get_theme_font("font") as SystemFont).font_names = PackedStringArray(["Menlo", "Monaco", "monospace"])
 	panel.add_child(overlay)
+
+
+## The countryside course world: baked from course.gd by tools/bake_world.gd, plus the
+## hand-placed landmarks in decor.tscn. Returns false (and quits with an error) if it is broken.
+func _load_countryside_world() -> bool:
+	var world: Node3D = (load(WORLD_SCENE) as PackedScene).instantiate()
+	add_child(world)
+	if ResourceLoader.exists(DECOR_SCENE):
+		add_child((load(DECOR_SCENE) as PackedScene).instantiate())
+	var terrain := world.get_node_or_null("Terrain")
+	if terrain == null:
+		push_error("%s has no Terrain node; re-run tools/bake_world.gd" % WORLD_SCENE)
+		get_tree().quit(1)
+		return false
+	terrain.call("set_camera", camera)
+	return true
 
 
 # ---------------------------------------------------------------- sim loop (60 Hz)
