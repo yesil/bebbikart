@@ -176,8 +176,8 @@ const DEFAULT_CONFIG = {
 	"sessionMinutes": 30,
 	"maxPlayers": 20,
 	"maxConcurrentRuns": 20,
-	"starsTotal": 10,
-	"starsMaxPerAbility": 5,
+	"starsTotal": 20,
+	"starsMaxPerAbility": 10,
 	"boostsPerRun": 3,
 	"runTimeCapMs": 90000,
 	"stuckTimeoutMs": 3000,
@@ -206,12 +206,12 @@ const DEFAULT_CONFIG = {
 }
 const DEFAULT_BUILD = {
 	"stars": {
-		"speed": 2,
-		"jump": 2,
-		"grip": 2,
-		"water": 1,
-		"stability": 2,
-		"bounce": 1
+		"speed": 4,
+		"jump": 4,
+		"grip": 4,
+		"water": 2,
+		"stability": 4,
+		"bounce": 2
 	},
 	"routes": {
 		"pond": "bridge",

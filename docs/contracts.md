@@ -24,8 +24,8 @@ export const DEFAULT_CONFIG = {
   sessionMinutes: 30,
   maxPlayers: 20,
   maxConcurrentRuns: 20,
-  starsTotal: 10,
-  starsMaxPerAbility: 5,
+  starsTotal: 20,
+  starsMaxPerAbility: 10,
   boostsPerRun: 3,
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
@@ -130,6 +130,7 @@ interface Stars {
   bounce: number;
 }
 // Rule: integers, each 0..starsMaxPerAbility, sum === starsTotal.
+// A saved build that breaks the rule (e.g. from before a budget change) can't launch: 400 invalid_build.
 
 interface Build {
   id: string;
@@ -140,7 +141,7 @@ interface Build {
   createdAt: string;
 }
 const DEFAULT_BUILD = {
-  stars: { speed: 2, jump: 2, grip: 2, water: 1, stability: 2, bounce: 1 },
+  stars: { speed: 4, jump: 4, grip: 4, water: 2, stability: 4, bounce: 2 },
   routes: { pond: "bridge", ramp: "around", crossing: "sheltered" },
   style: "balanced",
 };
@@ -304,7 +305,7 @@ Phone auth: the server sets an httpOnly cookie `bk_device` on `POST /api/device`
 | `POST /api/players/me/reroll`                               | – → `AssetJob`                                                                   | "Try another look": DeepSeek designs a new interpretation. Max 3 per player.                                                                    |
 | `POST /api/players/me/drawings`                             | multipart `character`, `vehicle` (JPEG/PNG/HEIC/WebP, ≤ 15 MB each) → `AssetJob` | Starts or replaces the asset job. Both files required.                                                                                          |
 | `PUT /api/players/me/build`                                 | `{ stars, routes, style }` → `Build`                                             | 400 `invalid_build` if the star rules fail.                                                                                                     |
-| `POST /api/players/me/runs`                                 | – → `Run` (status `queued`)                                                      | Uses the latest build. 409 `run_in_progress`, `cooldown`, `session_not_running`, `not_ready`.                                                   |
+| `POST /api/players/me/runs`                                 | – → `Run` (status `queued`)                                                      | Uses the latest build. 409 `run_in_progress`, `cooldown`, `session_not_running`, `not_ready`; 400 `invalid_build` if that build breaks the star rules. |
 | `POST /api/players/me/runs/current/boost`                   | – → `{ ok }`                                                                     | REST fallback; the phone normally sends `phone.boost` over WS.                                                                                  |
 | `GET /api/leaderboard`                                      | → `LeaderboardEntry[]`                                                           |                                                                                                                                                 |
 | `GET /api/players/me/runs?limit=10`                         | → `Run[]`                                                                        | History for the phone.                                                                                                                          |

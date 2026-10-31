@@ -21,7 +21,7 @@ test("state, build and launch", async () => {
 
   const bad = await api(
     "/api/players/me/build",
-    json("PUT", { ...DEFAULT_BUILD, stars: { ...DEFAULT_BUILD.stars, speed: 5 } }),
+    json("PUT", { ...DEFAULT_BUILD, stars: { ...DEFAULT_BUILD.stars, speed: 9 } }),
   );
   expect(bad.status).toBe(400);
   expect((await bad.json()).error.code).toBe("invalid_build");

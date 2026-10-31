@@ -30,7 +30,7 @@ export const BuildSchema = BuildInputSchema.extend({
 });
 
 export const DEFAULT_BUILD = Object.freeze({
-  stars: Object.freeze({ speed: 2, jump: 2, grip: 2, water: 1, stability: 2, bounce: 1 }),
+  stars: Object.freeze({ speed: 4, jump: 4, grip: 4, water: 2, stability: 4, bounce: 2 }),
   routes: Object.freeze({ pond: "bridge", ramp: "around", crossing: "sheltered" }),
   style: "balanced",
 });

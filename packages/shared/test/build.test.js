@@ -15,19 +15,19 @@ test("default build is valid", () => {
 test("stars must add up to the total", () => {
   const r = validateStars({ ...DEFAULT_BUILD.stars, speed: 1 });
   expect(r.ok).toBe(false);
-  expect(r.errors[0]).toContain("add up to 10");
+  expect(r.errors[0]).toContain("add up to 20");
 });
 
 test("stars are capped per ability", () => {
-  const r = validateStars({ speed: 6, jump: 4, grip: 0, water: 0, stability: 0, bounce: 0 });
+  const r = validateStars({ speed: 11, jump: 9, grip: 0, water: 0, stability: 0, bounce: 0 });
   expect(r.ok).toBe(false);
-  expect(r.errors).toContain("speed: at most 5 stars");
+  expect(r.errors).toContain("speed: at most 10 stars");
 });
 
 test("star rules follow the config", () => {
-  const config = { ...DEFAULT_CONFIG, starsTotal: 12, starsMaxPerAbility: 6 };
+  const config = { ...DEFAULT_CONFIG, starsTotal: 24, starsMaxPerAbility: 12 };
   expect(
-    validateStars({ speed: 6, jump: 6, grip: 0, water: 0, stability: 0, bounce: 0 }, config).ok,
+    validateStars({ speed: 12, jump: 12, grip: 0, water: 0, stability: 0, bounce: 0 }, config).ok,
   ).toBe(true);
 });
 
