@@ -353,6 +353,7 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
     elapsedMs: 20000,
     splits,
     stretches: lapStretches(20000, 4000),
+    weatherSeen: [],
     isBest: true,
   });
   const lap1 = await phone.wait("run.lap", (p) => p.lap === 1);
@@ -365,6 +366,7 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
     elapsedMs: 39000,
     splits,
     stretches: lapStretches(19000, 3500),
+    weatherSeen: ["rain"],
     isBest: true,
   });
   const lap2 = await phone.wait("run.lap", (p) => p.lap === 2);
@@ -404,6 +406,18 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
   await Bun.sleep(10);
   phone.send("phoneToServer", "phone.go", {});
   const start2 = await game.wait("run.start", (p) => p.runId !== runId);
+  // Every lap reaches the server as game.run.lap before the run ends (contracts §2d, §2f).
+  game.send("gameToServer", "game.run.lap", {
+    runId: start2.payload.runId,
+    lap: 1,
+    lapMs: 18000,
+    elapsedMs: 18000,
+    splits,
+    stretches: lapStretches(18000, 3000),
+    weatherSeen: ["wind"],
+    isBest: true,
+  });
+  await phone.wait("run.lap", (p) => p.runId === start2.payload.runId);
   game.send("gameToServer", "game.run.failed", {
     runId: start2.payload.runId,
     reason: "off_track",
@@ -423,7 +437,14 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
   expect(ended2.payload.isPersonalBest).toBe(true);
   expect(ended2.payload.run.failStretch).toBe("farm");
   expect(ended2.payload.coach).toMatchObject({ key: "fail_slip", stretch: "farm" });
-  // The player's best on main street comes from the earlier run's laps (19000 - 3500 - 2000).
+  // The player's best on main street comes from the earlier run's laps (19000 - 3500 - 2000);
+  // the session's fastest is this run's own lap (18000 - 3000 - 2000), with that lap's setup:
+  // the build and the weather on that lap (contracts §2f).
+  const setup = {
+    stars: { speed: 4, jump: 4, grip: 4, water: 2, stability: 4, bounce: 2 },
+    routes: { pond: "bridge", ramp: "around", crossing: "sheltered" },
+    style: "balanced",
+  };
   expect(ended2.payload.stretches).toEqual([
     {
       id: "main_street",
@@ -431,12 +452,16 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
       lostMs: 0,
       ability: "grip",
       bestMs: 13500,
-      fastestMs: 13500,
+      fastestMs: 13000,
       fastestPlayerId: me.payload.id,
       fastestNickname: "Lapper",
+      fastestSetup: { ...setup, weather: ["wind"] },
     },
   ]);
   await phone.wait("player.updated", (p) => p.bestTimeMs === 18000);
+  // The leaderboard shows what the best lap was set with, in that lap's weather.
+  const lb2 = await (await fetch(`${base}/api/leaderboard`)).json();
+  expect(lb2.find((e) => e.nickname === "Lapper").setup).toEqual({ ...setup, weather: ["wind"] });
   game.ws.close();
   phone.ws.close();
 }, 40000);
@@ -755,10 +780,23 @@ test("a heat: racers who left together see each other's places on their phones, 
   const pb = await b.phone.wait("run.progress", (p) => p.runId === runIds[1] && p.progress === 0.3);
   expect([pb.payload.place, pb.payload.of]).toEqual([2, 2]);
   const result = { splits: {}, stretches: [], events: [], boostsUsed: 0, weatherSeen: [] };
+  // B goes through the pond's ford; A (below) takes the bridge and fails further on.
+  const via = (pond, pondMs) => [
+    { id: "bumpy_road", ms: 5000, lostMs: 0 },
+    { id: "knoll_road", ms: 2000, lostMs: 0 },
+    { id: "hilltop", ms: 1000, lostMs: 0 },
+    { id: pond, ms: pondMs, lostMs: 0 },
+  ];
   game.send("gameToServer", "game.run.finished", {
     runId: runIds[1],
     elapsedMs: 31000,
     ...result,
+    stretches: [
+      ...via("ford", 6000),
+      { id: "hedge_lane", ms: 8000, lostMs: 0 },
+      { id: "rainbow_bends", ms: 9000, lostMs: 0 },
+    ],
+    weatherSeen: ["rain"],
     trace: { runId: runIds[1], hz: 10, samples: [] },
   });
   // B is home first: both phones hear it, A is still racing.
@@ -774,10 +812,17 @@ test("a heat: racers who left together see each other's places on their phones, 
     runId: runIds[0],
     elapsedMs: 8000,
     reason: "flipped",
-    section: "hills",
-    stretch: "bumpy_road",
+    section: "crossing",
+    stretch: "hedge_lane",
     ...result,
+    stretches: via("stone_bridge", 9000),
   });
+  // A's bridge shows who was fastest the other way through the pond, and with what (§2f).
+  const endedA = await a.phone.wait("run.ended", (p) => p.run.id === runIds[0]);
+  const bridge = endedA.payload.stretches.find((st) => st.id === "stone_bridge");
+  expect(bridge.other).toMatchObject({ id: "ford", ms: 6000, nickname: "Heat B" });
+  expect(bridge.other.setup).toMatchObject({ style: "balanced", weather: ["rain"] });
+  expect(endedA.payload.stretches.find((st) => st.id === "bumpy_road").other).toBeUndefined();
   for (const r of [a, b]) {
     const h = (await r.phone.wait("run.heat", (p) => p.done)).payload;
     expect(h.entries.map((e) => [e.nickname, e.place, e.outcome, e.failReason])).toEqual([

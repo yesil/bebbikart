@@ -27,10 +27,27 @@ function rankTime(run) {
   if (isLoop(run.track)) return run.bestLapMs;
   return run.outcome === "finished" ? run.elapsedMs : undefined;
 }
-/** Every complete pass of a run over its stretches: each lap on a loop, a finished point-to-point run. */
+/**
+ * Every complete pass of a run over its stretches, with the lap it was (an index into run.laps):
+ * each lap on a loop, a finished point-to-point run (lap 0).
+ */
 function stretchPasses(run) {
-  if (isLoop(run.track)) return run.lapStretches ?? [];
-  return run.outcome === "finished" && run.stretches ? [run.stretches] : [];
+  if (isLoop(run.track))
+    return (run.lapStretches ?? []).map((stretches, lap) => ({ stretches, lap }));
+  return run.outcome === "finished" && run.stretches ? [{ stretches: run.stretches, lap: 0 }] : [];
+}
+/**
+ * The weather a lap of a run was raced in (contracts §2f): the lap's own on loop tracks, the run's
+ * on point-to-point ones. Loop runs recorded before laps carried their weather have only the
+ * run's, which is what they get.
+ */
+function lapWeather(run, lap) {
+  if (isLoop(run.track) && run.lapWeather) {
+    const w = run.lapWeather[lap];
+    if (!w) throw new Error(`lapWeather: run ${run.id} has no weather for lap ${lap}`);
+    return w;
+  }
+  return run.weatherSeen ?? [];
 }
 /** coachTip compares elapsedMs; on loops that is the best lap (a run that failed after laps
  * still gets the fail tip, naming where it ended). */
@@ -140,6 +157,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
         avatarUrl: a?.renders.avatar_happy ?? "",
         bestTimeMs: p.bestTimeMs,
         setAt: runs.get(p.bestRunId)?.endedAt ?? p.createdAt,
+        setup: bestSetup(p),
       };
       if (a) entry.racerTitle = a.spec.title;
       return entry;
@@ -666,6 +684,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
         const bestBefore = prev.length ? Math.min(...prev) : undefined;
         r.liveLaps = [...(r.liveLaps ?? []), pl.lapMs];
         r.liveLapStretches = [...(r.liveLapStretches ?? []), pl.stretches];
+        r.liveLapWeather = [...(r.liveLapWeather ?? []), pl.weatherSeen];
         r.liveSplits = {}; // section splits restart each lap
         const out = {
           runId: pl.runId,
@@ -701,7 +720,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function finishRun(ok, pl) {
     const r = gameRun(pl.runId);
     if (!r) return;
-    const { liveSplits, liveLaps, liveLapStretches, liveDist, ...base } = r;
+    const { liveSplits, liveLaps, liveLapStretches, liveLapWeather, liveDist, ...base } = r;
     const run = {
       ...base,
       status: "done",
@@ -721,7 +740,10 @@ export function createGame({ db, settings, hub, log = console.log }) {
         failSection: pl.section,
         failStretch: pl.stretch,
       });
-    if (isLoop(run.track)) run.lapStretches = liveLapStretches ?? [];
+    if (isLoop(run.track)) {
+      run.lapStretches = liveLapStretches ?? [];
+      run.lapWeather = liveLapWeather ?? [];
+    }
     if (pl.laps) run.laps = pl.laps;
     if (pl.bestLapMs !== undefined) run.bestLapMs = pl.bestLapMs;
     if (isLoop(run.track) && run.laps?.length && run.bestLapMs === undefined)
@@ -770,6 +792,24 @@ export function createGame({ db, settings, hub, log = console.log }) {
       `[run] ${run.id} ${run.outcome} "${p?.nickname}" ${ok ? `${(run.elapsedMs / 1000).toFixed(2)} s` : `${run.failReason} @${run.failSection}`}${run.laps ? ` laps ${run.laps.map((l) => (l / 1000).toFixed(2)).join("/")}` : ""}${isPersonalBest ? " (best)" : ""}`,
     );
   }
+  /** The setup a lap of a run was raced with (contracts §2f): its build and that lap's weather. */
+  function setupOf(run, lap) {
+    const b = builds.get(run.buildId);
+    if (!b) throw new Error(`setupOf: run ${run.id} has no build ${run.buildId}`);
+    return {
+      stars: { ...b.stars },
+      routes: { ...b.routes },
+      style: b.style,
+      weather: lapWeather(run, lap),
+    };
+  }
+  /** A ranked player's best: the setup of the run (on a loop, the lap) that set it. */
+  function bestSetup(p) {
+    const run = runs.get(p.bestRunId);
+    if (!run) throw new Error(`bestSetup: ${p.nickname} has a best time but no best run`);
+    const lap = isLoop(run.track) ? run.laps.indexOf(run.bestLapMs) : 0;
+    return setupOf(run, lap);
+  }
   /**
    * The run's stretches for its phone (contracts §2d): with the player's best on each from earlier
    * runs and the session's fastest (any racer, this run included), over the session's runs on
@@ -780,13 +820,14 @@ export function createGame({ db, settings, hub, log = console.log }) {
     if (!known) throw new Error(`stretchResults: no stretches for track "${run.track}"`);
     const since = session.startedAt ?? "";
     const best = new Map(); // id -> ms, this player's earlier runs
-    const fastest = new Map(); // id -> { ms, playerId }
+    const fastest = new Map(); // id -> { ms, playerId, setup }
     for (const other of runs.values()) {
       if (other.status !== "done" || other.track !== run.track || other.queuedAt < since) continue;
       for (const pass of stretchPasses(other)) {
-        for (const st of pass) {
+        for (const st of pass.stretches) {
           const f = fastest.get(st.id);
-          if (!f || st.ms < f.ms) fastest.set(st.id, { ms: st.ms, playerId: other.playerId });
+          if (!f || st.ms < f.ms)
+            fastest.set(st.id, { ms: st.ms, playerId: other.playerId, run: other, lap: pass.lap });
           if (other.playerId === run.playerId && other.id !== run.id) {
             best.set(st.id, Math.min(best.get(st.id) ?? Number.POSITIVE_INFINITY, st.ms));
           }
@@ -804,6 +845,20 @@ export function createGame({ db, settings, hub, log = console.log }) {
         out.fastestPlayerId = f.playerId;
         const who = players.get(f.playerId);
         if (who) out.fastestNickname = who.nickname;
+        out.fastestSetup = setupOf(f.run, f.lap);
+      }
+      // A fork piece: the session's fastest through the same fork the other way (§2f).
+      const alt = meta.fork && known.find((k) => k.fork === meta.fork && k.choice !== meta.choice);
+      const fo = alt && fastest.get(alt.id);
+      const whoAlt = fo && players.get(fo.playerId);
+      if (whoAlt) {
+        out.other = {
+          id: alt.id,
+          ms: fo.ms,
+          playerId: fo.playerId,
+          nickname: whoAlt.nickname,
+          setup: setupOf(fo.run, fo.lap),
+        };
       }
       return out;
     });

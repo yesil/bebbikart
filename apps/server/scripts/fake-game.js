@@ -176,6 +176,7 @@ function raceLoop(start) {
       elapsedMs: t,
       splits: splitsOf(lapMs),
       stretches,
+      weatherSeen: [],
       isBest: lapMs === Math.min(...laps),
     });
     lapT = 0;
