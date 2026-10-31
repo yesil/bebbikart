@@ -380,6 +380,7 @@ interface Envelope<T extends string, P> {
 | `phone.go`    | `{}`, same as `POST …/runs` |
 | `phone.boost` | `{ runId }`                 |
 | `phone.stop`  | `{ runId }`, loop tracks: "Pit in", finish at the next line crossing |
+| `phone.watch` | `{ runId }`, "Show me on the big screen": the camera cuts to this racer soon (see Camera below) |
 
 ### Server → Phone
 
@@ -397,6 +398,7 @@ interface Envelope<T extends string, P> {
 | `session.updated`            | `Session`                                                                                      |                                                       |
 | `weather.updated`            | `WeatherState`                                                                                 | Every phase change (incl. `warning`)                  |
 | `config.updated`             | config                                                                                         |                                                       |
+| `camera.updated`             | `{ playerId?, runId? }`: the racer the big-screen camera follows now; empty when nobody         | Every camera cut (relayed `game.camera`)              |
 | `error`                      | `{ code, message, refId? }`                                                                    |                                                       |
 
 ### Server → Admin
@@ -422,6 +424,7 @@ Everything a phone gets that isn't about one player's run (`leaderboard.updated`
 | `run.start`                                                  | `RunStart`                                                           | Server admitted a run                                |
 | `run.boost`                                                  | `{ runId }`                                                          | Phone tapped Boost                                   |
 | `run.stop`                                                   | `{ runId }`                                                          | Loop tracks: phone tapped Pit in                     |
+| `run.watch`                                                  | `{ runId }`                                                          | Phone tapped "Show me on the big screen"             |
 | `run.abort`                                                  | `{ runId, reason }`                                                  | Admin stop, player deleted                           |
 | `session.updated` / `config.updated` / `leaderboard.updated` | as above                                                             |                                                      |
 
@@ -460,10 +463,13 @@ interface RunStart {
 | `game.config.set`   | `{ track?, lapsPerRun?, sessionMinutes?, language? }`: game manager options (see below)       |
 | `game.session.end`  | `{}`: ends the running session                                                                |
 | `game.session.start`| `{}`: starts a session (`sessionMinutes`); after an ended one, a **new** session with an empty leaderboard |
+| `game.camera`       | `{ runId? }`: the run the big-screen camera follows now (every cut; no `runId` when the course is empty) |
 
 **Game options live on the big screen.** Phones are players: they join, race and quit (Pit in), and never set options. The game manager sets the track, laps, session length and language in the game's options menu, which sends the `game.config.*` / `game.session.*` messages above. The server answers with `config.updated` / `session.updated` to every client, or with `error { code, message, refId }` where `refId` is the refused message's `id` (`track_locked` when the track changes during a running session, `bad_request` when starting a running session, `bad_message` for any other field). Switching track = `game.session.end`, `game.config.set { track }`, `game.session.start`, sent back to back. Racers stay; bests and ghosts don't carry over to the new session. The admin REST routes do the same for scripts.
 
 The **game is the authority** for timing and outcomes. The server trusts these messages and records them.
+
+**Camera.** The big screen's camera director takes turns between the racers on the course (every 8 s by default, set in the game's options menu). A phone's `phone.watch` reaches the game as `run.watch` for the player's current run (ignored without one); the game queues that racer for one of the next cuts, at most one cut every 3 s, so taps from several phones can't make the camera flicker. On every cut the game sends `game.camera`, and the server tells every phone with `camera.updated` (`playerId` added from the run), so the racer on camera can show "You're on the big screen!".
 
 ## 8. Coach tips (`packages/shared/src/coach.js`)
 
