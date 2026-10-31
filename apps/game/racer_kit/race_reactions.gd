@@ -9,6 +9,7 @@ const Gestures = preload("res://racer_kit/racer_gestures.gd")
 const PASS_NEAR := 7.0       # m: only racers this close can overtake each other
 const PASS_LANE := 4.0       # m sideways: further apart is not a pass (other road, fork)
 const PASS_GAP := 0.6        # m along the road either side before an order flip counts
+const PASS_FASTER := 0.4     # m/s: the passer must be this much faster (not two side by side jostling)
 const COOL := 3.0            # s between overtake reactions of one racer
 const BRACE_DIST := 1.8      # m between racers
 const BRACE_CLOSING := 2.5   # m/s closing speed
@@ -39,7 +40,7 @@ func _process(delta: float) -> void:
 	_kits.clear()
 	for k in main.views:
 		var v = main.views[k]
-		if v.get("toy") == null or v.racer == null or v.racer.state != "racing":
+		if v.get("toy") == null or v.racer == null or v.racer.state != "racing" or v.parked:
 			continue
 		v.toy.rain = rain
 		v.toy.wind = wind
@@ -97,7 +98,10 @@ func _pair(a, b, delta: float) -> void:
 	_order[key] = sgn
 	if before != 0 and before != sgn:
 		# hi was ahead (+1) and now lo is (-1): lo passed hi, and the other way round.
-		_overtake(lo if sgn < 0 else hi, hi if sgn < 0 else lo)
+		var passer = lo if sgn < 0 else hi
+		var passed = hi if sgn < 0 else lo
+		if passer.racer.v - passed.racer.v > PASS_FASTER:
+			_overtake(passer, passed)
 
 
 func _overtake(passer, passed) -> void:
