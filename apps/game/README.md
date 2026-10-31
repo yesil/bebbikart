@@ -22,6 +22,7 @@ Game flags (after `--`):
 | `--server[=URL]` | Real server (default `ws://localhost:8080/ws`): phone players race; their racers are built from their `RacerSpec` with the racer kit, and the game renders and uploads their hero/avatar PNGs |
 | `--game-key=KEY` | Must match the server's `BK_GAME_KEY` (default `bebbikart-dev`; env `BK_GAME_KEY` also works) |
 | `--racers=N` | Number of fake players (default 20) |
+| `--kit` | Mock mode: build the fake racers with the racer kit from `racer_kit/samples` (in turn) instead of placeholder boxes |
 | `--seed=N` | RNG seed for mock players and weather |
 | `--weather=calm\|rain\|wind\|storm` | Force the weather (default: the state machine) |
 | `--speed=X` | Sim speed multiplier (raises the physics tick rate) |

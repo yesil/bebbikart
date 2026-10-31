@@ -20,7 +20,7 @@ const FACE_FOV := 36.0
 const SIDE_FOV := 42.0
 
 var inset := "face"
-var _view: Node3D = null           # racer view on camera (RacerView or KitRacerView)
+var _view = null                   # racer view on camera (RacerView or KitRacerView), or null
 var _vp: SubViewport
 var _cam: Camera3D
 var _inset_box: Control
@@ -74,7 +74,7 @@ func cycle_inset() -> String:
 ## Every frame: the racer view on camera (null if nobody), its name and colour, whether the main
 ## camera is chasing it (follow mode), how much of the interval to the next automatic cut is
 ## left (0..1, or < 0 for none coming) and whether automatic switching is off.
-func show_racer(view: Node3D, nickname: String, color: Color, chasing: bool, left_frac: float, locked: bool) -> void:
+func show_racer(view, nickname: String, color: Color, chasing: bool, left_frac: float, locked: bool) -> void:
 	if view != _view:
 		_fwd = Vector3.ZERO
 	_view = view

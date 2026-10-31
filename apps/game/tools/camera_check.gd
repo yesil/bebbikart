@@ -51,7 +51,7 @@ func _expect(ok: bool, what: String) -> void:
 func _run(d: CameraDirector, racers: Array, seconds: float, t0 := 0.0) -> Array:
 	var cuts: Array = []
 	var t := t0
-	for i in int(round(seconds / DT)):
+	for _i in int(round(seconds / DT)):
 		t += DT
 		d.update(DT, racers)
 		if d.changed:
