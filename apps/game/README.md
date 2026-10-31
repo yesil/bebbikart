@@ -29,6 +29,8 @@ Game flags (after `--`):
 | `--duration=SEC` | Quit after SEC wall seconds and print a summary |
 | `--log=none\|summary\|full` | What outgoing messages to print |
 | `--screenshot=PATH [--shot-at=SEC] [--cam=follow\|wide\|forks]` | Save a screenshot (windowed only) |
+| `--shots=DIR [--shot-every=SEC]` | A screenshot every SEC seconds (2) while racers are on the track, named by time and racer count (windowed only; the multiplayer harness uses it) |
+| `--overlay` | Start with the debug text overlay shown (H toggles it); by default the race HUD is all you see |
 | `--cam-cycle=SEC` | Switch the followed racer every SEC seconds, 0 = never (default: the options menu's pick, else 8) |
 | `--inset=face\|side\|off` | Second camera, picture in picture (default: the options menu's pick, else face) |
 
@@ -44,7 +46,7 @@ Keys:
 | B | Boost the followed racer |
 | R / W | Advance the rain / wind phase |
 | K | Toggle forced calm |
-| H | Hide the overlay |
+| H | Show / hide the debug overlay (hidden at start; the race HUD shows names, places, results and problems) |
 | Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, camera, sound, language, track, quit |
 | Ctrl+Cmd+F, or F11 | Toggle fullscreen (on a Mac keyboard F11 may need fn) |
 | Cmd+Q, or closing the window | Quit (prints the run summary) |
@@ -106,6 +108,7 @@ Sweep flags:
   - `camera_director.gd`: which racer the camera follows, and when it switches (see below).
 - `ui/camera_hud.gd`: the on-camera name, the name pop after a cut, and the picture-in-picture second camera.
 - `tools/camera_check.gd`: headless test of the camera director, exit 1 on failure: `godot --headless --path . --script res://tools/camera_check.gd`.
+- `ui/race_hud.gd`: the big-screen race HUD for groups: a place + name tag over every kart (pushed apart, never overlapping), the race board (top right: place, avatar, lap or section, time; finishers keep their time until the group is home), the standings (top left: everyone by best time, or what the designer is doing), finish and oops banners, problems in red, and the podium when a session ends. Colours come from its palette in join order and are shared with the camera's name tags.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.

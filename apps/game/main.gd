@@ -41,6 +41,7 @@ const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
 const CameraDirector = preload("res://world/camera_director.gd")
 const CameraHud = preload("res://ui/camera_hud.gd")
+const RaceHud = preload("res://ui/race_hud.gd")
 const OptionsMenu = preload("res://ui/options_menu.gd")
 const I18n = preload("res://ui/i18n.gd")
 const AudioDirector = preload("res://audio/audio_director.gd")
@@ -73,7 +74,7 @@ var sim: Sim
 var net                    # net/mock_net.gd or net/server_net.gd (same interface)
 var assets = null          # net/roster_assets.gd, server mode only
 var views := {}            # runId -> RacerView
-var colors := {}           # playerId -> Color
+var colors := {}           # playerId -> Color (the race HUD's distinct palette, in join order)
 var nicks := {}            # playerId -> nickname
 var making := {}           # playerId -> design stage last shown (roster stage)
 var results: Array = []    # recent finished/failed lines
@@ -81,6 +82,7 @@ var camera: CameraRig
 var kit_specs: Array = []      # --kit: sample RacerSpecs for the fake racers
 var director: CameraDirector   # which racer the camera follows, and when it switches
 var cam_hud: CameraHud         # on-camera name, cut pop, picture-in-picture second camera
+var hud: RaceHud               # kart tags with places, race board, standings, banners, podium
 var fx: WeatherFx
 var env: Environment
 var world_env: WorldEnvironment
@@ -186,6 +188,7 @@ func _build_scene() -> void:
 		camera.fork_shots = Viewpoints.fork_shots(course)  # one shot per fork split
 	if not _setup_camera_director():
 		return
+	_setup_race_hud()
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)
@@ -196,6 +199,7 @@ func _build_scene() -> void:
 	add_child(audio)
 	if not audio.setup(sim, track, camera, args.has("mute")):
 		_result(I18n.t("log.audio_failed"))
+		hud.problem(I18n.t("log.audio_failed"))
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var panel := PanelContainer.new()
@@ -205,6 +209,9 @@ func _build_scene() -> void:
 	sb.set_content_margin_all(10)
 	panel.add_theme_stylebox_override("panel", sb)
 	layer.add_child(panel)
+	# The race HUD shows names, places, results and problems; this debug text starts hidden
+	# (H shows it, or --overlay at start).
+	panel.visible = args.has("overlay")
 	overlay = Label.new()
 	overlay.add_theme_font_size_override("font_size", 18)
 	overlay.add_theme_font_override("font", SystemFont.new())
@@ -220,6 +227,23 @@ func _build_scene() -> void:
 	apply_quality(q)
 	get_viewport().size_changed.connect(_apply_render_scale)
 	Engine.max_fps = FPS_CAP
+
+
+## The race HUD: who is who and who is ahead for a group race (ui/race_hud.gd). Racer colours
+## come from its palette, so tags, board, standings and the camera's name tag all match.
+func _setup_race_hud() -> void:
+	hud = RaceHud.new()
+	hud.camera = camera
+	hud.laps_per_run = int(config["lapsPerRun"])
+	hud.local_bests = assets == null
+	if assets != null:
+		hud.avatar_of = assets.avatar_for
+		assets.problem.connect(func(text: String): hud.problem(text))
+	add_child(hud)
+	if assets == null:
+		hud.set_roster(net.players)
+	for pid in colors.keys():
+		colors[pid] = hud.color_for(pid)
 
 
 ## The options menu, (re)built in the current language.
@@ -578,12 +602,14 @@ func _handle(msg: Dictionary) -> void:
 					var err := I18n.f("log.no_spec", [pl["runId"], pl["playerId"], nicks.get(pl["playerId"], "?")])
 					push_error(err)
 					_result(err)
+					hud.problem(err)
 					return
 				var checked: Dictionary = RacerSpec.validate(spec)
 				if not (checked["errors"] as PackedStringArray).is_empty():
 					var err := I18n.f("log.invalid_spec", [pl["runId"], nicks.get(pl["playerId"], "?"), "; ".join(checked["errors"])])
 					push_error(err)
 					_result(err.left(160))
+					hud.problem(err.left(300))
 					return
 				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
 				v = KitRacerView.new()
@@ -600,6 +626,7 @@ func _handle(msg: Dictionary) -> void:
 				v = RacerView.new()
 				add_child(v)
 				v.setup(r, colors.get(pl["playerId"], Color.WHITE), nicks.get(pl["playerId"], "?"))
+			v.show_name_tag(false)  # the race HUD draws the tags
 			views[pl["runId"]] = v
 			net.remember_run(pl["runId"], nicks.get(pl["playerId"], "?"))
 		Messages.RUN_BOOST:
@@ -617,6 +644,9 @@ func _handle(msg: Dictionary) -> void:
 			_on_roster(pl)
 		"session.updated":
 			menu.set_session(String(pl.get("status", "?")))
+			hud.set_session(String(pl.get("status", "?")))
+		"leaderboard.updated":
+			hud.set_leaderboard(pl)
 		Messages.WELCOME:
 			# The big screen's language wins: a fresh server (or one an admin changed) gets ours.
 			var server_lang := String(pl.get("config", {}).get("language", ""))
@@ -625,6 +655,7 @@ func _handle(msg: Dictionary) -> void:
 				language_sent = I18n.language
 				net.send("game.config.set", {"language": I18n.language})
 		"config.updated":
+			hud.laps_per_run = int(config["lapsPerRun"])
 			var lang := String(pl.get("language", ""))
 			if language_sent != "":
 				if lang == language_sent:
@@ -639,6 +670,7 @@ func _handle(msg: Dictionary) -> void:
 			language_sent = ""
 			var err := I18n.f("log.server_refused", [pl.get("code", "?"), pl.get("message", "")])
 			_result(err)
+			hud.problem(err)
 			menu.show_error(I18n.f("error.server_refused", [pl.get("message", pl.get("code", "?"))]))
 
 
@@ -660,11 +692,14 @@ func _on_roster(roster: Array) -> void:
 		if stage != "" and making.get(mpid, "") != stage:
 			_result(I18n.f("log.making", [e["nickname"], I18n.t("making." + stage)]))
 		making[mpid] = stage
+	hud.set_roster(roster)
+	for pid in colors.keys():
+		if not still.has(pid):
+			colors.erase(pid)
 	for e in roster:
 		var pid: String = e["playerId"]
 		nicks[pid] = e["nickname"]
-		if not colors.has(pid):
-			colors[pid] = Color.from_hsv(float(absi(hash(pid)) % 360) / 360.0, 0.75, 0.95)
+		colors[pid] = hud.color_for(pid)
 	if assets != null:
 		assets.update(roster)
 
@@ -685,7 +720,15 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 				views.erase(pl["runId"])
 			if pl["outcome"] == "aborted":
 				net.run_gone(pl["runId"])
+				hud.run_gone(pl["runId"])
 			return  # the camera director moves on from a racer that left on its next update
+		Messages.GAME_RUN_FINISHED, Messages.GAME_RUN_FAILED:
+			var fv = views.get(pl["runId"])
+			if fv != null:
+				# On a loop the best lap ranks, also for a run that failed after some laps.
+				var ms := int(pl["bestLapMs"]) if pl.has("bestLapMs") else int(pl.get("elapsedMs", 0))
+				hud.run_result(pl["runId"], fv.racer.player_id, type == Messages.GAME_RUN_FINISHED, ms, String(pl.get("reason", "")))
+	match type:
 		Messages.GAME_RUN_FINISHED:
 			if pl.has("bestLapMs"):
 				_result(I18n.f("log.finished_laps", [_nick_of(pl["runId"]), int(pl["bestLapMs"]) / 1000.0, (pl["laps"] as Array).size()]))
@@ -726,6 +769,7 @@ func _process(delta: float) -> void:
 	for v in views.values():
 		v.sync()
 	_update_camera_hud()
+	hud.update(delta, sim, views)
 	_update_overlay(racing)
 	var dur := float(args.get("duration", "0"))
 	if args.has("screenshot") and not shot_taken and run_time >= float(args.get("shot-at", str(dur - 0.5 if dur > 1 else 12.0))):

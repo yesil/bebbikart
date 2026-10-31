@@ -69,7 +69,7 @@ var _podium: Control = null
 
 
 func _ready() -> void:
-	layer = 5
+	layer = 4  # under the camera HUD (5): its picture-in-picture covers kart tags behind it
 	_font = SystemFont.new()
 	_font.font_names = PackedStringArray(FONT_NAMES)
 	_font.font_weight = 700
@@ -163,10 +163,11 @@ func run_result(run_id: String, pid: String, ok: bool, result_ms: int, reason: S
 	_heat[run_id] = h
 	var name := _nick(pid)
 	if ok:
-		var place := _finish_place(run_id)
+		# No place in the banner: a racer who started later may still beat this time (the board
+		# keeps the places sorted as the times come in).
 		var best: Dictionary = _ranks.get(pid, {})
 		var pb := best.is_empty() or result_ms < int(best["bestTimeMs"])
-		_banner(I18n.f("hud.banner_finish", [_ordinal(place), name, result_ms / 1000.0]) + ("   " + I18n.t("hud.new_best") if pb and not best.is_empty() else ""), color_for(pid))
+		_banner(I18n.f("hud.banner_finish", [name, result_ms / 1000.0]) + ("   " + I18n.t("hud.new_best") if pb and not best.is_empty() else ""), color_for(pid))
 		if local_bests and pb:
 			_ranks[pid] = {"rank": 0, "bestTimeMs": result_ms}
 			_rerank_local()
@@ -261,15 +262,6 @@ func _order(sim) -> Array:
 	var qorder: Array = sim.queue.map(func(r): return r.run_id)
 	queued.sort_custom(func(a, b): return qorder.find(a) < qorder.find(b))
 	return fin + racing + queued + failed
-
-
-func _finish_place(run_id: String) -> int:
-	var ms := int(_heat[run_id]["result_ms"])
-	var place := 1
-	for other in _heat:
-		if other != run_id and _heat[other]["state"] == "finished" and int(_heat[other]["result_ms"]) < ms:
-			place += 1
-	return place
 
 
 func _ordinal(n: int) -> String:
