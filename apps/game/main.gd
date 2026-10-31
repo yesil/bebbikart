@@ -114,8 +114,11 @@ func _build_scene() -> void:
 	add_child(camera)
 	camera.make_current()
 	var terrain := world.get_node_or_null("Terrain")
-	if terrain != null:
-		terrain.call("set_camera", camera)
+	if terrain == null:
+		push_error("%s has no Terrain node; re-run tools/bake_world.gd" % WORLD_SCENE)
+		get_tree().quit(1)
+		return
+	terrain.call("set_camera", camera)
 	camera.mode = {"follow": CameraRig.Mode.FOLLOW, "wide": CameraRig.Mode.WIDE, "forks": CameraRig.Mode.FORKS}.get(args.get("cam", "follow"), CameraRig.Mode.FOLLOW)
 	camera.fork_shots = [
 		[Vector3(18, 9, 60), Vector3(3, 0, 78)],      # ramp: jump vs around

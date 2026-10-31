@@ -59,13 +59,16 @@ func can_render() -> bool:
 ## Renders all four images. Returns {key: absolute png path}.
 func render_all(spec: Dictionary, player_id: String, drawing: Texture2D = null) -> Dictionary:
 	if not can_render():
-		push_warning("AvatarRenderer: headless display, renders skipped")
+		push_error("AvatarRenderer: cannot render on a headless display")
 		return {}
 	if _vp == null:
 		await ready
 	var dir := "user://renders/%s" % player_id.validate_filename()
 	DirAccess.make_dir_recursive_absolute(dir)
 	var racer := RacerBuilder.build(spec, drawing)
+	if racer == null:
+		push_error("AvatarRenderer: no renders for %s, the spec is invalid" % player_id)
+		return {}
 	racer.show_name_tag(false)
 	racer.set_process(false)
 	_vp.add_child(racer)

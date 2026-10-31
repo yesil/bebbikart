@@ -1,45 +1,22 @@
 class_name RacerSpec
 extends RefCounted
-## RacerSpec helpers (contracts §5): loading, defaults and normalisation.
-## normalize() never fails. It repairs like clampRacerSpec in packages/shared: unknown part
-## names snap to the nearest catalog name, numbers are clamped, extras capped. Each fix is a
-## warning so the Racer Viewer can show what the designer got wrong.
+## RacerSpec helpers (contracts §5): loading and validation.
+## validate() repairs nothing and fills in nothing: every unknown part name, out-of-range
+## number, invalid colour or palette reference, missing required field or over-long list is
+## reported as an error, and a spec with errors must not be built. Only the fields contracts §5
+## marks optional (cheeks, hair, hat, wheels/legs/wings/tail, extra.mirror) may be absent.
 ## Spec frame: +y up, +z forward, +x = the racer's LEFT (see to_godot()).
-
-const FALLBACK_PALETTE := ["#ff6b35", "#ffd23f", "#3bceac", "#2b2140"]
-
-
-## pkg_default: shown for anyone without a valid spec yet (res://data/pkg_default/spec.json).
-static func default_spec() -> Dictionary:
-	var s := load_file(KitCatalog.PKG_DEFAULT_PATH)
-	if not s.is_empty():
-		return s
-	return {
-		"specVersion": 1, "title": "Speedy Bean", "personality": ["cheerful", "speedy"],
-		"palette": FALLBACK_PALETTE.duplicate(),
-		"character": {
-			"body": {"shape": "bean", "color": 0, "scale": [1, 1, 1]},
-			"head": {"shape": "round", "color": 1, "size": 1},
-			"face": {"eyes": "big_round", "eyeColor": "#2b2140", "mouth": "smile", "brows": true, "cheeks": 0},
-			"hat": {"type": "helmet", "color": 2}, "arms": {"color": 0}, "extras": [],
-		},
-		"ride": {
-			"base": "kart", "color": 2, "accent": 1, "scale": [1, 1, 1],
-			"wheels": {"count": 4, "style": "toy", "color": 3, "size": 1},
-			"extras": [{"shape": "cylinder", "socket": "ride_back", "offset": [0, 0.1, -0.2],
-				"scale": [0.2, 0.4, 0.2], "rotationDeg": [0, 0, 0], "color": 3}],
-			"drawingSticker": false,
-		},
-	}
 
 
 ## Loads a spec JSON file. Accepts a bare RacerSpec or a wrapper with a "spec" field
-## (AssetManifest, designer output). Returns {} if unreadable.
+## (AssetManifest, designer output). Returns {} and pushes an error if unreadable.
 static func load_file(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
+		push_error("RacerSpec: file not found: %s" % path)
 		return {}
 	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(data) != TYPE_DICTIONARY:
+		push_error("RacerSpec: not a JSON object: %s" % path)
 		return {}
 	if typeof(data.get("spec")) == TYPE_DICTIONARY:
 		return data.spec
@@ -56,241 +33,227 @@ static func rot_to_godot(v: Array) -> Vector3:
 	return Vector3(deg_to_rad(-float(v[0])), deg_to_rad(float(v[1])), deg_to_rad(-float(v[2])))
 
 
-## Returns { "spec": Dictionary (clean copy), "warnings": PackedStringArray }.
-static func normalize(raw: Dictionary) -> Dictionary:
-	var w := PackedStringArray()
-	var d := default_spec()
+## Returns { "spec": Dictionary (clean copy), "errors": PackedStringArray }. The spec must not
+## be used when errors is non-empty.
+static func validate(raw: Dictionary) -> Dictionary:
+	var e := PackedStringArray()
+	if not KitCatalog.load_error().is_empty():
+		e.append(KitCatalog.load_error())
+		return {"spec": {}, "errors": e}
 	var out := {"specVersion": 1}
 
 	var title := str(raw.get("title", "")).strip_edges()
 	if title == "":
-		w.append("title missing")
-		title = str(d.get("title", "Racer"))
+		e.append("title missing")
 	var tmax: int = KitCatalog.limit("titleMax")
 	if title.length() > tmax:
-		w.append("title longer than %d chars, cut" % tmax)
-		title = title.substr(0, tmax)
+		e.append("title longer than %d chars" % tmax)
 	out.title = title
 
 	var pers := []
-	for p in _arr(raw.get("personality", [])):
+	for p in _arr(raw.get("personality"), "personality", e):
 		pers.append(str(p).to_lower())
-	out.personality = pers.slice(0, KitCatalog.limit("personalityMax")) if not pers.is_empty() else d.personality
+	if pers.size() < KitCatalog.limit("personalityMin") or pers.size() > KitCatalog.limit("personalityMax"):
+		e.append("personality: %d words, need %d-%d" % [pers.size(), KitCatalog.limit("personalityMin"), KitCatalog.limit("personalityMax")])
+	out.personality = pers
 
 	var palette := []
-	for c in _arr(raw.get("palette", [])):
+	for c in _arr(raw.get("palette"), "palette", e):
 		if typeof(c) == TYPE_STRING and Color.html_is_valid(c):
 			palette.append(c)
 		else:
-			w.append("palette: invalid colour %s dropped" % str(c))
-	var pmax: int = KitCatalog.limit("paletteMax")
-	if palette.size() > pmax:
-		w.append("palette: kept %d of %d" % [pmax, palette.size()])
-		palette.resize(pmax)
-	var i := 0
-	while palette.size() < KitCatalog.limit("paletteMin"):
-		w.append("palette has fewer than 3 colours, padded")
-		palette.append(FALLBACK_PALETTE[i])
-		i += 1
+			e.append("palette: invalid colour %s" % str(c))
+	if palette.size() < KitCatalog.limit("paletteMin") or palette.size() > KitCatalog.limit("paletteMax"):
+		e.append("palette: %d colours, need %d-%d" % [palette.size(), KitCatalog.limit("paletteMin"), KitCatalog.limit("paletteMax")])
 	out.palette = palette
 	var n := palette.size()
 
-	var rc := _dict(raw.get("character"))
+	var rc := _dict(raw.get("character"), "character", e)
 	var c := {}
-	var body := _dict(rc.get("body"))
+	var body := _dict(rc.get("body"), "character.body", e)
 	c.body = {
-		"shape": _part(body.get("shape"), "bodyShapes", "character.body.shape", w),
-		"color": _ref(body.get("color", 0), n, "character.body.color", w),
-		"scale": _vec3(body.get("scale"), "bodyScale", "character.body.scale", w),
+		"shape": _part(body.get("shape"), "bodyShapes", "character.body.shape", e),
+		"color": _ref(body.get("color"), n, "character.body.color", e),
+		"scale": _vec3(body.get("scale"), "bodyScale", "character.body.scale", e),
 	}
-	var head := _dict(rc.get("head"))
+	var head := _dict(rc.get("head"), "character.head", e)
 	c.head = {
-		"shape": _part(head.get("shape"), "headShapes", "character.head.shape", w),
-		"color": _ref(head.get("color", c.body.color), n, "character.head.color", w),
-		"size": _num(head.get("size", 1.0), "headSize", "character.head.size", w),
+		"shape": _part(head.get("shape"), "headShapes", "character.head.shape", e),
+		"color": _ref(head.get("color"), n, "character.head.color", e),
+		"size": _num(head.get("size"), "headSize", "character.head.size", e),
 	}
-	var face := _dict(rc.get("face"))
-	var eye_color := str(face.get("eyeColor", "#2b2140"))
+	var face := _dict(rc.get("face"), "character.face", e)
+	var eye_color := str(face.get("eyeColor", ""))
 	if not Color.html_is_valid(eye_color):
-		w.append("character.face.eyeColor invalid, using dark")
-		eye_color = "#2b2140"
+		e.append("character.face.eyeColor: invalid colour %s" % eye_color)
 	c.face = {
-		"eyes": _part(face.get("eyes"), "eyes", "character.face.eyes", w),
+		"eyes": _part(face.get("eyes"), "eyes", "character.face.eyes", e),
 		"eyeColor": eye_color,
-		"mouth": _part(face.get("mouth"), "mouths", "character.face.mouth", w),
-		"brows": bool(face.get("brows", true)),
+		"mouth": _part(face.get("mouth"), "mouths", "character.face.mouth", e),
+		"brows": _bool(face.get("brows"), "character.face.brows", e),
 	}
 	if face.get("cheeks") != null:
-		c.face.cheeks = _ref(face.cheeks, n, "character.face.cheeks", w)
-	if typeof(rc.get("hair")) == TYPE_DICTIONARY:
-		c.hair = {"style": _part(rc.hair.get("style"), "hairStyles", "character.hair.style", w),
-			"color": _ref(rc.hair.get("color", 0), n, "character.hair.color", w)}
-	if typeof(rc.get("hat")) == TYPE_DICTIONARY:
-		c.hat = {"type": _part(rc.hat.get("type"), "hatTypes", "character.hat.type", w),
-			"color": _ref(rc.hat.get("color", 0), n, "character.hat.color", w)}
-	c.arms = {"color": _ref(_dict(rc.get("arms")).get("color", c.body.color), n, "character.arms.color", w)}
-	c.extras = _extras(rc.get("extras", []), "characterExtrasMax", "character", n, w)
+		c.face.cheeks = _ref(face.cheeks, n, "character.face.cheeks", e)
+	if rc.get("hair") != null:
+		var hair := _dict(rc.hair, "character.hair", e)
+		c.hair = {"style": _part(hair.get("style"), "hairStyles", "character.hair.style", e),
+			"color": _ref(hair.get("color"), n, "character.hair.color", e)}
+	if rc.get("hat") != null:
+		var hat := _dict(rc.hat, "character.hat", e)
+		c.hat = {"type": _part(hat.get("type"), "hatTypes", "character.hat.type", e),
+			"color": _ref(hat.get("color"), n, "character.hat.color", e)}
+	var arms := _dict(rc.get("arms"), "character.arms", e)
+	c.arms = {"color": _ref(arms.get("color"), n, "character.arms.color", e)}
+	c.extras = _extras(rc.get("extras"), "characterExtrasMax", "character", n, e)
 	out.character = c
 
-	var rr := _dict(raw.get("ride"))
+	var rr := _dict(raw.get("ride"), "ride", e)
 	var r := {}
-	r.base = _part(rr.get("base"), "rideBases", "ride.base", w)
-	r.color = _ref(rr.get("color", 0), n, "ride.color", w)
-	r.accent = _ref(rr.get("accent", 1), n, "ride.accent", w)
-	r.scale = _vec3(rr.get("scale"), "rideScale", "ride.scale", w)
-	if typeof(rr.get("wheels")) == TYPE_DICTIONARY:
-		var wh: Dictionary = rr.wheels
-		var cnt := int(wh.get("count", 4))
-		if cnt not in [2, 3, 4]:
-			w.append("ride.wheels.count %d → %d" % [cnt, clampi(cnt, 2, 4)])
-			cnt = clampi(cnt, 2, 4)
+	r.base = _part(rr.get("base"), "rideBases", "ride.base", e)
+	r.color = _ref(rr.get("color"), n, "ride.color", e)
+	r.accent = _ref(rr.get("accent"), n, "ride.accent", e)
+	r.scale = _vec3(rr.get("scale"), "rideScale", "ride.scale", e)
+	if rr.get("wheels") != null:
+		var wh := _dict(rr.wheels, "ride.wheels", e)
+		var cnt = wh.get("count")
+		if typeof(cnt) not in [TYPE_INT, TYPE_FLOAT] or int(cnt) not in [2, 3, 4]:
+			e.append("ride.wheels.count: %s, need 2, 3 or 4" % str(cnt))
 		r.wheels = {
-			"count": cnt,
-			"style": _part(wh.get("style"), "wheelStyles", "ride.wheels.style", w),
-			"color": _ref(wh.get("color", r.accent), n, "ride.wheels.color", w),
-			"size": _num(wh.get("size", 1.0), "wheelSize", "ride.wheels.size", w),
+			"count": int(cnt) if typeof(cnt) in [TYPE_INT, TYPE_FLOAT] else 0,
+			"style": _part(wh.get("style"), "wheelStyles", "ride.wheels.style", e),
+			"color": _ref(wh.get("color"), n, "ride.wheels.color", e),
+			"size": _num(wh.get("size"), "wheelSize", "ride.wheels.size", e),
 		}
-	if typeof(rr.get("legs")) == TYPE_DICTIONARY:
-		r.legs = {"style": _part(rr.legs.get("style"), "legStyles", "ride.legs.style", w),
-			"color": _ref(rr.legs.get("color", r.color), n, "ride.legs.color", w)}
-	if typeof(rr.get("wings")) == TYPE_DICTIONARY:
-		r.wings = {"style": _part(rr.wings.get("style"), "wingStyles", "ride.wings.style", w),
-			"color": _ref(rr.wings.get("color", r.accent), n, "ride.wings.color", w),
-			"size": _num(rr.wings.get("size", 1.0), "wingSize", "ride.wings.size", w)}
-	if typeof(rr.get("tail")) == TYPE_DICTIONARY:
-		r.tail = {"style": _part(rr.tail.get("style"), "tailStyles", "ride.tail.style", w),
-			"color": _ref(rr.tail.get("color", r.accent), n, "ride.tail.color", w)}
-	r.extras = _extras(rr.get("extras", []), "rideExtrasMax", "ride", n, w)
-	r.drawingSticker = bool(rr.get("drawingSticker", false))
+	if rr.get("legs") != null:
+		var legs := _dict(rr.legs, "ride.legs", e)
+		r.legs = {"style": _part(legs.get("style"), "legStyles", "ride.legs.style", e),
+			"color": _ref(legs.get("color"), n, "ride.legs.color", e)}
+	if rr.get("wings") != null:
+		var wings := _dict(rr.wings, "ride.wings", e)
+		r.wings = {"style": _part(wings.get("style"), "wingStyles", "ride.wings.style", e),
+			"color": _ref(wings.get("color"), n, "ride.wings.color", e),
+			"size": _num(wings.get("size"), "wingSize", "ride.wings.size", e)}
+	if rr.get("tail") != null:
+		var tail := _dict(rr.tail, "ride.tail", e)
+		r.tail = {"style": _part(tail.get("style"), "tailStyles", "ride.tail.style", e),
+			"color": _ref(tail.get("color"), n, "ride.tail.color", e)}
+	r.extras = _extras(rr.get("extras"), "rideExtrasMax", "ride", n, e)
+	r.drawingSticker = _bool(rr.get("drawingSticker"), "ride.drawingSticker", e)
 	out.ride = r
-	return {"spec": out, "warnings": w}
+	return {"spec": out, "errors": e}
 
 
 static func palette_colors(spec: Dictionary) -> Array[Color]:
 	var out: Array[Color] = []
-	for c in spec.get("palette", FALLBACK_PALETTE):
+	for c in spec.palette:
 		out.append(Color.html(c))
 	return out
 
 
-## Closest catalog name by edit distance, case- and separator-insensitive (as in racer-spec.js).
-static func nearest_name(value: String, options: Array) -> String:
-	if options.is_empty():
-		return value
-	var v := value.to_lower().replace(" ", "_").replace("-", "_")
-	var best: String = options[0]
-	var best_d := 1 << 30
-	for o in options:
-		var dist := _edit_distance(v, str(o).to_lower().replace(" ", "_").replace("-", "_"))
-		if dist < best_d:
-			best = o
-			best_d = dist
-	return best
-
-
 # --- helpers ---
 
-static func _edit_distance(a: String, b: String) -> int:
-	var row := []
-	for j in b.length() + 1:
-		row.append(j)
-	for i in range(1, a.length() + 1):
-		var prev: int = row[0]
-		row[0] = i
-		for j in range(1, b.length() + 1):
-			var tmp: int = row[j]
-			row[j] = mini(mini(row[j] + 1, row[j - 1] + 1), prev + (0 if a[i - 1] == b[j - 1] else 1))
-			prev = tmp
-	return row[b.length()]
+static func _arr(v: Variant, field: String, e: PackedStringArray) -> Array:
+	if typeof(v) != TYPE_ARRAY:
+		e.append("%s: missing or not a list" % field)
+		return []
+	return v
 
 
-static func _arr(v: Variant) -> Array:
-	return v if typeof(v) == TYPE_ARRAY else []
+static func _bool(v: Variant, field: String, e: PackedStringArray) -> bool:
+	if typeof(v) != TYPE_BOOL:
+		e.append("%s: missing or not true/false" % field)
+		return false
+	return v
 
 
-static func _dict(v: Variant) -> Dictionary:
-	return v if typeof(v) == TYPE_DICTIONARY else {}
+static func _dict(v: Variant, field: String, e: PackedStringArray) -> Dictionary:
+	if typeof(v) != TYPE_DICTIONARY:
+		e.append("%s: missing or not an object" % field)
+		return {}
+	return v
 
 
-static func _part(v: Variant, list: String, field: String, w: PackedStringArray) -> String:
-	var options := KitCatalog.names(list)
+static func _part(v: Variant, list: String, field: String, e: PackedStringArray) -> String:
 	var s := str(v) if v != null else ""
-	if s in options:
-		return s
-	var best := nearest_name(s, options) if s != "" else str(options[0])
-	w.append("%s: unknown part \"%s\" → \"%s\"" % [field, s, best])
-	return best
+	if s == "":
+		e.append("%s: missing" % field)
+	elif s not in KitCatalog.names(list):
+		e.append("%s: unknown part \"%s\" (kit has: %s)" % [field, s, ", ".join(KitCatalog.names(list))])
+	return s
 
 
-static func _ref(v: Variant, n: int, field: String, w: PackedStringArray) -> int:
-	var i := int(v) if typeof(v) in [TYPE_INT, TYPE_FLOAT] else 0
-	var c := clampi(i, 0, n - 1)
-	if c != i:
-		w.append("%s: palette ref %d → %d" % [field, i, c])
-	return c
+static func _ref(v: Variant, n: int, field: String, e: PackedStringArray) -> int:
+	if typeof(v) not in [TYPE_INT, TYPE_FLOAT]:
+		e.append("%s: missing palette index" % field)
+		return 0
+	var i := int(v)
+	if i < 0 or i >= n:
+		e.append("%s: palette index %d out of range 0-%d" % [field, i, n - 1])
+	return i
 
 
-static func _num(v: Variant, limit_key: String, field: String, w: PackedStringArray) -> float:
+static func _num(v: Variant, limit_key: String, field: String, e: PackedStringArray) -> float:
 	var rng: Array = KitCatalog.limit(limit_key)
 	if typeof(v) not in [TYPE_INT, TYPE_FLOAT]:
-		return clampf(1.0, rng[0], rng[1])
+		e.append("%s: not a number" % field)
+		return 0.0
 	var f := float(v)
-	var c := clampf(f, rng[0], rng[1])
-	if not is_equal_approx(c, f):
-		w.append("%s: %s → %s" % [field, str(f), str(c)])
-	return c
+	if f < rng[0] or f > rng[1]:
+		e.append("%s: %s outside %s-%s" % [field, str(f), str(rng[0]), str(rng[1])])
+	return f
 
 
-static func _vec3(v: Variant, limit_key: String, field: String, w: PackedStringArray, fallback := 1.0) -> Array:
+static func _vec3(v: Variant, limit_key: String, field: String, e: PackedStringArray) -> Array:
 	var rng: Array = KitCatalog.limit(limit_key)
-	var out := [fallback, fallback, fallback]
-	if typeof(v) == TYPE_ARRAY and v.size() == 3:
-		for k in 3:
-			var f := float(v[k]) if typeof(v[k]) in [TYPE_INT, TYPE_FLOAT] else fallback
-			out[k] = clampf(f, rng[0], rng[1])
-			if not is_equal_approx(out[k], f):
-				w.append("%s[%d]: %s → %s" % [field, k, str(f), str(out[k])])
-	elif v != null:
-		w.append("%s: not a [x,y,z] array" % field)
+	if typeof(v) != TYPE_ARRAY or v.size() != 3:
+		e.append("%s: not a [x,y,z] array" % field)
+		return [0.0, 0.0, 0.0]
+	var out := [0.0, 0.0, 0.0]
+	for k in 3:
+		if typeof(v[k]) not in [TYPE_INT, TYPE_FLOAT]:
+			e.append("%s[%d]: not a number" % [field, k])
+			continue
+		out[k] = float(v[k])
+		if out[k] < rng[0] or out[k] > rng[1]:
+			e.append("%s[%d]: %s outside %s-%s" % [field, k, str(out[k]), str(rng[0]), str(rng[1])])
 	return out
 
 
-static func _extras(v: Variant, max_key: String, on: String, n: int, w: PackedStringArray) -> Array:
+static func _extras(v: Variant, max_key: String, on: String, n: int, e: PackedStringArray) -> Array:
 	var out := []
-	var list := _arr(v)
+	var list := _arr(v, on + ".extras", e)
 	var max_count: int = KitCatalog.limit(max_key)
 	if list.size() > max_count:
-		w.append("%s.extras: kept %d of %d" % [on, max_count, list.size()])
+		e.append("%s.extras: %d, at most %d" % [on, list.size(), max_count])
 	var sockets := KitCatalog.sockets_on(on)
-	for idx in mini(list.size(), max_count):
-		var e = list[idx]
-		if typeof(e) != TYPE_DICTIONARY:
-			w.append("%s.extras[%d]: not an object, dropped" % [on, idx])
-			continue
+	for idx in list.size():
 		var where := "%s.extras[%d]" % [on, idx]
-		var sock := str(e.get("socket", ""))
+		var x := _dict(list[idx], where, e)
+		if x.is_empty():
+			continue
+		var sock := str(x.get("socket", ""))
 		if sock not in sockets:
-			var best := nearest_name(sock, sockets)
-			w.append("%s.socket: unknown \"%s\" → \"%s\"" % [where, sock, best])
-			sock = best
-		var max_off: float = float(KitCatalog.socket(sock).get("maxOffset", 0.2))
+			e.append("%s.socket: unknown \"%s\" (sockets on %s: %s)" % [where, sock, on, ", ".join(sockets)])
+		var max_off: float = float(KitCatalog.socket(sock).get("maxOffset", 0.0))
 		var off := [0.0, 0.0, 0.0]
-		var raw_off = e.get("offset")
-		if typeof(raw_off) == TYPE_ARRAY and raw_off.size() == 3:
-			var clamped := false
+		var raw_off = x.get("offset")
+		if typeof(raw_off) != TYPE_ARRAY or raw_off.size() != 3:
+			e.append("%s.offset: not a [x,y,z] array" % where)
+		else:
 			for k in 3:
-				var f := float(raw_off[k]) if typeof(raw_off[k]) in [TYPE_INT, TYPE_FLOAT] else 0.0
-				off[k] = clampf(f, -max_off, max_off)
-				clamped = clamped or not is_equal_approx(off[k], f)
-			if clamped:
-				w.append("%s: %s offset clamped to ±%s" % [where, sock, str(max_off)])
+				if typeof(raw_off[k]) not in [TYPE_INT, TYPE_FLOAT]:
+					e.append("%s.offset[%d]: not a number" % [where, k])
+					continue
+				off[k] = float(raw_off[k])
+				if absf(off[k]) > max_off:
+					e.append("%s.offset[%d]: %s beyond the %s socket's ±%s" % [where, k, str(off[k]), sock, str(max_off)])
 		out.append({
-			"shape": _part(e.get("shape"), "extraShapes", where + ".shape", w),
+			"shape": _part(x.get("shape"), "extraShapes", where + ".shape", e),
 			"socket": sock,
 			"offset": off,
-			"scale": _vec3(e.get("scale"), "extraScale", where + ".scale", w, 0.3),
-			"rotationDeg": _vec3(e.get("rotationDeg"), "extraRotationDeg", where + ".rotationDeg", w, 0.0),
-			"color": _ref(e.get("color", 0), n, where + ".color", w),
-			"mirror": bool(e.get("mirror", false)),
+			"scale": _vec3(x.get("scale"), "extraScale", where + ".scale", e),
+			"rotationDeg": _vec3(x.get("rotationDeg"), "extraRotationDeg", where + ".rotationDeg", e),
+			"color": _ref(x.get("color"), n, where + ".color", e),
+			"mirror": bool(x.get("mirror", false)),
 		})
 	return out

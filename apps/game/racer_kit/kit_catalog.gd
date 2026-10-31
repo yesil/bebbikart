@@ -2,8 +2,8 @@ class_name KitCatalog
 extends RefCounted
 ## The toy-part kit catalog, as seen by the game.
 ## Source of truth: packages/shared/src/racer-kit.js (contracts §5). `bun run kit:export`
-## writes it to res://data/racer_kit.json, which is loaded here. FALLBACK mirrors the same
-## names so the kit still works if the JSON is missing.
+## writes it to res://data/racer_kit.json, which is loaded here. There is no built-in copy: if
+## the JSON is missing or broken, load_error() says why and no spec validates.
 ## Adding a part = add it to racer-kit.js + build it in kit_parts / kit_ride_parts + export.
 ## tools/check_catalog.gd fails if a catalog name has no Godot implementation.
 
@@ -30,52 +30,40 @@ const IMPLEMENTED := {
 		"ride_front", "ride_back", "ride_side", "ride_top", "ride_bottom"],
 }
 
-const FALLBACK_SOCKETS := {
-	"head_top": ["character", 0.3], "head_side": ["character", 0.2], "head_front": ["character", 0.15],
-	"body_front": ["character", 0.2], "body_back": ["character", 0.25], "hand": ["character", 0.2],
-	"ride_front": ["ride", 0.4], "ride_back": ["ride", 0.4], "ride_side": ["ride", 0.35],
-	"ride_top": ["ride", 0.4], "ride_bottom": ["ride", 0.3],
-}
-
-const FALLBACK_LIMITS := {
-	"titleMax": 24, "bodyScale": [0.6, 1.4], "headSize": [0.6, 1.5], "rideScale": [0.6, 1.4],
-	"wheelSize": [0.5, 2.0], "wingSize": [0.5, 2.0], "extraScale": [0.1, 2.0],
-	"extraRotationDeg": [-180.0, 180.0], "characterExtrasMax": 6, "rideExtrasMax": 8,
-	"paletteMin": 3, "paletteMax": 5, "personalityMin": 2, "personalityMax": 3,
-}
-
 static var _data: Dictionary = {}
 
 
-## The raw catalog (racer_kit.json contents, or a fallback built from IMPLEMENTED).
+static var _error := ""
+
+
+## The raw catalog (racer_kit.json contents). Empty (with load_error() set) if it can't be read.
 static func data() -> Dictionary:
-	if not _data.is_empty():
+	if not _data.is_empty() or not _error.is_empty():
 		return _data
-	if FileAccess.file_exists(DATA_PATH):
+	if not FileAccess.file_exists(DATA_PATH):
+		_error = "KitCatalog: %s missing (run `bun run kit:export`)" % DATA_PATH
+	else:
 		var parsed = JSON.parse_string(FileAccess.get_file_as_string(DATA_PATH))
-		if typeof(parsed) == TYPE_DICTIONARY:
+		if typeof(parsed) != TYPE_DICTIONARY:
+			_error = "KitCatalog: %s is not a JSON object" % DATA_PATH
+		elif typeof(parsed.get("limits")) != TYPE_DICTIONARY:
+			_error = "KitCatalog: %s has no limits" % DATA_PATH
+		else:
 			_data = parsed
-	if _data.is_empty():
-		push_warning("KitCatalog: %s missing, using built-in fallback" % DATA_PATH)
-		for list in IMPLEMENTED:
-			if list == "sockets":
-				var socks := []
-				for s in FALLBACK_SOCKETS:
-					socks.append({"name": s, "desc": "", "on": FALLBACK_SOCKETS[s][0], "maxOffset": FALLBACK_SOCKETS[s][1]})
-				_data.sockets = socks
-			elif list == "extraShapes":
-				_data.extraShapes = IMPLEMENTED.extraShapes.duplicate()
-			else:
-				_data[list] = IMPLEMENTED[list].map(func(n): return {"name": n, "desc": ""})
-		_data.kitVersion = 1
-		_data.limits = FALLBACK_LIMITS.duplicate()
-	if not _data.has("limits"):
-		_data.limits = FALLBACK_LIMITS.duplicate()
+	if not _error.is_empty():
+		push_error(_error)
 	return _data
+
+
+## Why the catalog could not be loaded, or "" when it is fine.
+static func load_error() -> String:
+	data()
+	return _error
 
 
 static func reload() -> void:
 	_data = {}
+	_error = ""
 
 
 ## Part names of one catalog list, e.g. names("eyes").
@@ -87,7 +75,11 @@ static func names(list: String) -> Array:
 
 
 static func limit(key: String) -> Variant:
-	return data().limits.get(key, FALLBACK_LIMITS.get(key))
+	var limits: Dictionary = data().get("limits", {})
+	if not limits.has(key):
+		push_error("KitCatalog: limit \"%s\" missing from %s" % [key, DATA_PATH])
+		return null
+	return limits[key]
 
 
 static func socket(name: String) -> Dictionary:

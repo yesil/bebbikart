@@ -37,6 +37,7 @@ var land: Landscape
 var shape: TerrainShape
 var world: Node3D
 var stages: PackedStringArray = ["terrain", "roads"]
+var failed := false
 
 
 func _initialize() -> void:
@@ -60,6 +61,10 @@ func _bake() -> void:
 		await _bake_terrain()
 	if "roads" in stages:
 		await _bake_roads()
+	if failed:
+		push_error("bake: errors above, %s NOT saved" % SCENE_PATH)
+		quit(1)
+		return
 	_own(world, world)
 	var packed := PackedScene.new()
 	var err := packed.pack(world)
@@ -74,6 +79,19 @@ func _bake() -> void:
 		return
 	print("bake: saved %s in %.1f s" % [SCENE_PATH, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(0)
+
+
+## Loads a resource or stops the bake: a missing asset is an error, never a silent null.
+func _res(path: String) -> Resource:
+	var r: Resource = load(path) if ResourceLoader.exists(path) else null
+	if r == null:
+		_fail("missing resource %s" % path)
+	return r
+
+
+func _fail(msg: String) -> void:
+	push_error("bake: " + msg)
+	failed = true
 
 
 ## Re-bakes update the existing scene in place so stages not being re-run keep their nodes.
@@ -127,16 +145,16 @@ func _bake_terrain() -> void:
 		var lname: String = TerrainShape.LAYER_NAMES[i]
 		var ta: Resource = ClassDB.instantiate("Terrain3DTextureAsset")
 		ta.set("name", lname)
-		ta.set("albedo_texture", load(TEX_DIR + lname + "_albedo_height.webp"))
-		ta.set("normal_texture", load(TEX_DIR + lname + "_normal_rough.webp"))
+		ta.set("albedo_texture", _res(TEX_DIR + lname + "_albedo_height.webp"))
+		ta.set("normal_texture", _res(TEX_DIR + lname + "_normal_rough.webp"))
 		ta.set("uv_scale", LAYER_LOOK[lname][0])
 		ta.set("albedo_color", LAYER_LOOK[lname][1])
 		ta.set("detiling_rotation", 0.3)
 		ta.set("detiling_shift", 0.3)
 		assets.call("set_texture_asset", i, ta)
 	ResourceSaver.save(assets, TERRAIN_ASSETS)
-	terrain.set("material", load(TERRAIN_MATERIAL))
-	terrain.set("assets", load(TERRAIN_ASSETS))
+	terrain.set("material", _res(TERRAIN_MATERIAL))
+	terrain.set("assets", _res(TERRAIN_ASSETS))
 	# Wipe old data so regions outside the new map do not linger.
 	var dir := ProjectSettings.globalize_path(TERRAIN_DIR)
 	if DirAccess.dir_exists_absolute(dir):
@@ -191,7 +209,7 @@ const ROAD_PIECES := [
 
 func _road_materials() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(MAT_DIR))
-	var sh: Shader = load(MAT_DIR + "road.gdshader")
+	var sh: Shader = _res(MAT_DIR + "road.gdshader")
 	# [name, texture set, tile metres, tint, edge lines, depth pull, roughness bias]
 	var defs := [
 		["road_asphalt", "Asphalt012", 4.0, Color(0.9, 0.9, 0.92), true, 0.0, 0.0],
@@ -208,15 +226,15 @@ func _road_materials() -> void:
 		m.shader = sh
 		var tex: String = d[1]
 		if tex == "dirt":
-			m.set_shader_parameter("albedo_tex", load(TEX_DIR + "dirt_albedo_height.webp"))
-			m.set_shader_parameter("normal_tex", load("res://assets/textures/Asphalt012/Asphalt012_1K-JPG_NormalGL.jpg"))
-			m.set_shader_parameter("rough_tex", load("res://assets/textures/Asphalt012/Asphalt012_1K-JPG_Roughness.jpg"))
+			m.set_shader_parameter("albedo_tex", _res(TEX_DIR + "dirt_albedo_height.webp"))
+			m.set_shader_parameter("normal_tex", _res("res://assets/textures/Asphalt012/Asphalt012_1K-JPG_NormalGL.jpg"))
+			m.set_shader_parameter("rough_tex", _res("res://assets/textures/Asphalt012/Asphalt012_1K-JPG_Roughness.jpg"))
 			m.set_shader_parameter("roughness_bias", 0.15)
 		else:
 			var base := "res://assets/textures/%s/%s_1K-JPG_" % [tex, tex]
-			m.set_shader_parameter("albedo_tex", load(base + "Color.jpg"))
-			m.set_shader_parameter("normal_tex", load(base + "NormalGL.jpg"))
-			m.set_shader_parameter("rough_tex", load(base + "Roughness.jpg"))
+			m.set_shader_parameter("albedo_tex", _res(base + "Color.jpg"))
+			m.set_shader_parameter("normal_tex", _res(base + "NormalGL.jpg"))
+			m.set_shader_parameter("rough_tex", _res(base + "Roughness.jpg"))
 			m.set_shader_parameter("roughness_bias", d[6])
 		m.set_shader_parameter("tile_m", d[2])
 		m.set_shader_parameter("tint", d[3])
@@ -265,8 +283,7 @@ func _piece_s(seg: Dictionary, key: String) -> float:
 			return float(seg["water"][0][0])
 		"water_out":
 			return float(seg["water"][0][1])
-	push_error("bake: unknown road piece split '%s'" % key)
-	quit(1)
+	_fail("unknown road piece split '%s'" % key)
 	return 0.0
 
 
@@ -283,7 +300,7 @@ func _bake_roads() -> void:
 		cont.name = piece[0]
 		_mark(cont)
 		cont.flatten_terrain = false
-		cont.material_resource = load(MAT_DIR + String(piece[4]) + ".tres")
+		cont.material_resource = _res(MAT_DIR + String(piece[4]) + ".tres")
 		cont.underside_thickness = piece[5]
 		mgr.add_child(cont)
 		var n := maxi(1, int(ceil((s1 - s0) / ROAD_STEP)))

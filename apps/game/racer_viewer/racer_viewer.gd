@@ -155,13 +155,16 @@ func _show(i: int) -> void:
 	var path := files[index]
 	var raw := RacerSpec.load_file(path)
 	racer = RacerBuilder.build(raw, SpecFolders.drawing_for(path))
+	if racer == null:
+		_info.text = "%s  (%d/%d)\n%s" % [path.get_file(), index + 1, files.size(), HELP]
+		var why := RacerBuilder.last_errors if not raw.is_empty() else PackedStringArray(["could not read the file"])
+		_warn.text = "INVALID SPEC, not built:\n- " + "\n- ".join(why)
+		return
 	_pivot.add_child(racer)
 	var box := RacerBuilder._aabb(racer, Transform3D.IDENTITY)
 	_frame(box.size.y)
 	action = 0
 	_act_t = 0.0
-	if raw.is_empty():
-		racer.warnings.append("could not read %s; showing defaults" % path.get_file())
 	_update_ui()
 
 
@@ -174,7 +177,7 @@ func _update_ui() -> void:
 		", ".join(s.personality), s.ride.base, ", ".join(s.palette),
 		ACTIONS[action], racer.get_mood(), "" if not racer._mood_locked else " (locked)",
 		HELP, _last_render]
-	_warn.text = ("Spec fixes:\n- " + "\n- ".join(racer.warnings)) if racer.warnings.size() > 0 else ""
+	_warn.text = ""
 
 
 func _next_action() -> void:
@@ -210,6 +213,8 @@ func _toggle_lineup() -> void:
 	var cols := ceili(sqrt(n))
 	for i in n:
 		var r := RacerBuilder.build(RacerSpec.load_file(files[i]), SpecFolders.drawing_for(files[i]))
+		if r == null:
+			continue
 		r.position = Vector3((i % cols - (cols - 1) * 0.5) * 2.2, 0, (i / cols) * 2.4)
 		_pivot.add_child(r)
 		lineup.append(r)

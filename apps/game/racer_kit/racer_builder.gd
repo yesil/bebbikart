@@ -4,10 +4,10 @@ extends RefCounted
 ##
 ##   var racer := RacerBuilder.build(spec)            # ToyRacer (extends Node3D)
 ##   var racer := RacerBuilder.build(spec, drawing)   # drawing = kid's vehicle drawing (sticker)
-##   racer.get_meta("warnings")                        # what normalisation fixed
+##   RacerBuilder.last_errors                          # why the last build() returned null
 ##
-## The spec is normalised first (unknown names snap to the nearest kit part, numbers are
-## clamped), so build() never fails. Spec frame: +y up, +z forward, +x racer's left;
+## The spec is validated first (RacerSpec.validate). An invalid spec is not built: build()
+## pushes every problem as an error and returns null; nothing is guessed or clamped. Spec frame: +y up, +z forward, +x racer's left;
 ## Godot: -Z forward, +X right. Extra offsets are metres, extra scale 1.0 = CHAR_UNIT
 ## (character sockets) or RIDE_UNIT (ride sockets).
 
@@ -19,16 +19,22 @@ const BOUNCY := ["bouncy", "silly", "speedy", "zoomy", "cheerful", "playful", "w
 const CALM := ["calm", "sleepy", "chill", "gentle", "shy", "wise", "cool"]
 
 
+static var last_errors := PackedStringArray()
+
+
 static func build(raw: Dictionary, drawing: Texture2D = null) -> ToyRacer:
-	var res := RacerSpec.normalize(raw)
+	var res := RacerSpec.validate(raw)
+	last_errors = res.errors
+	if not last_errors.is_empty():
+		for err in last_errors:
+			push_error("RacerBuilder: invalid spec \"%s\": %s" % [str(raw.get("title", "?")), err])
+		return null
 	var spec: Dictionary = res.spec
 	var cols := RacerSpec.palette_colors(spec)
 	var racer := ToyRacer.new()
 	racer.name = "ToyRacer"
 	racer.spec = spec
-	racer.warnings = res.warnings
 	racer.set_meta("spec", spec)
-	racer.set_meta("warnings", res.warnings)
 	racer.bounciness = _bounciness(spec.personality)
 
 	var rig := P.node("Rig")

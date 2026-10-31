@@ -1,7 +1,7 @@
 extends SceneTree
 ## Headless smoke test: builds every sample spec (racer_kit/samples, data/pkg_default and the
 ## WS5 designer output folder), steps the animation through all states and moods, and prints
-## normalisation warnings. Exit code 1 if any spec fails to build.
+## validation errors. Exit code 1 if any spec is invalid or fails to build.
 ##
 ##   godot --headless --path apps/game --script res://racer_kit/tools/check_samples.gd [-- --specs=<dir>]
 
@@ -23,6 +23,12 @@ func _initialize() -> void:
 			failed += 1
 			continue
 		var racer := RacerBuilder.build(raw)
+		if racer == null:
+			print("FAIL  %s: invalid spec" % f.get_file())
+			for err in RacerBuilder.last_errors:
+				print("        - ", err)
+			failed += 1
+			continue
 		root.add_child(racer)
 		var meshes := _count(racer)
 		var box := RacerBuilder._aabb(racer.model, racer.model.transform)
@@ -41,10 +47,8 @@ func _initialize() -> void:
 			racer._process(0.05)
 		racer.snap_pose()
 		var ok := meshes > 10 and box.size.y > 0.5 and box.size.y < 4.0 and box.position.y > -0.01 and box.position.y < 0.5
-		print("%s  %-46s %-10s %3d meshes  %.2fm tall  min y %.2f  %d warnings" % [
-			"ok  " if ok else "FAIL", f.get_file(), racer.spec.ride.base, meshes, box.size.y, box.position.y, racer.warnings.size()])
-		for w in racer.warnings:
-			print("        - ", w)
+		print("%s  %-46s %-10s %3d meshes  %.2fm tall  min y %.2f" % [
+			"ok  " if ok else "FAIL", f.get_file(), racer.spec.ride.base, meshes, box.size.y, box.position.y])
 		if not ok:
 			failed += 1
 		racer.free()

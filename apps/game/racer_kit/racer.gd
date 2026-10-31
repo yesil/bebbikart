@@ -11,7 +11,6 @@ extends Node3D
 signal mood_changed(mood: String)
 
 var spec: Dictionary = {}
-var warnings := PackedStringArray()
 var bounciness := 1.0
 
 # Driven state
