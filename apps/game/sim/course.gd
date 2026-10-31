@@ -7,6 +7,9 @@ extends RefCounted
 const Route = preload("res://sim/route.gd")
 const Tuning = preload("res://sim/tuning.gd")
 
+## Length of the plank wedge from the jump pit up onto the landing road.
+const LANDING_WEDGE := 1.6
+
 ## Segment: {
 ##   id, section, fork ("" or fork id), choice, route (Route), half_width,
 ##   edge (extra metres before off_track), rails (bool: d is clamped, no off_track),
@@ -182,8 +185,11 @@ static func surface_offset(seg: Dictionary, s: float) -> float:
 	if s >= a and s <= lip:
 		var f := (s - a) / (lip - a)
 		return float(ramp["lip_h"]) * f * f
-	if s > lip and s < float(ramp["land_s"]):
-		return -float(ramp["pit_depth"])
+	var land: float = ramp["land_s"]
+	if s > lip and s < land:
+		# The pit floor, rising up the landing wedge (tools/bake_world.gd, tools/bake_village.gd)
+		# over its last LANDING_WEDGE metres, so a short lander drives up it, not through it.
+		return -float(ramp["pit_depth"]) * (1.0 - smoothstep(land - LANDING_WEDGE, land, s))
 	return 0.0
 
 
