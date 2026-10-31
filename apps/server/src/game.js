@@ -8,6 +8,7 @@ import {
   newId,
   parseBuildInput,
   SECTION_IDS,
+  validateStars,
 } from "@bebbikart/shared";
 import { ApiError, cleanNickname } from "./errors.js";
 
@@ -388,6 +389,10 @@ export function createGame({ db, settings, hub, log = console.log }) {
     if (running >= config.maxConcurrentRuns)
       throw new ApiError("run_in_progress", "The track is full, try again in a moment", 409);
     const build = latestBuild(playerId);
+    // A build saved under an older star budget can't race: the player sets their stars again.
+    const stars = validateStars(build.stars, config);
+    if (!stars.ok)
+      throw new ApiError("invalid_build", `Set your stars again: ${stars.errors.join("; ")}`, 400);
     const run = {
       id: newId("run"),
       playerId,

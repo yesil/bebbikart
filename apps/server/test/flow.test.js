@@ -502,3 +502,49 @@ test("quit: the racer leaves the race, the big screen and the leaderboard; the p
   game.ws.close();
   phone.ws.close();
 }, 30000);
+
+test("a saved build that breaks the star budget can't launch: invalid_build, no run", async () => {
+  // The racer gets the 20-star default build; this server only allows 10 (like a build saved
+  // before a budget change).
+  const s = startServer(
+    { ...settings, port: 0, dbFile: ":memory:", config: { ...settings.config, starsTotal: 10 } },
+    { log: () => {} },
+  );
+  const sBase = `http://localhost:${s.server.port}`;
+  const game = new WebSocket(`${sBase.replace("http", "ws")}/ws`);
+  await new Promise((r) => (game.onopen = r));
+  game.send(
+    JSON.stringify(makeMsg("phoneToServer", "hello", { role: "game", gameKey: settings.gameKey })),
+  );
+  const dev = await fetch(`${sBase}/api/device`, { method: "POST" });
+  const cookie = dev.headers.get("set-cookie").split(";")[0];
+  await fetch(`${sBase}/api/players`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ nickname: "Oldie" }),
+  });
+  const form = new FormData();
+  for (const [k, f] of [
+    ["character", "pair01-character-cat.jpg"],
+    ["vehicle", "pair01-vehicle-kart.jpg"],
+  ])
+    form.append(k, new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }));
+  await fetch(`${sBase}/api/players/me/drawings`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  for (let i = 0; i < 200; i++) {
+    const st = await (await fetch(`${sBase}/api/state`, { headers: { cookie } })).json();
+    if (st.me.status === "ready") break;
+    await Bun.sleep(100);
+  }
+
+  const res = await fetch(`${sBase}/api/players/me/runs`, { method: "POST", headers: { cookie } });
+  expect(res.status).toBe(400);
+  const err = (await res.json()).error;
+  expect(err.code).toBe("invalid_build");
+  expect(err.message).toContain("stars must add up to 10, got 20");
+  game.close();
+  s.stop();
+}, 30000);
