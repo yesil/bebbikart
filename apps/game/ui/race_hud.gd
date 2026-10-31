@@ -304,7 +304,7 @@ func _build_board() -> void:
 		var chip := _avatar_chip(44)
 		row.add_child(chip["root"])
 		var name := _label("", 28, Color.WHITE)
-		name.custom_minimum_size = Vector2(140, 0)
+		name.custom_minimum_size = Vector2(124, 0)
 		name.clip_text = true
 		name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(name)
@@ -312,7 +312,7 @@ func _build_board() -> void:
 		info.custom_minimum_size = Vector2(90, 0)
 		row.add_child(info)
 		var time := _label("", 28, Color.WHITE)
-		time.custom_minimum_size = Vector2(92, 0)
+		time.custom_minimum_size = Vector2(108, 0)
 		time.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		row.add_child(time)
 		box.add_child(row)
@@ -355,13 +355,13 @@ func _update_board(order: Array, sim) -> void:
 					info = I18n.f("hud.lap", [mini(r.lap + 1, laps_per_run), laps_per_run])
 					if r.pit_requested:
 						info = I18n.f("hud.lap_pit", [r.lap + 1])  # finishes at the next line
-					time = "%.1f" % (r.lap_ms() / 1000.0)
+					time = I18n.f("hud.secs_live", [r.lap_ms() / 1000.0])
 				else:
 					info = I18n.t("section." + String(r.section))
-					time = "%.1f" % (r.elapsed_ms() / 1000.0)
+					time = I18n.f("hud.secs_live", [r.elapsed_ms() / 1000.0])
 			"finished":
 				info = I18n.t("hud.best_lap") if h.has("racer") and h["racer"].looping else I18n.t("hud.finished")
-				time = "%.2f" % (int(h["result_ms"]) / 1000.0)
+				time = I18n.f("hud.best_time", [int(h["result_ms"]) / 1000.0])
 			_:
 				info = I18n.t("hud.oops")
 				time = ""
@@ -504,11 +504,12 @@ func _rebuild_paddock(sim) -> void:
 	_paddock_panel.visible = not _roster.is_empty()
 	for c in _paddock.get_children():
 		c.queue_free()
-	var on_track := {}
+	var on_track := {}   # racing
+	var at_start := {}   # on the grid or waiting to leave, like the race board says
 	for r in sim.racers:
 		on_track[r.player_id] = true
 	for r in sim.queue:
-		on_track[r.player_id] = true
+		at_start[r.player_id] = true
 	# Ranked racers first (by rank), then everyone else in join order.
 	var pids: Array = _join_order.duplicate()
 	pids.sort_custom(func(a, b):
@@ -554,6 +555,9 @@ func _rebuild_paddock(sim) -> void:
 			if on_track.has(pid):
 				line = I18n.t("hud.racing")
 				line_col = Color(0.5, 1, 0.6)
+			elif at_start.has(pid):
+				line = I18n.t("hud.at_start")
+				line_col = Color(1, 0.86, 0.3)
 			elif rank.is_empty():
 				line = I18n.t("hud.ready")
 		else:
@@ -614,6 +618,14 @@ func _update_countdown(sim) -> void:
 		_green_tick = sim.grid_go
 		_go_until = _t + GO_S
 	var title: Label = get_meta("count_title")
+	# While others are racing, the lights stay small and high, out of the race's way.
+	var small: bool = not sim.racers.is_empty()
+	if small != bool(_countdown.get_meta("small", false)):
+		_countdown.set_meta("small", small)
+		_countdown.offset_top = 96 if small else 210
+		title.add_theme_font_size_override("font_size", 22 if small else 34)
+		_count_label.add_theme_font_size_override("font_size", 64 if small else 130)
+		_count_key = ""  # rebuild the name chips at the new size
 	if not waiting.is_empty():
 		_countdown.visible = true
 		title.visible = true
@@ -627,7 +639,7 @@ func _update_countdown(sim) -> void:
 				c.queue_free()
 			for q in waiting:
 				var chip := _panel(color_for(q.player_id).darkened(0.35), 10, color_for(q.player_id), 3)
-				chip.add_child(_label(_nick(q.player_id), 26, Color.WHITE))
+				chip.add_child(_label(_nick(q.player_id), 18 if small else 26, Color.WHITE))
 				_count_names.add_child(chip)
 	elif _t < _go_until:
 		_countdown.visible = true
