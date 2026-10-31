@@ -66,15 +66,36 @@ Sweep flags:
   - `server_net.gd`: the real WebSocket client (`--server`): hello with the game key, auto-reconnect, unpacks `welcome`, merges `config.updated`.
   - `roster_assets.gd`: per-player specs from the roster, ride-drawing downloads, and hero/avatar renders + uploads via `AvatarRenderer`.
   - `mock_net.gd`: the fake server and phones. It spawns players with random builds, routes and styles, launches runs, taps boosts (skilled players tap inside zones) and logs the `game.run.*` messages it would send.
-- `world/`:
-  - `world_builder.gd`: the procedural grey-box toy world.
-  - `racer_view.gd`: placeholder racers.
-  - `weather_fx.gd`: rain, wind and storm visuals.
-  - `camera_rig.gd`: simple follow, wide and fork cameras.
+- `world/`: the countryside world (see **World pipeline** below).
+  - `course_world.tscn`: baked from the course by `tools/bake_world.gd`. Don't hand-edit.
+  - `decor.tscn`, `environment.tscn`: hand-editable landmarks, sky and lighting.
+  - `landscape.gd`, `terrain_shape.gd`, `viewpoints.gd`, `mesh_batch.gd`: data and helpers the bake uses.
+  - `racer_view.gd`: placeholder racers (mock mode).
+  - `weather_fx.gd`: rain, wind and storm visuals, plus the global shader parameters `road_wetness`, `wind_strength` and `wind_dir`.
+  - `camera_rig.gd`: simple follow, wide and fork cameras. Fork shots come from `viewpoints.gd`.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
 - `world/landscape.gd`: the terrain features each fork alternative is built around (pond, inflow stream, jump dip, knoll, valley, hills), anchored to the course.
+
+## World pipeline (countryside)
+
+`sim/course.gd` is the single source of truth for the racing line. The world is built from it with three CC0/MIT tools in `addons/`: **Terrain3D** (terrain, texture painting and the grass instancer), **Godot Road Generator** (road meshes) and **ProtonScatter** (trees, bushes, rocks and hedges). Assets and licences are listed in `assets/CREDITS.md`.
+
+| Step | Command | Output |
+|---|---|---|
+| 1. Check the layout | `godot --headless --path . --script res://tools/layout_map.gd` | `docs/layout_map.png`, exit 1 on bad geometry |
+| 2. Bake the world | `godot --headless --path . --script res://tools/bake_world.gd` | `world/course_world.tscn`, `world/terrain_data/`, `world/baked/`, `world/vegetation/` |
+| 3. Check the world | `godot --headless --path . --script res://tools/world_check.gd` | exit 1 if anything is scattered on a road or in water, floats or sinks more than 0.3 m, the terrain pokes through a road, or an asset is missing |
+| 4. Benchmark | `godot --path . --resolution 1920x1080 --script res://tools/bench.gd -- --seconds=30 [--cam=wide]` | average and 1% low fps with 20 mock racers, exit 1 below 60 |
+| 5. Screenshots | `godot --path . --resolution 1920x1080 --script res://tools/shots.gd -- --out=DIR` | fixed viewpoints from `world/viewpoints.gd` |
+
+- **Re-sync after editing the course:** run steps 1–3. The bake rebuilds the terrain (meadow levelled to the roads, pond, stream, dip, knoll, valley), the roads, water, course structures (kicker, causeway rails, lane fence) and vegetation. `--only=roads` (or `water`, `structures`) re-bakes single stages; vegetation needs the terrain stage too.
+- **Editing in the Godot editor:** open `world/course_world.tscn` to inspect, but its contents are regenerated, so tune the bake or the materials in `world/materials/` and `world/vegetation/materials/` instead. Those are created once and kept on later bakes. `world/decor.tscn` (gantries, grid, flags, grandstand, signposts, stone bridge, ford posts) and `world/environment.tscn` (HDRI sky, sun, post-processing) are yours to edit. They come from `tools/seed_decor.gd` and `tools/seed_environment.gd`, which refuse to overwrite them without `--force`.
+- **No fallbacks:** a missing scene, texture or model stops the bake (nothing is saved) and the game quits with an error.
+- Local add-on patches are listed in `assets/CREDITS.md`.
+
+Current results (2026-10-31, M4 Max, 1920×1080, 20 racers, vsync off): about 105–120 fps on average (the 120 looks like the display's cap); 1% low 94–102 fps across the follow, wide and fork cameras. The world check covers about 5,000 scattered and 35,000 ground-cover instances, 16 grounded landmarks and 3,270 road samples. Screenshots are in `docs/screenshots/`.
 
 ## Village circuit (second track)
 

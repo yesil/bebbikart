@@ -690,7 +690,7 @@ func _foliage_material(model: String, tex: Texture2D, sway_h: float, crown: Vect
 		m.set_shader_parameter("sway_height", sway_h)
 		m.set_shader_parameter("sway", 0.06 * sway_h)
 		m.set_shader_parameter("crown_center", crown)
-		m.set_shader_parameter("normal_bend", 0.35 if ground_cover else 0.85)
+		m.set_shader_parameter("normal_bend", 0.35 if ground_cover else 1.0)
 		var look: Array = LEAF_LOOK.get(tex_name, [Color.WHITE, 0.0])
 		m.set_shader_parameter("tint", look[0])
 		m.set_shader_parameter("recolor", look[1])

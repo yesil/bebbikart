@@ -286,7 +286,7 @@ func _finish() -> void:
 			var p := r.world_at(float(s), side * (hw + 2.4))
 			p.y = _ground(p)
 			_flag(decor, "Flag_%d_%s" % [s, "L" if side < 0.0 else "R"], p,
-				_flag_mat("flag_%d" % (i % 4), colors[i % 4], Color.WHITE, 0.0))
+				_flag_mat("flag_%d" % (i % 4), colors[i % 4], Color.WHITE, 0.0), 0.9, 0.55, 4.0)
 			i += 1
 
 
@@ -336,10 +336,10 @@ func _grandstand() -> void:
 	var s := L - 12.0
 	var p := r.world_at(s, hw + 6.5)
 	p.y = _ground(p)
-	var fwd := r.tangent_at(s)
-	# Faces the road: local -X points at the track.
-	var right := fwd.cross(Vector3.UP) * -1.0
-	var g := _group(decor, "Grandstand", Transform3D(Basis(fwd * -1.0, Vector3.UP, right), p))
+	# Local +Z points away from the road (the stand is on the +d side), so the bottom row is
+	# nearest the track and the stand rises away from it.
+	var away := r.normal_at(s)
+	var g := _group(decor, "Grandstand", Transform3D(Basis(Vector3.UP.cross(away), Vector3.UP, away), p))
 	var length := 18.0
 	var steps := 5
 	for k in steps:
@@ -350,6 +350,7 @@ func _grandstand() -> void:
 		for i in n:
 			var sx := -length * 0.5 + 0.75 + i * (length - 1.5) / (n - 1)
 			_box(g, "Seat%d_%d" % [k, i], Vector3(0.55, 0.12, 0.45), Vector3(sx, y + 0.06, x - 0.1), mats.seat_colors[(i + k) % 4])
+	_crowd(g, length, steps)
 	var top := 0.45 * steps
 	for xi: float in [-length * 0.5, length * 0.5]:
 		for zi: float in [0.0, steps * 1.0]:
@@ -357,6 +358,42 @@ func _grandstand() -> void:
 	_box(g, "Roof", Vector3(length + 0.6, 0.15, steps + 1.2), Vector3(0, top + 2.45, steps * 0.5 - 0.3), mats.metal_blue, Vector3(-0.08, 0, 0))
 	_box(g, "Backboard", Vector3(length, 2.2, 0.1), Vector3(0, top + 1.3, steps * 1.0 + 0.4), mats.banner)
 	_label(g, "Sponsor", "BEBBIKART", Vector3(0, top + 1.3, steps * 1.0 + 0.34), 0.012, Color(0.85, 0.15, 0.15))
+
+
+## Seated spectators, merged into one mesh per shirt colour and one per skin tone (MultiMesh
+## instance data can't be saved from a headless run).
+func _crowd(parent: Node3D, length: float, steps: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var shirts := [Color(0.85, 0.2, 0.2), Color(0.2, 0.45, 0.9), Color(0.95, 0.75, 0.15), Color(0.25, 0.65, 0.3),
+		Color(0.9, 0.45, 0.7), Color(0.95, 0.95, 0.95), Color(0.55, 0.3, 0.75), Color(1.0, 0.55, 0.15)]
+	var skins := [Color(0.98, 0.82, 0.68), Color(0.85, 0.64, 0.47), Color(0.6, 0.42, 0.3), Color(0.4, 0.27, 0.2)]
+	var bodies := []
+	for c in shirts:
+		bodies.append(MeshBatch.new())
+	var heads := []
+	for c in skins:
+		heads.append(MeshBatch.new())
+	for k in steps:
+		var y := 0.45 * (k + 1)
+		var n := 12
+		for i in n:
+			if rng.randf() < 0.22:
+				continue  # a few empty seats
+			var x := -length * 0.5 + 0.75 + i * (length - 1.5) / (n - 1) + rng.randf_range(-0.08, 0.08)
+			var z := 1.0 * k + 0.05
+			var h := rng.randf_range(0.55, 0.7)
+			(bodies[rng.randi() % shirts.size()] as MeshBatch).cylinder(Vector3(x, y + 0.12, z), 0.2, h, 8, 0.15)
+			(heads[rng.randi() % skins.size()] as MeshBatch).sphere(Vector3(x, y + 0.12 + h + 0.14, z - 0.02), 0.14)
+	for list in [[bodies, shirts, "Spectators"], [heads, skins, "SpectatorHeads"]]:
+		for i in (list[0] as Array).size():
+			var mb: MeshBatch = list[0][i]
+			if mb.count == 0:
+				continue
+			var mi := MeshInstance3D.new()
+			mi.name = "%s%d" % [list[2], i]
+			mi.mesh = mb.commit(_plain("%s_%d" % [String(list[2]).to_snake_case(), i], list[1][i], 0.85, 0.0))
+			parent.add_child(mi)
 
 
 # ---------------------------------------------------------------- forks

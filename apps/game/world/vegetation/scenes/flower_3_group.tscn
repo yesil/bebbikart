@@ -2,5 +2,5 @@
 
 [ext_resource type="ArrayMesh" path="res://world/vegetation/meshes/flower_3_group.res" id="1_8uwdv"]
 
-[node name="Flower_3_Group" type="MeshInstance3D" unique_id=363543275]
+[node name="Flower_3_Group" type="MeshInstance3D" unique_id=508696041]
 mesh = ExtResource("1_8uwdv")

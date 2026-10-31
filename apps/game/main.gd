@@ -27,6 +27,7 @@ const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
 const WORLD_SCENE := "res://world/course_world.tscn"
 const DECOR_SCENE := "res://world/decor.tscn"
 const LIGHTING_SCENE := "res://world/environment.tscn"
+const Viewpoints = preload("res://world/viewpoints.gd")
 const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
@@ -129,11 +130,7 @@ func _build_scene() -> void:
 	if track == "village":
 		camera.fork_shots = _village_fork_shots()
 	else:
-		camera.fork_shots = [
-			[Vector3(18, 9, 60), Vector3(3, 0, 78)],      # ramp: jump vs around
-			[Vector3(25, 14, 145), Vector3(-10, 0, 170)], # pond: water vs bridge
-			[Vector3(-14, 9, 230), Vector3(6, 1, 252)],   # crossing: exposed vs sheltered
-		]
+		camera.fork_shots = Viewpoints.fork_shots(course)  # one shot per fork split
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)

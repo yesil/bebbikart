@@ -1468,9 +1468,9 @@ closed = false
 thickness = 11.0
 curve = SubResource("Curve3D_s2pdv")
 
-[node name="CourseWorld" type="Node3D" unique_id=1793613555]
+[node name="CourseWorld" type="Node3D" unique_id=2018874990]
 
-[node name="Terrain" type="Terrain3D" parent="." unique_id=1501081935]
+[node name="Terrain" type="Terrain3D" parent="." unique_id=1166532270]
 data_directory = "res://world/terrain_data"
 material = ExtResource("1_dgtpf")
 assets = ExtResource("2_fte1r")
@@ -1479,11 +1479,11 @@ top_level = true
 metadata/baked = true
 metadata/_edit_lock_ = true
 
-[node name="Roads" type="Node3D" parent="." unique_id=102656796]
+[node name="Roads" type="Node3D" parent="." unique_id=1078971165]
 script = ExtResource("3_46fb6")
 metadata/baked = true
 
-[node name="start" type="Node3D" parent="Roads" unique_id=2133389548]
+[node name="start" type="Node3D" parent="Roads" unique_id=801415067]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("5_qgtmh")
 flatten_terrain = false
@@ -1494,7 +1494,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_003")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/start" unique_id=1153893325]
+[node name="RP_000" type="Node3D" parent="Roads/start" unique_id=268353209]
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
 auto_lanes = false
@@ -1508,7 +1508,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/start" unique_id=2143302691]
+[node name="RP_001" type="Node3D" parent="Roads/start" unique_id=292732702]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 5)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1524,7 +1524,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/start" unique_id=1560029316]
+[node name="RP_002" type="Node3D" parent="Roads/start" unique_id=236974078]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 10)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1540,7 +1540,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/start" unique_id=1271401781]
+[node name="RP_003" type="Node3D" parent="Roads/start" unique_id=1548203211]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 15)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1555,7 +1555,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="hills1" type="Node3D" parent="Roads" unique_id=371318541]
+[node name="hills1" type="Node3D" parent="Roads" unique_id=1025721697]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("5_qgtmh")
 flatten_terrain = false
@@ -1566,7 +1566,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_007")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/hills1" unique_id=66207553]
+[node name="RP_000" type="Node3D" parent="Roads/hills1" unique_id=312643643]
 transform = Transform3D(1, 0, 0, 0, 0.9998947, 0.014514616, 0, -0.014514616, 0.9998947, 0, 0, 15)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1581,7 +1581,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/hills1" unique_id=1356958768]
+[node name="RP_001" type="Node3D" parent="Roads/hills1" unique_id=1418630664]
 transform = Transform3D(0.98780835, -0.016010217, 0.15484929, 0, 0.9946975, 0.10284402, -0.15567476, -0.10159019, 0.9825705, 0.22202802, 0.37390482, 20.796959)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1597,7 +1597,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/hills1" unique_id=503058069]
+[node name="RP_002" type="Node3D" parent="Roads/hills1" unique_id=1166317627]
 transform = Transform3D(0.99897325, -0.0027218375, 0.04522259, 0, 0.9981937, 0.06007884, -0.04530443, -0.060017154, 0.9971687, 1.2024122, 0.920218, 26.499466)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1613,7 +1613,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/hills1" unique_id=567344097]
+[node name="RP_003" type="Node3D" parent="Roads/hills1" unique_id=1016872045]
 transform = Transform3D(0.9719893, -0.011111655, -0.23476249, 0, 0.9988818, -0.047278553, 0.23502529, 0.045954246, 0.9709024, 0.544559, 0.90866166, 32.257183)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1629,7 +1629,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/hills1" unique_id=1040253211]
+[node name="RP_004" type="Node3D" parent="Roads/hills1" unique_id=1658135101]
 transform = Transform3D(0.997023, -0.0044281185, -0.07697823, 0, 0.99834967, -0.05742936, 0.077105485, 0.05725839, 0.9953775, -0.060408477, 0.5618075, 38.023193)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1645,7 +1645,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/hills1" unique_id=1275290302]
+[node name="RP_005" type="Node3D" parent="Roads/hills1" unique_id=1862333621]
 transform = Transform3D(0.9924303, -0.0019314565, -0.122793406, 0, 0.9998763, -0.015727373, 0.12280859, 0.015608322, 0.99230766, -1.0849879, 0.3896752, 43.74418)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1661,7 +1661,7 @@ prior_pt_init = NodePath("../RP_004")
 next_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="RP_006" type="Node3D" parent="Roads/hills1" unique_id=593202147]
+[node name="RP_006" type="Node3D" parent="Roads/hills1" unique_id=1462039146]
 transform = Transform3D(0.9795777, 0.009747851, 0.2008295, 0, 0.9988242, -0.048480865, -0.20106594, 0.047490776, 0.97842586, -0.8632202, 0.15673742, 49.53158)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1677,7 +1677,7 @@ prior_pt_init = NodePath("../RP_005")
 next_pt_init = NodePath("../RP_007")
 metadata/baked = true
 
-[node name="RP_007" type="Node3D" parent="Roads/hills1" unique_id=1539167612]
+[node name="RP_007" type="Node3D" parent="Roads/hills1" unique_id=520661173]
 transform = Transform3D(0.99961597, 2.3296536e-05, 0.027712122, 0, 0.9999997, -0.00084066205, -0.027712129, 0.0008403392, 0.99961567, 1.4901161e-08, 0, 55.269928)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1692,7 +1692,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="ramp_jump_run_up" type="Node3D" parent="Roads" unique_id=41044451]
+[node name="ramp_jump_run_up" type="Node3D" parent="Roads" unique_id=1995221428]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("5_qgtmh")
 flatten_terrain = false
@@ -1703,7 +1703,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_003")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/ramp_jump_run_up" unique_id=891162447]
+[node name="RP_000" type="Node3D" parent="Roads/ramp_jump_run_up" unique_id=1445284337]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 55.269928)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1718,7 +1718,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/ramp_jump_run_up" unique_id=1664590516]
+[node name="RP_001" type="Node3D" parent="Roads/ramp_jump_run_up" unique_id=562953983]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 60.269928)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1734,7 +1734,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/ramp_jump_run_up" unique_id=413486548]
+[node name="RP_002" type="Node3D" parent="Roads/ramp_jump_run_up" unique_id=370840952]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 65.26993)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1750,7 +1750,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/ramp_jump_run_up" unique_id=1942142639]
+[node name="RP_003" type="Node3D" parent="Roads/ramp_jump_run_up" unique_id=1014468893]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 70.26993)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1765,7 +1765,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="ramp_jump_landing" type="Node3D" parent="Roads" unique_id=652491290]
+[node name="ramp_jump_landing" type="Node3D" parent="Roads" unique_id=576640406]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("5_qgtmh")
 flatten_terrain = false
@@ -1776,7 +1776,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_006")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=154980751]
+[node name="RP_000" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=1860586271]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 88.26993)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1791,7 +1791,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=715008071]
+[node name="RP_001" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=269525440]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 94.073944)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1807,7 +1807,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=450855829]
+[node name="RP_002" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=1644005716]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 99.87796)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1823,7 +1823,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=1580469674]
+[node name="RP_003" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=744753743]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 105.68198)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1839,7 +1839,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=2083178449]
+[node name="RP_004" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=40991181]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 111.48599)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1855,7 +1855,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=249664396]
+[node name="RP_005" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=2115673178]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 117.29001)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1871,7 +1871,7 @@ prior_pt_init = NodePath("../RP_004")
 next_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="RP_006" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=1220453029]
+[node name="RP_006" type="Node3D" parent="Roads/ramp_jump_landing" unique_id=2067629931]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 123.094025)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1886,7 +1886,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="ramp_around" type="Node3D" parent="Roads" unique_id=1941146017]
+[node name="ramp_around" type="Node3D" parent="Roads" unique_id=652453608]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("7_xx502")
 flatten_terrain = false
@@ -1897,7 +1897,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_013")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/ramp_around" unique_id=1637582588]
+[node name="RP_000" type="Node3D" parent="Roads/ramp_around" unique_id=1623479034]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0, 55.269928)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1912,7 +1912,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/ramp_around" unique_id=472586410]
+[node name="RP_001" type="Node3D" parent="Roads/ramp_around" unique_id=660587298]
 transform = Transform3D(0.990114, 0, 0.14026509, 0, 1, 0, -0.14026509, 0, 0.990114, 0.20083964, 0, 61.074017)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1928,7 +1928,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/ramp_around" unique_id=1160447774]
+[node name="RP_002" type="Node3D" parent="Roads/ramp_around" unique_id=1946781502]
 transform = Transform3D(0.90835667, 0, 0.41819632, 0, 1, 0, -0.41819632, 0, 0.90835667, 1.8370106, 0, 66.63019)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1944,7 +1944,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/ramp_around" unique_id=645741950]
+[node name="RP_003" type="Node3D" parent="Roads/ramp_around" unique_id=105852755]
 transform = Transform3D(0.7503629, 0, 0.6610261, 0, 1, 0, -0.6610261, 0, 0.7503629, 4.9957795, 0, 71.48457)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1960,7 +1960,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/ramp_around" unique_id=986758297]
+[node name="RP_004" type="Node3D" parent="Roads/ramp_around" unique_id=839174980]
 transform = Transform3D(0.7795624, 0, 0.62632465, 0, 1.0000001, 0, -0.62632465, 0, 0.7795624, 9.030982, 0, 75.66073)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1976,7 +1976,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/ramp_around" unique_id=204474658]
+[node name="RP_005" type="Node3D" parent="Roads/ramp_around" unique_id=1848932416]
 transform = Transform3D(0.9263879, 0, 0.3765707, 0, 1, 0, -0.3765707, 0, 0.9263879, 11.967072, 0, 80.65317)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -1992,7 +1992,7 @@ prior_pt_init = NodePath("../RP_004")
 next_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="RP_006" type="Node3D" parent="Roads/ramp_around" unique_id=1676443243]
+[node name="RP_006" type="Node3D" parent="Roads/ramp_around" unique_id=1781191909]
 transform = Transform3D(0.9954567, 0, 0.09521574, 0, 1, 0, -0.09521574, 0, 0.9954567, 13.350352, 0, 86.27801)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2008,7 +2008,7 @@ prior_pt_init = NodePath("../RP_005")
 next_pt_init = NodePath("../RP_007")
 metadata/baked = true
 
-[node name="RP_007" type="Node3D" parent="Roads/ramp_around" unique_id=1505989390]
+[node name="RP_007" type="Node3D" parent="Roads/ramp_around" unique_id=648000658]
 transform = Transform3D(0.9954567, 0, -0.09521574, 0, 1, 0, 0.09521574, 0, 0.9954567, 13.350351, 0, 92.085754)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2024,7 +2024,7 @@ prior_pt_init = NodePath("../RP_006")
 next_pt_init = NodePath("../RP_008")
 metadata/baked = true
 
-[node name="RP_008" type="Node3D" parent="Roads/ramp_around" unique_id=645332951]
+[node name="RP_008" type="Node3D" parent="Roads/ramp_around" unique_id=1553893441]
 transform = Transform3D(0.9263879, 0, -0.3765707, 0, 1, 0, 0.3765707, 0, 0.9263879, 11.967069, 0, 97.710594)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2040,7 +2040,7 @@ prior_pt_init = NodePath("../RP_007")
 next_pt_init = NodePath("../RP_009")
 metadata/baked = true
 
-[node name="RP_009" type="Node3D" parent="Roads/ramp_around" unique_id=591051742]
+[node name="RP_009" type="Node3D" parent="Roads/ramp_around" unique_id=286780025]
 transform = Transform3D(0.7795624, 0, -0.62632465, 0, 1.0000001, 0, 0.62632465, 0, 0.7795624, 9.030977, 0, 102.70303)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2056,7 +2056,7 @@ prior_pt_init = NodePath("../RP_008")
 next_pt_init = NodePath("../RP_010")
 metadata/baked = true
 
-[node name="RP_010" type="Node3D" parent="Roads/ramp_around" unique_id=547787777]
+[node name="RP_010" type="Node3D" parent="Roads/ramp_around" unique_id=1627695422]
 transform = Transform3D(0.7503631, 0, -0.6610259, 0, 1, 0, 0.6610259, 0, 0.7503631, 4.9957747, 0, 106.87919)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2072,7 +2072,7 @@ prior_pt_init = NodePath("../RP_009")
 next_pt_init = NodePath("../RP_011")
 metadata/baked = true
 
-[node name="RP_011" type="Node3D" parent="Roads/ramp_around" unique_id=190077784]
+[node name="RP_011" type="Node3D" parent="Roads/ramp_around" unique_id=1512613179]
 transform = Transform3D(0.9083557, 0, -0.41819844, 0, 1, 0, 0.41819844, 0, 0.9083557, 1.8370084, 0, 111.733574)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2088,7 +2088,7 @@ prior_pt_init = NodePath("../RP_010")
 next_pt_init = NodePath("../RP_012")
 metadata/baked = true
 
-[node name="RP_012" type="Node3D" parent="Roads/ramp_around" unique_id=1541604572]
+[node name="RP_012" type="Node3D" parent="Roads/ramp_around" unique_id=199607081]
 transform = Transform3D(0.9901142, 0, -0.14026335, 0, 1, 0, 0.14026335, 0, 0.9901142, 0.20084013, 0, 117.28974)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2104,7 +2104,7 @@ prior_pt_init = NodePath("../RP_011")
 next_pt_init = NodePath("../RP_013")
 metadata/baked = true
 
-[node name="RP_013" type="Node3D" parent="Roads/ramp_around" unique_id=486661341]
+[node name="RP_013" type="Node3D" parent="Roads/ramp_around" unique_id=1828639121]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.2945993e-07, 0, 123.093834)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2119,7 +2119,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_012")
 metadata/baked = true
 
-[node name="hills2" type="Node3D" parent="Roads" unique_id=552593598]
+[node name="hills2" type="Node3D" parent="Roads" unique_id=1718659795]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("5_qgtmh")
 flatten_terrain = false
@@ -2130,7 +2130,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_005")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/hills2" unique_id=420572133]
+[node name="RP_000" type="Node3D" parent="Roads/hills2" unique_id=168946382]
 transform = Transform3D(1, 0, 0, 0, 0.99985754, 0.01687928, 0, -0.01687928, 0.99985754, 1.4901161e-08, 0, 123.094025)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2145,7 +2145,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/hills2" unique_id=1489653646]
+[node name="RP_001" type="Node3D" parent="Roads/hills2" unique_id=1204204628]
 transform = Transform3D(1, 0, 0, 0, 0.9941837, 0.107697934, 0, -0.107697934, 0.9941837, 1.4901161e-08, 0.3299321, 128.09344)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2161,7 +2161,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/hills2" unique_id=1216736734]
+[node name="RP_002" type="Node3D" parent="Roads/hills2" unique_id=1677081985]
 transform = Transform3D(1, 0, 0, 0, 0.9967102, 0.08104847, 0, -0.08104847, 0.9967102, 1.4901161e-08, 0.86345845, 133.07755)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2177,7 +2177,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/hills2" unique_id=1923018497]
+[node name="RP_003" type="Node3D" parent="Roads/hills2" unique_id=225525512]
 transform = Transform3D(1, 0, 0, 0, 0.99916774, -0.04078979, 0, 0.04078979, 0.99916774, 1.4901161e-08, 0.9558878, 138.08577)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2193,7 +2193,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/hills2" unique_id=482168476]
+[node name="RP_004" type="Node3D" parent="Roads/hills2" unique_id=1335360376]
 transform = Transform3D(1, 0, 0, 0, 0.9974004, -0.07205905, 0, 0.07205905, 0.9974004, 1.4901161e-08, 0.626171, 143.08746)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2209,7 +2209,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/hills2" unique_id=153429560]
+[node name="RP_005" type="Node3D" parent="Roads/hills2" unique_id=1097077235]
 transform = Transform3D(1, 0, 0, 0, 0.99993, -0.01183374, 0, 0.01183374, 0.99993, 1.4901161e-08, 0.4, 148.09402)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2224,7 +2224,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="pond_water_in" type="Node3D" parent="Roads" unique_id=259797243]
+[node name="pond_water_in" type="Node3D" parent="Roads" unique_id=2031234593]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("5_qgtmh")
 flatten_terrain = false
@@ -2235,7 +2235,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_002")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/pond_water_in" unique_id=1199171601]
+[node name="RP_000" type="Node3D" parent="Roads/pond_water_in" unique_id=154387706]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 148.09402)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2250,7 +2250,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/pond_water_in" unique_id=1942400522]
+[node name="RP_001" type="Node3D" parent="Roads/pond_water_in" unique_id=291684785]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 153.09402)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2266,7 +2266,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/pond_water_in" unique_id=1072117529]
+[node name="RP_002" type="Node3D" parent="Roads/pond_water_in" unique_id=2110202443]
 transform = Transform3D(1, 0, 0, 0, 0.99928606, -0.037780654, 0, 0.037780654, 0.99928606, 1.4901161e-08, 0.3793463, 158.09378)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2281,7 +2281,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="pond_ford" type="Node3D" parent="Roads" unique_id=1895462193]
+[node name="pond_ford" type="Node3D" parent="Roads" unique_id=1779453272]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("8_rqmar")
 flatten_terrain = false
@@ -2292,7 +2292,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_014")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/pond_ford" unique_id=199260415]
+[node name="RP_000" type="Node3D" parent="Roads/pond_ford" unique_id=1102003900]
 transform = Transform3D(1, 0, 0, 0, 0.99928606, -0.037780654, 0, 0.037780654, 0.99928606, 1.4901161e-08, 0.3793463, 158.09378)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2307,7 +2307,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/pond_ford" unique_id=1411371815]
+[node name="RP_001" type="Node3D" parent="Roads/pond_ford" unique_id=1173946603]
 transform = Transform3D(1, 0, 0, 0, 0.9971981, -0.07480603, 0, 0.07480603, 0.9971981, 1.4901161e-08, -0.0998629, 163.78719)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2323,7 +2323,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/pond_ford" unique_id=421108881]
+[node name="RP_002" type="Node3D" parent="Roads/pond_ford" unique_id=1376410938]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 169.49869)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2339,7 +2339,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/pond_ford" unique_id=331318931]
+[node name="RP_003" type="Node3D" parent="Roads/pond_ford" unique_id=581796501]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 175.21297)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2355,7 +2355,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/pond_ford" unique_id=643992968]
+[node name="RP_004" type="Node3D" parent="Roads/pond_ford" unique_id=182056926]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 180.92726)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2371,7 +2371,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/pond_ford" unique_id=1984146473]
+[node name="RP_005" type="Node3D" parent="Roads/pond_ford" unique_id=1550572769]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 186.64154)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2387,7 +2387,7 @@ prior_pt_init = NodePath("../RP_004")
 next_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="RP_006" type="Node3D" parent="Roads/pond_ford" unique_id=20889118]
+[node name="RP_006" type="Node3D" parent="Roads/pond_ford" unique_id=731490472]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 192.35583)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2403,7 +2403,7 @@ prior_pt_init = NodePath("../RP_005")
 next_pt_init = NodePath("../RP_007")
 metadata/baked = true
 
-[node name="RP_007" type="Node3D" parent="Roads/pond_ford" unique_id=542372562]
+[node name="RP_007" type="Node3D" parent="Roads/pond_ford" unique_id=1516131014]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 198.07011)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2419,7 +2419,7 @@ prior_pt_init = NodePath("../RP_006")
 next_pt_init = NodePath("../RP_008")
 metadata/baked = true
 
-[node name="RP_008" type="Node3D" parent="Roads/pond_ford" unique_id=658152797]
+[node name="RP_008" type="Node3D" parent="Roads/pond_ford" unique_id=1651475464]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 203.78441)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2435,7 +2435,7 @@ prior_pt_init = NodePath("../RP_007")
 next_pt_init = NodePath("../RP_009")
 metadata/baked = true
 
-[node name="RP_009" type="Node3D" parent="Roads/pond_ford" unique_id=229814416]
+[node name="RP_009" type="Node3D" parent="Roads/pond_ford" unique_id=627412324]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 209.49869)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2451,7 +2451,7 @@ prior_pt_init = NodePath("../RP_008")
 next_pt_init = NodePath("../RP_010")
 metadata/baked = true
 
-[node name="RP_010" type="Node3D" parent="Roads/pond_ford" unique_id=1586830988]
+[node name="RP_010" type="Node3D" parent="Roads/pond_ford" unique_id=884837338]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 215.21298)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2467,7 +2467,7 @@ prior_pt_init = NodePath("../RP_009")
 next_pt_init = NodePath("../RP_011")
 metadata/baked = true
 
-[node name="RP_011" type="Node3D" parent="Roads/pond_ford" unique_id=409331039]
+[node name="RP_011" type="Node3D" parent="Roads/pond_ford" unique_id=79596037]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 220.92726)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2483,7 +2483,7 @@ prior_pt_init = NodePath("../RP_010")
 next_pt_init = NodePath("../RP_012")
 metadata/baked = true
 
-[node name="RP_012" type="Node3D" parent="Roads/pond_ford" unique_id=1168312170]
+[node name="RP_012" type="Node3D" parent="Roads/pond_ford" unique_id=1156553104]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, -0.2, 226.64156)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2499,7 +2499,7 @@ prior_pt_init = NodePath("../RP_011")
 next_pt_init = NodePath("../RP_013")
 metadata/baked = true
 
-[node name="RP_013" type="Node3D" parent="Roads/pond_ford" unique_id=957578032]
+[node name="RP_013" type="Node3D" parent="Roads/pond_ford" unique_id=1614176126]
 transform = Transform3D(1, 0, 0, 0, 0.99727905, 0.07371941, 0, -0.07371941, 0.99727905, 1.4901161e-08, -0.103433, 232.3532)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2515,7 +2515,7 @@ prior_pt_init = NodePath("../RP_012")
 next_pt_init = NodePath("../RP_014")
 metadata/baked = true
 
-[node name="RP_014" type="Node3D" parent="Roads/pond_ford" unique_id=1271774932]
+[node name="RP_014" type="Node3D" parent="Roads/pond_ford" unique_id=1331950050]
 transform = Transform3D(1, 0, 0, 0, 0.9992266, 0.03932184, 0, -0.03932184, 0.9992266, 1.4901161e-08, 0.3770334, 238.04652)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2530,7 +2530,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_013")
 metadata/baked = true
 
-[node name="pond_water_out" type="Node3D" parent="Roads" unique_id=1604991368]
+[node name="pond_water_out" type="Node3D" parent="Roads" unique_id=1081587126]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("5_qgtmh")
 flatten_terrain = false
@@ -2541,7 +2541,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_002")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/pond_water_out" unique_id=358250223]
+[node name="RP_000" type="Node3D" parent="Roads/pond_water_out" unique_id=128949116]
 transform = Transform3D(1, 0, 0, 0, 0.9992266, 0.03932184, 0, -0.03932184, 0.9992266, 1.4901161e-08, 0.3770334, 238.04652)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2556,7 +2556,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/pond_water_out" unique_id=906593301]
+[node name="RP_001" type="Node3D" parent="Roads/pond_water_out" unique_id=692486795]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 243.06859)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2572,7 +2572,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/pond_water_out" unique_id=1839629661]
+[node name="RP_002" type="Node3D" parent="Roads/pond_water_out" unique_id=736184313]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 248.09097)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2587,7 +2587,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="pond_bridge" type="Node3D" parent="Roads" unique_id=1916278019]
+[node name="pond_bridge" type="Node3D" parent="Roads" unique_id=255449895]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("7_xx502")
 flatten_terrain = false
@@ -2599,7 +2599,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_022")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/pond_bridge" unique_id=567275551]
+[node name="RP_000" type="Node3D" parent="Roads/pond_bridge" unique_id=62122103]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 148.09402)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2614,7 +2614,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/pond_bridge" unique_id=46191350]
+[node name="RP_001" type="Node3D" parent="Roads/pond_bridge" unique_id=1721293772]
 transform = Transform3D(0.96185446, 0, -0.27356184, 0, 1, 0, 0.27356184, 0, 0.96185446, -0.40457037, 0.4, 153.9656)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2630,7 +2630,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/pond_bridge" unique_id=1913466241]
+[node name="RP_002" type="Node3D" parent="Roads/pond_bridge" unique_id=1796277527]
 transform = Transform3D(0.66754156, 0, -0.7445725, 0, 1, 0, 0.7445725, 0, 0.66754156, -3.496088, 0.4, 158.90703)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2646,7 +2646,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/pond_bridge" unique_id=1303499532]
+[node name="RP_003" type="Node3D" parent="Roads/pond_bridge" unique_id=1786998712]
 transform = Transform3D(0.20272525, 0, -0.97923565, 0, 1, 0, 0.97923565, 0, 0.20272525, -8.744304, 0.4, 161.44516)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2662,7 +2662,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/pond_bridge" unique_id=1602145080]
+[node name="RP_004" type="Node3D" parent="Roads/pond_bridge" unique_id=610396679]
 transform = Transform3D(0.39517024, 0, -0.91860795, 0, 1, 0, 0.91860795, 0, 0.39517024, -14.389837, 0.4, 163.14648)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2678,7 +2678,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/pond_bridge" unique_id=1827996340]
+[node name="RP_005" type="Node3D" parent="Roads/pond_bridge" unique_id=1734922062]
 transform = Transform3D(0.5934211, 0, -0.80489224, 0, 1.0000001, 0, 0.80489224, 0, 0.5934211, -19.50375, 0.4, 166.08011)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2694,7 +2694,7 @@ prior_pt_init = NodePath("../RP_004")
 next_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="RP_006" type="Node3D" parent="Roads/pond_bridge" unique_id=2037343241]
+[node name="RP_006" type="Node3D" parent="Roads/pond_bridge" unique_id=1939610482]
 transform = Transform3D(0.76066786, 0, -0.6491413, 0, 1, 0, 0.6491413, 0, 0.76066786, -23.818192, 0.4, 170.09796)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2710,7 +2710,7 @@ prior_pt_init = NodePath("../RP_005")
 next_pt_init = NodePath("../RP_007")
 metadata/baked = true
 
-[node name="RP_007" type="Node3D" parent="Roads/pond_bridge" unique_id=194734989]
+[node name="RP_007" type="Node3D" parent="Roads/pond_bridge" unique_id=302032816]
 transform = Transform3D(0.8881751, 0, -0.45950523, 0, 1, 0, 0.45950523, 0, 0.8881751, -27.107973, 0.4, 174.99034)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2726,7 +2726,7 @@ prior_pt_init = NodePath("../RP_006")
 next_pt_init = NodePath("../RP_008")
 metadata/baked = true
 
-[node name="RP_008" type="Node3D" parent="Roads/pond_bridge" unique_id=2121431625]
+[node name="RP_008" type="Node3D" parent="Roads/pond_bridge" unique_id=153228911]
 transform = Transform3D(0.9693283, 0, -0.2457698, 0, 1.0000001, 0, 0.2457698, 0, 0.9693283, -29.201296, 0.4, 180.50192)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2742,7 +2742,7 @@ prior_pt_init = NodePath("../RP_007")
 next_pt_init = NodePath("../RP_009")
 metadata/baked = true
 
-[node name="RP_009" type="Node3D" parent="Roads/pond_bridge" unique_id=1097372787]
+[node name="RP_009" type="Node3D" parent="Roads/pond_bridge" unique_id=116133673]
 transform = Transform3D(0.99976224, 0.00039010085, -0.021801574, 0, 0.99984, 0.017890379, 0.021805063, -0.017886125, 0.99960226, -29.988956, 0.40639666, 186.34494)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2758,7 +2758,7 @@ prior_pt_init = NodePath("../RP_008")
 next_pt_init = NodePath("../RP_010")
 metadata/baked = true
 
-[node name="RP_010" type="Node3D" parent="Roads/pond_bridge" unique_id=1700807365]
+[node name="RP_010" type="Node3D" parent="Roads/pond_bridge" unique_id=863443477]
 transform = Transform3D(1, 0, 0, 0, 0.9891378, 0.1469915, 0, -0.1469915, 0.9891378, -29.99657, 1.0185355, 192.21736)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2774,7 +2774,7 @@ prior_pt_init = NodePath("../RP_009")
 next_pt_init = NodePath("../RP_011")
 metadata/baked = true
 
-[node name="RP_011" type="Node3D" parent="Roads/pond_bridge" unique_id=1994279620]
+[node name="RP_011" type="Node3D" parent="Roads/pond_bridge" unique_id=1394944513]
 transform = Transform3D(1, 0, 0, 0, 1, 2.3850592e-07, 0, -2.3850592e-07, 1, -29.99657, 1.5996343, 198.09247)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2790,7 +2790,7 @@ prior_pt_init = NodePath("../RP_010")
 next_pt_init = NodePath("../RP_012")
 metadata/baked = true
 
-[node name="RP_012" type="Node3D" parent="Roads/pond_bridge" unique_id=506686591]
+[node name="RP_012" type="Node3D" parent="Roads/pond_bridge" unique_id=1639942191]
 transform = Transform3D(1, 0, 0, 0, 0.9891377, -0.14699195, 0, 0.14699195, 0.9891377, -29.99657, 1.018535, 203.96759)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2806,7 +2806,7 @@ prior_pt_init = NodePath("../RP_011")
 next_pt_init = NodePath("../RP_013")
 metadata/baked = true
 
-[node name="RP_013" type="Node3D" parent="Roads/pond_bridge" unique_id=1221257526]
+[node name="RP_013" type="Node3D" parent="Roads/pond_bridge" unique_id=829645303]
 transform = Transform3D(0.99976224, 0.00039011257, 0.021801574, 0, 0.99984, -0.017890917, -0.021805063, 0.017886663, 0.99960226, -29.988958, 0.4063967, 209.84001)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2822,7 +2822,7 @@ prior_pt_init = NodePath("../RP_012")
 next_pt_init = NodePath("../RP_014")
 metadata/baked = true
 
-[node name="RP_014" type="Node3D" parent="Roads/pond_bridge" unique_id=771025064]
+[node name="RP_014" type="Node3D" parent="Roads/pond_bridge" unique_id=1338413439]
 transform = Transform3D(0.96932685, 0, 0.24577518, 0, 1, 0, -0.24577518, 0, 0.96932685, -29.201296, 0.4, 215.68303)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2838,7 +2838,7 @@ prior_pt_init = NodePath("../RP_013")
 next_pt_init = NodePath("../RP_015")
 metadata/baked = true
 
-[node name="RP_015" type="Node3D" parent="Roads/pond_bridge" unique_id=907298149]
+[node name="RP_015" type="Node3D" parent="Roads/pond_bridge" unique_id=1093975909]
 transform = Transform3D(0.88817585, 0, 0.4595037, 0, 1, 0, -0.4595037, 0, 0.88817585, -27.107975, 0.4, 221.19461)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2854,7 +2854,7 @@ prior_pt_init = NodePath("../RP_014")
 next_pt_init = NodePath("../RP_016")
 metadata/baked = true
 
-[node name="RP_016" type="Node3D" parent="Roads/pond_bridge" unique_id=1768308212]
+[node name="RP_016" type="Node3D" parent="Roads/pond_bridge" unique_id=644394069]
 transform = Transform3D(0.760665, 0, 0.64914465, 0, 1, 0, -0.64914465, 0, 0.760665, -23.818186, 0.4, 226.08699)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2870,7 +2870,7 @@ prior_pt_init = NodePath("../RP_015")
 next_pt_init = NodePath("../RP_017")
 metadata/baked = true
 
-[node name="RP_017" type="Node3D" parent="Roads/pond_bridge" unique_id=1005710520]
+[node name="RP_017" type="Node3D" parent="Roads/pond_bridge" unique_id=1427404882]
 transform = Transform3D(0.59343547, 0, 0.8048816, 0, 1, 0, -0.8048816, 0, 0.59343547, -19.503748, 0.4, 230.10486)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2886,7 +2886,7 @@ prior_pt_init = NodePath("../RP_016")
 next_pt_init = NodePath("../RP_018")
 metadata/baked = true
 
-[node name="RP_018" type="Node3D" parent="Roads/pond_bridge" unique_id=664494435]
+[node name="RP_018" type="Node3D" parent="Roads/pond_bridge" unique_id=1608449949]
 transform = Transform3D(0.3951546, 0, 0.9186146, 0, 1, 0, -0.9186146, 0, 0.3951546, -14.389846, 0.4, 233.03847)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2902,7 +2902,7 @@ prior_pt_init = NodePath("../RP_017")
 next_pt_init = NodePath("../RP_019")
 metadata/baked = true
 
-[node name="RP_019" type="Node3D" parent="Roads/pond_bridge" unique_id=1365211267]
+[node name="RP_019" type="Node3D" parent="Roads/pond_bridge" unique_id=1326267143]
 transform = Transform3D(0.20269467, 0, 0.979242, 0, 1.0000001, 0, -0.979242, 0, 0.20269467, -8.744306, 0.4, 234.73979)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2918,7 +2918,7 @@ prior_pt_init = NodePath("../RP_018")
 next_pt_init = NodePath("../RP_020")
 metadata/baked = true
 
-[node name="RP_020" type="Node3D" parent="Roads/pond_bridge" unique_id=262834803]
+[node name="RP_020" type="Node3D" parent="Roads/pond_bridge" unique_id=1556813825]
 transform = Transform3D(0.66755587, 0, 0.7445597, 0, 1, 0, -0.7445597, 0, 0.66755587, -3.496093, 0.4, 237.27791)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2934,7 +2934,7 @@ prior_pt_init = NodePath("../RP_019")
 next_pt_init = NodePath("../RP_021")
 metadata/baked = true
 
-[node name="RP_021" type="Node3D" parent="Roads/pond_bridge" unique_id=996913489]
+[node name="RP_021" type="Node3D" parent="Roads/pond_bridge" unique_id=860727265]
 transform = Transform3D(0.96185446, 0, 0.2735619, 0, 1.0000001, 0, -0.2735619, 0, 0.96185446, -0.40456957, 0.4, 242.21935)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2950,7 +2950,7 @@ prior_pt_init = NodePath("../RP_020")
 next_pt_init = NodePath("../RP_022")
 metadata/baked = true
 
-[node name="RP_022" type="Node3D" parent="Roads/pond_bridge" unique_id=1625036278]
+[node name="RP_022" type="Node3D" parent="Roads/pond_bridge" unique_id=2132660465]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.3937395e-06, 0.4, 248.09093)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2965,7 +2965,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_021")
 metadata/baked = true
 
-[node name="cross_exposed" type="Node3D" parent="Roads" unique_id=564965583]
+[node name="cross_exposed" type="Node3D" parent="Roads" unique_id=1001118393]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("9_6x6sh")
 flatten_terrain = false
@@ -2977,7 +2977,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_011")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/cross_exposed" unique_id=1591997899]
+[node name="RP_000" type="Node3D" parent="Roads/cross_exposed" unique_id=522736348]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 248.09097)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -2992,7 +2992,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/cross_exposed" unique_id=103594064]
+[node name="RP_001" type="Node3D" parent="Roads/cross_exposed" unique_id=1207236878]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 253.88237)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3008,7 +3008,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/cross_exposed" unique_id=1042720091]
+[node name="RP_002" type="Node3D" parent="Roads/cross_exposed" unique_id=1269493171]
 transform = Transform3D(1, 0, 0, 0, 0.9999933, 0.0036660114, 0, -0.0036660114, 0.9999933, 1.4901161e-08, 0.40016082, 259.67377)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3024,7 +3024,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/cross_exposed" unique_id=1150381469]
+[node name="RP_003" type="Node3D" parent="Roads/cross_exposed" unique_id=149477411]
 transform = Transform3D(1, 0, 0, 0, 0.98914176, 0.14696473, 0, -0.14696473, 0.98914176, 1.4901161e-08, 0.95048535, 265.43164)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3040,7 +3040,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/cross_exposed" unique_id=1846321066]
+[node name="RP_004" type="Node3D" parent="Roads/cross_exposed" unique_id=1007891284]
 transform = Transform3D(1, 0, 0, 0, 1, 0.00020826499, 0, -0.00020826499, 1, 1.4901161e-08, 1.4000189, 271.19693)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3056,7 +3056,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/cross_exposed" unique_id=90693703]
+[node name="RP_005" type="Node3D" parent="Roads/cross_exposed" unique_id=781821112]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 1.4, 276.9883)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3072,7 +3072,7 @@ prior_pt_init = NodePath("../RP_004")
 next_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="RP_006" type="Node3D" parent="Roads/cross_exposed" unique_id=1791859010]
+[node name="RP_006" type="Node3D" parent="Roads/cross_exposed" unique_id=1305606581]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 1.4, 282.7797)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3088,7 +3088,7 @@ prior_pt_init = NodePath("../RP_005")
 next_pt_init = NodePath("../RP_007")
 metadata/baked = true
 
-[node name="RP_007" type="Node3D" parent="Roads/cross_exposed" unique_id=717435817]
+[node name="RP_007" type="Node3D" parent="Roads/cross_exposed" unique_id=327473073]
 transform = Transform3D(1, 0, 0, 0, 1, -0.00020671522, 0, 0.00020671522, 1, 1.4901161e-08, 1.4000187, 288.57108)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3104,7 +3104,7 @@ prior_pt_init = NodePath("../RP_006")
 next_pt_init = NodePath("../RP_008")
 metadata/baked = true
 
-[node name="RP_008" type="Node3D" parent="Roads/cross_exposed" unique_id=195662778]
+[node name="RP_008" type="Node3D" parent="Roads/cross_exposed" unique_id=1202178729]
 transform = Transform3D(1, 0, 0, 0, 0.9891421, -0.14696229, 0, 0.14696229, 0.9891421, 1.4901161e-08, 0.9505789, 294.33636)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3120,7 +3120,7 @@ prior_pt_init = NodePath("../RP_007")
 next_pt_init = NodePath("../RP_009")
 metadata/baked = true
 
-[node name="RP_009" type="Node3D" parent="Roads/cross_exposed" unique_id=99493647]
+[node name="RP_009" type="Node3D" parent="Roads/cross_exposed" unique_id=261612144]
 transform = Transform3D(1, 0, 0, 0, 0.99999326, -0.0036720315, 0, 0.0036720315, 0.99999326, 1.4901161e-08, 0.40016192, 300.09424)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3136,7 +3136,7 @@ prior_pt_init = NodePath("../RP_008")
 next_pt_init = NodePath("../RP_010")
 metadata/baked = true
 
-[node name="RP_010" type="Node3D" parent="Roads/cross_exposed" unique_id=1991289955]
+[node name="RP_010" type="Node3D" parent="Roads/cross_exposed" unique_id=1733177908]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 305.88562)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3152,7 +3152,7 @@ prior_pt_init = NodePath("../RP_009")
 next_pt_init = NodePath("../RP_011")
 metadata/baked = true
 
-[node name="RP_011" type="Node3D" parent="Roads/cross_exposed" unique_id=1406876031]
+[node name="RP_011" type="Node3D" parent="Roads/cross_exposed" unique_id=1569697501]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 311.67703)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3167,7 +3167,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_010")
 metadata/baked = true
 
-[node name="cross_sheltered" type="Node3D" parent="Roads" unique_id=1682666363]
+[node name="cross_sheltered" type="Node3D" parent="Roads" unique_id=59043593]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("10_e1qn4")
 flatten_terrain = false
@@ -3178,7 +3178,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_013")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/cross_sheltered" unique_id=317850145]
+[node name="RP_000" type="Node3D" parent="Roads/cross_sheltered" unique_id=320090582]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.4901161e-08, 0.4, 248.09097)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3193,7 +3193,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/cross_sheltered" unique_id=11334523]
+[node name="RP_001" type="Node3D" parent="Roads/cross_sheltered" unique_id=1312824658]
 transform = Transform3D(0.9792536, 0, 0.20263883, 0, 1.0000001, 0, -0.20263883, 0, 0.9792536, 0.2951855, 0.4, 253.92712)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3209,7 +3209,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/cross_sheltered" unique_id=1508517654]
+[node name="RP_002" type="Node3D" parent="Roads/cross_sheltered" unique_id=28861198]
 transform = Transform3D(0.81248164, 0, 0.5829869, 0, 1.0000001, 0, -0.5829869, 0, 0.81248164, 2.631571, 0.4, 259.24838)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3225,7 +3225,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/cross_sheltered" unique_id=1374932254]
+[node name="RP_003" type="Node3D" parent="Roads/cross_sheltered" unique_id=761439051]
 transform = Transform3D(0.50474477, 0, 0.8632686, 0, 1, 0, -0.8632686, 0, 0.50474477, 6.9268446, 0.4, 263.16147)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3241,7 +3241,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/cross_sheltered" unique_id=741493049]
+[node name="RP_004" type="Node3D" parent="Roads/cross_sheltered" unique_id=760829645]
 transform = Transform3D(0.69970113, 0, 0.7144357, 0, 1, 0, -0.7144357, 0, 0.69970113, 11.779133, 0.4, 266.38794)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3257,7 +3257,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/cross_sheltered" unique_id=279129594]
+[node name="RP_005" type="Node3D" parent="Roads/cross_sheltered" unique_id=178723174]
 transform = Transform3D(0.9296029, 0, 0.36856273, 0, 1.0000001, 0, -0.36856273, 0, 0.9296029, 14.997901, 0.4, 271.22604)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3273,7 +3273,7 @@ prior_pt_init = NodePath("../RP_004")
 next_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="RP_006" type="Node3D" parent="Roads/cross_sheltered" unique_id=1375843492]
+[node name="RP_006" type="Node3D" parent="Roads/cross_sheltered" unique_id=975319113]
 transform = Transform3D(0.99999017, 0, 0.004442442, 0, 1.0000001, 0, -0.004442442, 0, 0.99999017, 15.991832, 0.4, 276.95593)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3289,7 +3289,7 @@ prior_pt_init = NodePath("../RP_005")
 next_pt_init = NodePath("../RP_007")
 metadata/baked = true
 
-[node name="RP_007" type="Node3D" parent="Roads/cross_sheltered" unique_id=424845031]
+[node name="RP_007" type="Node3D" parent="Roads/cross_sheltered" unique_id=1062470682]
 transform = Transform3D(0.99999017, 0, -0.004442442, 0, 1.0000001, 0, 0.004442442, 0, 0.99999017, 15.991832, 0.4, 282.8127)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3305,7 +3305,7 @@ prior_pt_init = NodePath("../RP_006")
 next_pt_init = NodePath("../RP_008")
 metadata/baked = true
 
-[node name="RP_008" type="Node3D" parent="Roads/cross_sheltered" unique_id=1775252870]
+[node name="RP_008" type="Node3D" parent="Roads/cross_sheltered" unique_id=39330096]
 transform = Transform3D(0.92960453, 0, -0.3685586, 0, 1, 0, 0.3685586, 0, 0.92960453, 14.997911, 0.4, 288.5426)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3321,7 +3321,7 @@ prior_pt_init = NodePath("../RP_007")
 next_pt_init = NodePath("../RP_009")
 metadata/baked = true
 
-[node name="RP_009" type="Node3D" parent="Roads/cross_sheltered" unique_id=1686355616]
+[node name="RP_009" type="Node3D" parent="Roads/cross_sheltered" unique_id=464284386]
 transform = Transform3D(0.6997116, 0, -0.7144254, 0, 1, 0, 0.7144254, 0, 0.6997116, 11.779145, 0.4, 293.3807)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3337,7 +3337,7 @@ prior_pt_init = NodePath("../RP_008")
 next_pt_init = NodePath("../RP_010")
 metadata/baked = true
 
-[node name="RP_010" type="Node3D" parent="Roads/cross_sheltered" unique_id=851575923]
+[node name="RP_010" type="Node3D" parent="Roads/cross_sheltered" unique_id=1833220807]
 transform = Transform3D(0.504739, 0, -0.8632721, 0, 1.0000001, 0, 0.8632721, 0, 0.504739, 6.926868, 0.4, 296.60718)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3353,7 +3353,7 @@ prior_pt_init = NodePath("../RP_009")
 next_pt_init = NodePath("../RP_011")
 metadata/baked = true
 
-[node name="RP_011" type="Node3D" parent="Roads/cross_sheltered" unique_id=238079186]
+[node name="RP_011" type="Node3D" parent="Roads/cross_sheltered" unique_id=1696976703]
 transform = Transform3D(0.8124769, 0, -0.58299345, 0, 1, 0, 0.58299345, 0, 0.8124769, 2.6315947, 0.4, 300.5203)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3369,7 +3369,7 @@ prior_pt_init = NodePath("../RP_010")
 next_pt_init = NodePath("../RP_012")
 metadata/baked = true
 
-[node name="RP_012" type="Node3D" parent="Roads/cross_sheltered" unique_id=1971517765]
+[node name="RP_012" type="Node3D" parent="Roads/cross_sheltered" unique_id=1516201355]
 transform = Transform3D(0.979254, 0, -0.20263673, 0, 1.0000001, 0, 0.20263673, 0, 0.979254, 0.29518846, 0.4, 305.8415)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3385,7 +3385,7 @@ prior_pt_init = NodePath("../RP_011")
 next_pt_init = NodePath("../RP_013")
 metadata/baked = true
 
-[node name="RP_013" type="Node3D" parent="Roads/cross_sheltered" unique_id=972432448]
+[node name="RP_013" type="Node3D" parent="Roads/cross_sheltered" unique_id=720293447]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.899898e-07, 0.4, 311.67767)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3400,7 +3400,7 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_012")
 metadata/baked = true
 
-[node name="bends" type="Node3D" parent="Roads" unique_id=1751188176]
+[node name="bends" type="Node3D" parent="Roads" unique_id=46142883]
 script = ExtResource("4_87bgx")
 material_resource = ExtResource("5_qgtmh")
 flatten_terrain = false
@@ -3411,7 +3411,7 @@ edge_rp_locals = Array[NodePath]([NodePath("RP_000"), NodePath("RP_020")])
 edge_rp_local_dirs = Array[int]([1, 0])
 metadata/baked = true
 
-[node name="RP_000" type="Node3D" parent="Roads/bends" unique_id=419229576]
+[node name="RP_000" type="Node3D" parent="Roads/bends" unique_id=609268813]
 transform = Transform3D(1, 0, 0, 0, 0.9999998, -0.00065278995, 0, 0.00065278995, 0.9999998, 1.4901161e-08, 0.4, 311.67703)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3426,7 +3426,7 @@ gutter_profile = Vector2(0.45, -0.25)
 next_pt_init = NodePath("../RP_001")
 metadata/baked = true
 
-[node name="RP_001" type="Node3D" parent="Roads/bends" unique_id=1249447870]
+[node name="RP_001" type="Node3D" parent="Roads/bends" unique_id=2138923209]
 transform = Transform3D(0.9998549, -0.00010754385, -0.017035414, 0, 0.99998015, -0.0063128322, 0.017035753, 0.0063119163, 0.999835, -0.00013741637, 0.37975037, 317.5846)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3442,7 +3442,7 @@ prior_pt_init = NodePath("../RP_000")
 next_pt_init = NodePath("../RP_002")
 metadata/baked = true
 
-[node name="RP_002" type="Node3D" parent="Roads/bends" unique_id=988098784]
+[node name="RP_002" type="Node3D" parent="Roads/bends" unique_id=1667746644]
 transform = Transform3D(0.8848749, -0.0044451854, -0.4658076, 0, 0.9999545, -0.00954253, 0.4658288, 0.008443945, 0.8848346, -1.3876714, 0.3313607, 323.2642)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3458,7 +3458,7 @@ prior_pt_init = NodePath("../RP_001")
 next_pt_init = NodePath("../RP_003")
 metadata/baked = true
 
-[node name="RP_003" type="Node3D" parent="Roads/bends" unique_id=1122880582]
+[node name="RP_003" type="Node3D" parent="Roads/bends" unique_id=1121157466]
 transform = Transform3D(0.60582405, -0.0076850452, -0.79556155, 0, 0.9999534, -0.00965945, 0.7955987, 0.0058519267, 0.6057958, -5.2801657, 0.2731271, 327.6286)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3474,7 +3474,7 @@ prior_pt_init = NodePath("../RP_002")
 next_pt_init = NodePath("../RP_004")
 metadata/baked = true
 
-[node name="RP_004" type="Node3D" parent="Roads/bends" unique_id=1851585090]
+[node name="RP_004" type="Node3D" parent="Roads/bends" unique_id=1763899974]
 transform = Transform3D(0.900167, -0.0029126396, -0.4355353, 0, 0.9999777, -0.006687344, 0.43554506, 0.0060197264, 0.90014684, -9.026916, 0.22334324, 332.11435)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3490,7 +3490,7 @@ prior_pt_init = NodePath("../RP_003")
 next_pt_init = NodePath("../RP_005")
 metadata/baked = true
 
-[node name="RP_005" type="Node3D" parent="Roads/bends" unique_id=1198355048]
+[node name="RP_005" type="Node3D" parent="Roads/bends" unique_id=1743659143]
 transform = Transform3D(0.99912834, 2.624425e-05, 0.04174386, 0, 0.9999998, -0.00062869716, -0.041743867, 0.00062814914, 0.99912816, -10.213266, 0.20029774, 337.8357)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3506,7 +3506,7 @@ prior_pt_init = NodePath("../RP_004")
 next_pt_init = NodePath("../RP_006")
 metadata/baked = true
 
-[node name="RP_006" type="Node3D" parent="Roads/bends" unique_id=60818097]
+[node name="RP_006" type="Node3D" parent="Roads/bends" unique_id=1123726420]
 transform = Transform3D(0.86074907, 0.0017931421, 0.5090264, 0, 0.99999386, -0.0035226678, -0.50902957, 0.003032133, 0.8607437, -8.555257, 0.18985091, 343.43863)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3522,7 +3522,7 @@ prior_pt_init = NodePath("../RP_005")
 next_pt_init = NodePath("../RP_007")
 metadata/baked = true
 
-[node name="RP_007" type="Node3D" parent="Roads/bends" unique_id=643878901]
+[node name="RP_007" type="Node3D" parent="Roads/bends" unique_id=195584198]
 transform = Transform3D(0.6286, 0.004738792, 0.7777143, 0, 0.9999814, -0.0060931165, -0.77772874, 0.003830133, 0.6285884, -4.4883723, 0.16083314, 347.6538)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3538,7 +3538,7 @@ prior_pt_init = NodePath("../RP_006")
 next_pt_init = NodePath("../RP_008")
 metadata/baked = true
 
-[node name="RP_008" type="Node3D" parent="Roads/bends" unique_id=1977785960]
+[node name="RP_008" type="Node3D" parent="Roads/bends" unique_id=513547838]
 transform = Transform3D(0.92057705, 0.0028737753, 0.3905505, 0, 0.999973, -0.007358069, -0.39056107, 0.0067736697, 0.92055213, -0.95972395, 0.12048726, 352.31146)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3554,7 +3554,7 @@ prior_pt_init = NodePath("../RP_007")
 next_pt_init = NodePath("../RP_009")
 metadata/baked = true
 
-[node name="RP_009" type="Node3D" parent="Roads/bends" unique_id=1728357872]
+[node name="RP_009" type="Node3D" parent="Roads/bends" unique_id=638890153]
 transform = Transform3D(0.9958433, 0.00066608645, 0.09108035, 0, 0.99997324, -0.0073129786, -0.09108278, 0.0072825807, 0.9958167, 0.053509988, 0.07653045, 358.08658)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3570,7 +3570,7 @@ prior_pt_init = NodePath("../RP_008")
 next_pt_init = NodePath("../RP_010")
 metadata/baked = true
 
-[node name="RP_010" type="Node3D" parent="Roads/bends" unique_id=1461643287]
+[node name="RP_010" type="Node3D" parent="Roads/bends" unique_id=2077620863]
 transform = Transform3D(0.83462566, 0.0032821912, 0.55080783, 0, 0.99998236, -0.0059587625, -0.5508176, 0.004973336, 0.8346109, 1.9842898, 0.036685266, 363.60577)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3586,7 +3586,7 @@ prior_pt_init = NodePath("../RP_009")
 next_pt_init = NodePath("../RP_011")
 metadata/baked = true
 
-[node name="RP_011" type="Node3D" parent="Roads/bends" unique_id=1651577172]
+[node name="RP_011" type="Node3D" parent="Roads/bends" unique_id=1121126746]
 transform = Transform3D(0.66223973, 0.0024700095, 0.74928796, 0, 0.9999945, -0.003296458, -0.749292, 0.0021830455, 0.66223615, 6.202932, 0.008722933, 367.6899)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3602,7 +3602,7 @@ prior_pt_init = NodePath("../RP_010")
 next_pt_init = NodePath("../RP_012")
 metadata/baked = true
 
-[node name="RP_012" type="Node3D" parent="Roads/bends" unique_id=1323293538]
+[node name="RP_012" type="Node3D" parent="Roads/bends" unique_id=341440513]
 transform = Transform3D(0.9387077, 3.6066774e-06, 0.34471422, 0, 1.0000001, -1.0462804e-05, -0.34471422, 9.821515e-06, 0.9387077, 9.492272, 6.7481596e-07, 372.52203)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3618,7 +3618,7 @@ prior_pt_init = NodePath("../RP_011")
 next_pt_init = NodePath("../RP_013")
 metadata/baked = true
 
-[node name="RP_013" type="Node3D" parent="Roads/bends" unique_id=675441960]
+[node name="RP_013" type="Node3D" parent="Roads/bends" unique_id=1529716992]
 transform = Transform3D(0.9901668, 0, -0.1398922, 0, 1.0000001, 0, 0.1398922, 0, 0.9901668, 10.107312, 0, 378.33395)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3634,7 +3634,7 @@ prior_pt_init = NodePath("../RP_012")
 next_pt_init = NodePath("../RP_014")
 metadata/baked = true
 
-[node name="RP_014" type="Node3D" parent="Roads/bends" unique_id=1772245149]
+[node name="RP_014" type="Node3D" parent="Roads/bends" unique_id=2133329114]
 transform = Transform3D(0.8064715, 0, -0.591273, 0, 1.0000001, 0, 0.591273, 0, 0.8064715, 7.903352, 0, 383.7459)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3650,7 +3650,7 @@ prior_pt_init = NodePath("../RP_013")
 next_pt_init = NodePath("../RP_015")
 metadata/baked = true
 
-[node name="RP_015" type="Node3D" parent="Roads/bends" unique_id=294396205]
+[node name="RP_015" type="Node3D" parent="Roads/bends" unique_id=1965171960]
 transform = Transform3D(0.70037276, 0, -0.7137773, 0, 1, 0, 0.7137773, 0, 0.70037276, 3.602807, 0, 387.7583)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3666,7 +3666,7 @@ prior_pt_init = NodePath("../RP_014")
 next_pt_init = NodePath("../RP_016")
 metadata/baked = true
 
-[node name="RP_016" type="Node3D" parent="Roads/bends" unique_id=877469231]
+[node name="RP_016" type="Node3D" parent="Roads/bends" unique_id=334477331]
 transform = Transform3D(0.9545904, 0, -0.29792163, 0, 1.0000001, 0, 0.29792163, 0, 0.9545904, 0.55477715, 0, 392.74338)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3682,7 +3682,7 @@ prior_pt_init = NodePath("../RP_015")
 next_pt_init = NodePath("../RP_017")
 metadata/baked = true
 
-[node name="RP_017" type="Node3D" parent="Roads/bends" unique_id=307773094]
+[node name="RP_017" type="Node3D" parent="Roads/bends" unique_id=828889444]
 transform = Transform3D(1, 0, 1.0280772e-05, 0, 1, 0, -1.0280772e-05, 0, 1, 7.0407987e-07, 0, 398.59302)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3698,7 +3698,7 @@ prior_pt_init = NodePath("../RP_016")
 next_pt_init = NodePath("../RP_018")
 metadata/baked = true
 
-[node name="RP_018" type="Node3D" parent="Roads/bends" unique_id=108954904]
+[node name="RP_018" type="Node3D" parent="Roads/bends" unique_id=913509757]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.0407987e-07, 0, 404.50064)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3714,7 +3714,7 @@ prior_pt_init = NodePath("../RP_017")
 next_pt_init = NodePath("../RP_019")
 metadata/baked = true
 
-[node name="RP_019" type="Node3D" parent="Roads/bends" unique_id=1789493888]
+[node name="RP_019" type="Node3D" parent="Roads/bends" unique_id=203066320]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.0407987e-07, 0, 410.4083)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3730,7 +3730,7 @@ prior_pt_init = NodePath("../RP_018")
 next_pt_init = NodePath("../RP_020")
 metadata/baked = true
 
-[node name="RP_020" type="Node3D" parent="Roads/bends" unique_id=690230222]
+[node name="RP_020" type="Node3D" parent="Roads/bends" unique_id=63747417]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.0407987e-07, 0, 416.31595)
 script = ExtResource("6_i478k")
 traffic_dir = Array[int]([1])
@@ -3745,57 +3745,57 @@ gutter_profile = Vector2(0.45, -0.25)
 prior_pt_init = NodePath("../RP_019")
 metadata/baked = true
 
-[node name="Water" type="Node3D" parent="." unique_id=1051074997]
+[node name="Water" type="Node3D" parent="." unique_id=795168154]
 metadata/baked = true
 
-[node name="Pond" type="MeshInstance3D" parent="Water" unique_id=546776520]
+[node name="Pond" type="MeshInstance3D" parent="Water" unique_id=412889431]
 cast_shadow = 0
 mesh = ExtResource("11_1q5jq")
 metadata/baked = true
 
-[node name="Stream" type="MeshInstance3D" parent="Water" unique_id=718694701]
+[node name="Stream" type="MeshInstance3D" parent="Water" unique_id=763518563]
 cast_shadow = 0
 mesh = ExtResource("12_tfgbm")
 metadata/baked = true
 
-[node name="Structures" type="Node3D" parent="." unique_id=872488061]
+[node name="Structures" type="Node3D" parent="." unique_id=1055376412]
 metadata/baked = true
 
-[node name="Kicker" type="MeshInstance3D" parent="Structures" unique_id=616955642]
+[node name="Kicker" type="MeshInstance3D" parent="Structures" unique_id=364901697]
 mesh = ExtResource("13_k7tkh")
 metadata/baked = true
 
-[node name="KickerLip" type="MeshInstance3D" parent="Structures" unique_id=488167766]
+[node name="KickerLip" type="MeshInstance3D" parent="Structures" unique_id=126404727]
 mesh = ExtResource("14_2vu21")
 metadata/baked = true
 
-[node name="LandingWedge" type="MeshInstance3D" parent="Structures" unique_id=812593823]
+[node name="LandingWedge" type="MeshInstance3D" parent="Structures" unique_id=1617606663]
 mesh = ExtResource("15_afn68")
 metadata/baked = true
 
-[node name="CausewayPiers" type="MeshInstance3D" parent="Structures" unique_id=550541690]
+[node name="CausewayPiers" type="MeshInstance3D" parent="Structures" unique_id=2114748478]
 mesh = ExtResource("16_ak1ud")
 metadata/baked = true
 
-[node name="CausewayRails" type="MeshInstance3D" parent="Structures" unique_id=1585905994]
+[node name="CausewayRails" type="MeshInstance3D" parent="Structures" unique_id=752740643]
 mesh = ExtResource("17_yik3d")
 metadata/baked = true
 
-[node name="LaneFence" type="MeshInstance3D" parent="Structures" unique_id=534064757]
+[node name="LaneFence" type="MeshInstance3D" parent="Structures" unique_id=636848558]
 mesh = ExtResource("18_68hpq")
 metadata/baked = true
 
-[node name="Vegetation" type="Node3D" parent="." unique_id=541681150]
+[node name="Vegetation" type="Node3D" parent="." unique_id=1585413092]
 metadata/baked = true
 
-[node name="ScatterCache" type="Node" parent="Vegetation" unique_id=1202580907]
+[node name="ScatterCache" type="Node" parent="Vegetation" unique_id=1921702195]
 script = ExtResource("19_waai4")
 cache_file = "res://world/vegetation/scatter_cache.res"
 auto_rebuild_cache_when_saving = false
 dbg_disable_thread = true
 metadata/baked = true
 
-[node name="MeadowTrees" type="Node3D" parent="Vegetation" unique_id=928780457]
+[node name="MeadowTrees" type="Node3D" parent="Vegetation" unique_id=2055056874]
 script = ExtResource("20_ha6yp")
 global_seed = 4997
 force_rebuild_on_load = false
@@ -3805,7 +3805,7 @@ Performance/use_chunks = true
 Performance/chunk_dimensions = Vector3(15, 15, 15)
 metadata/baked = true
 
-[node name="CommonTree_1" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=300236735]
+[node name="CommonTree_1" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=220807751]
 script = ExtResource("28_bl84p")
 proportion = 30
 visibility_range_end = 420.0
@@ -3814,7 +3814,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/common_tree_1.res"
 metadata/baked = true
 
-[node name="CommonTree_2" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=56883881]
+[node name="CommonTree_2" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=348882835]
 script = ExtResource("28_bl84p")
 proportion = 30
 visibility_range_end = 420.0
@@ -3823,7 +3823,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/common_tree_2.res"
 metadata/baked = true
 
-[node name="CommonTree_3" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=737634391]
+[node name="CommonTree_3" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=538087562]
 script = ExtResource("28_bl84p")
 proportion = 25
 visibility_range_end = 420.0
@@ -3832,7 +3832,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/common_tree_3.res"
 metadata/baked = true
 
-[node name="CommonTree_4" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1166800682]
+[node name="CommonTree_4" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1572187352]
 script = ExtResource("28_bl84p")
 proportion = 25
 visibility_range_end = 420.0
@@ -3841,7 +3841,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/common_tree_4.res"
 metadata/baked = true
 
-[node name="CommonTree_5" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=2056843496]
+[node name="CommonTree_5" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=2022282711]
 script = ExtResource("28_bl84p")
 proportion = 20
 visibility_range_end = 420.0
@@ -3850,7 +3850,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/common_tree_5.res"
 metadata/baked = true
 
-[node name="TwistedTree_1" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=220969447]
+[node name="TwistedTree_1" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=725015946]
 script = ExtResource("28_bl84p")
 proportion = 3
 visibility_range_end = 420.0
@@ -3859,7 +3859,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/twisted_tree_1.res"
 metadata/baked = true
 
-[node name="TwistedTree_2" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=714198757]
+[node name="TwistedTree_2" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=636405389]
 script = ExtResource("28_bl84p")
 proportion = 2
 visibility_range_end = 420.0
@@ -3868,129 +3868,129 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/twisted_tree_2.res"
 metadata/baked = true
 
-[node name="Near_start" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1097412128]
+[node name="Near_start" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=488672756]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_6wrdx")
 metadata/baked = true
 
-[node name="Road_start" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=2117099996]
+[node name="Road_start" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=585544265]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_6j3aj")
 metadata/baked = true
 
-[node name="Near_hills1" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1247776524]
+[node name="Near_hills1" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1675475263]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_q46ga")
 metadata/baked = true
 
-[node name="Road_hills1" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=74436570]
+[node name="Road_hills1" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=579594542]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_u4a81")
 metadata/baked = true
 
-[node name="Near_ramp_jump" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=999889398]
+[node name="Near_ramp_jump" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1789752061]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_piwhx")
 metadata/baked = true
 
-[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1086199304]
+[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1572032750]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_5vq3a")
 metadata/baked = true
 
-[node name="Near_ramp_around" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=185097780]
+[node name="Near_ramp_around" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1304599852]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_07tif")
 metadata/baked = true
 
-[node name="Road_ramp_around" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=649423739]
+[node name="Road_ramp_around" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1082332788]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_japbf")
 metadata/baked = true
 
-[node name="Near_hills2" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1695453541]
+[node name="Near_hills2" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1542123124]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_jdakr")
 metadata/baked = true
 
-[node name="Road_hills2" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1667241892]
+[node name="Road_hills2" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1387152151]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_wjts6")
 metadata/baked = true
 
-[node name="Near_pond_water" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=343327175]
+[node name="Near_pond_water" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=141155421]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_hic04")
 metadata/baked = true
 
-[node name="Road_pond_water" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=971114368]
+[node name="Road_pond_water" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=220842850]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_vtkgv")
 metadata/baked = true
 
-[node name="Near_pond_bridge" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1334518151]
+[node name="Near_pond_bridge" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1734496935]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_sq58a")
 metadata/baked = true
 
-[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=31054023]
+[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1360073465]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_1o31h")
 metadata/baked = true
 
-[node name="Near_cross_exposed" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=624018738]
+[node name="Near_cross_exposed" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=2048849573]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_6vvlg")
 metadata/baked = true
 
-[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1349684173]
+[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=496551641]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_k70bg")
 metadata/baked = true
 
-[node name="Near_cross_sheltered" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1079707675]
+[node name="Near_cross_sheltered" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=425153058]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_n3oad")
 metadata/baked = true
 
-[node name="Road_cross_sheltered" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1014922661]
+[node name="Road_cross_sheltered" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=204668547]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_newdo")
 metadata/baked = true
 
-[node name="Near_bends" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1032243220]
+[node name="Near_bends" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1601030352]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_78lty")
 metadata/baked = true
 
-[node name="Road_bends" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1530801211]
+[node name="Road_bends" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1519045026]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_hx3rk")
 metadata/baked = true
 
-[node name="NoPond" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1677806904]
+[node name="NoPond" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=118231344]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_5rall")
 metadata/baked = true
 
-[node name="NoStream" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=1843801616]
+[node name="NoStream" type="Node3D" parent="Vegetation/MeadowTrees" unique_id=2113209271]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_30vtv")
 metadata/baked = true
 
-[node name="Woodland" type="Node3D" parent="Vegetation" unique_id=1582852043]
+[node name="Woodland" type="Node3D" parent="Vegetation" unique_id=292649480]
 script = ExtResource("20_ha6yp")
 global_seed = 493
 force_rebuild_on_load = false
@@ -4000,7 +4000,7 @@ Performance/use_chunks = true
 Performance/chunk_dimensions = Vector3(15, 15, 15)
 metadata/baked = true
 
-[node name="Pine_1" type="Node3D" parent="Vegetation/Woodland" unique_id=1417786995]
+[node name="Pine_1" type="Node3D" parent="Vegetation/Woodland" unique_id=1747018310]
 script = ExtResource("28_bl84p")
 proportion = 25
 override_cast_shadow = 0
@@ -4010,7 +4010,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/pine_1.res"
 metadata/baked = true
 
-[node name="Pine_2" type="Node3D" parent="Vegetation/Woodland" unique_id=548675313]
+[node name="Pine_2" type="Node3D" parent="Vegetation/Woodland" unique_id=1991454315]
 script = ExtResource("28_bl84p")
 proportion = 25
 override_cast_shadow = 0
@@ -4020,7 +4020,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/pine_2.res"
 metadata/baked = true
 
-[node name="Pine_3" type="Node3D" parent="Vegetation/Woodland" unique_id=1951925359]
+[node name="Pine_3" type="Node3D" parent="Vegetation/Woodland" unique_id=7652615]
 script = ExtResource("28_bl84p")
 proportion = 20
 override_cast_shadow = 0
@@ -4030,7 +4030,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/pine_3.res"
 metadata/baked = true
 
-[node name="Pine_4" type="Node3D" parent="Vegetation/Woodland" unique_id=1580178666]
+[node name="Pine_4" type="Node3D" parent="Vegetation/Woodland" unique_id=454202857]
 script = ExtResource("28_bl84p")
 proportion = 20
 override_cast_shadow = 0
@@ -4040,7 +4040,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/pine_4.res"
 metadata/baked = true
 
-[node name="Pine_5" type="Node3D" parent="Vegetation/Woodland" unique_id=105930344]
+[node name="Pine_5" type="Node3D" parent="Vegetation/Woodland" unique_id=1149827011]
 script = ExtResource("28_bl84p")
 proportion = 15
 override_cast_shadow = 0
@@ -4050,7 +4050,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/pine_5.res"
 metadata/baked = true
 
-[node name="CommonTree_2" type="Node3D" parent="Vegetation/Woodland" unique_id=581482805]
+[node name="CommonTree_2" type="Node3D" parent="Vegetation/Woodland" unique_id=909295867]
 script = ExtResource("28_bl84p")
 proportion = 15
 override_cast_shadow = 0
@@ -4060,7 +4060,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/common_tree_2.res"
 metadata/baked = true
 
-[node name="CommonTree_4" type="Node3D" parent="Vegetation/Woodland" unique_id=1407154487]
+[node name="CommonTree_4" type="Node3D" parent="Vegetation/Woodland" unique_id=358645995]
 script = ExtResource("28_bl84p")
 proportion = 15
 override_cast_shadow = 0
@@ -4070,85 +4070,85 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/common_tree_4.res"
 metadata/baked = true
 
-[node name="Map" type="Node3D" parent="Vegetation/Woodland" unique_id=1498054475]
+[node name="Map" type="Node3D" parent="Vegetation/Woodland" unique_id=775835008]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 256)
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_6y7nv")
 metadata/baked = true
 
-[node name="Road_start" type="Node3D" parent="Vegetation/Woodland" unique_id=331344840]
+[node name="Road_start" type="Node3D" parent="Vegetation/Woodland" unique_id=61504015]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_j3i8c")
 metadata/baked = true
 
-[node name="Road_hills1" type="Node3D" parent="Vegetation/Woodland" unique_id=1723299687]
+[node name="Road_hills1" type="Node3D" parent="Vegetation/Woodland" unique_id=1795142352]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_sdx1x")
 metadata/baked = true
 
-[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/Woodland" unique_id=975401035]
+[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/Woodland" unique_id=512860906]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_3j656")
 metadata/baked = true
 
-[node name="Road_ramp_around" type="Node3D" parent="Vegetation/Woodland" unique_id=750983471]
+[node name="Road_ramp_around" type="Node3D" parent="Vegetation/Woodland" unique_id=957030699]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_wntgo")
 metadata/baked = true
 
-[node name="Road_hills2" type="Node3D" parent="Vegetation/Woodland" unique_id=1956914658]
+[node name="Road_hills2" type="Node3D" parent="Vegetation/Woodland" unique_id=1586444296]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_6g0le")
 metadata/baked = true
 
-[node name="Road_pond_water" type="Node3D" parent="Vegetation/Woodland" unique_id=1997609679]
+[node name="Road_pond_water" type="Node3D" parent="Vegetation/Woodland" unique_id=1120277901]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_ns00o")
 metadata/baked = true
 
-[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/Woodland" unique_id=1055899242]
+[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/Woodland" unique_id=859939825]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_022wi")
 metadata/baked = true
 
-[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/Woodland" unique_id=552674471]
+[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/Woodland" unique_id=763983925]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_ixuhg")
 metadata/baked = true
 
-[node name="Road_cross_sheltered" type="Node3D" parent="Vegetation/Woodland" unique_id=500235063]
+[node name="Road_cross_sheltered" type="Node3D" parent="Vegetation/Woodland" unique_id=1216564949]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_vgd1h")
 metadata/baked = true
 
-[node name="Road_bends" type="Node3D" parent="Vegetation/Woodland" unique_id=709872847]
+[node name="Road_bends" type="Node3D" parent="Vegetation/Woodland" unique_id=447955809]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_yusaf")
 metadata/baked = true
 
-[node name="NoPond" type="Node3D" parent="Vegetation/Woodland" unique_id=981194201]
+[node name="NoPond" type="Node3D" parent="Vegetation/Woodland" unique_id=897986836]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_5kb4u")
 metadata/baked = true
 
-[node name="NoStream" type="Node3D" parent="Vegetation/Woodland" unique_id=1439466205]
+[node name="NoStream" type="Node3D" parent="Vegetation/Woodland" unique_id=803573054]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_t4ele")
 metadata/baked = true
 
-[node name="Bushes" type="Node3D" parent="Vegetation" unique_id=1494414461]
+[node name="Bushes" type="Node3D" parent="Vegetation" unique_id=1074550945]
 script = ExtResource("20_ha6yp")
 global_seed = 4415
 force_rebuild_on_load = false
@@ -4158,7 +4158,7 @@ Performance/use_chunks = true
 Performance/chunk_dimensions = Vector3(15, 15, 15)
 metadata/baked = true
 
-[node name="Bush_Common" type="Node3D" parent="Vegetation/Bushes" unique_id=1434614895]
+[node name="Bush_Common" type="Node3D" parent="Vegetation/Bushes" unique_id=823981462]
 script = ExtResource("28_bl84p")
 proportion = 50
 override_cast_shadow = 0
@@ -4168,7 +4168,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/bush_common.res"
 metadata/baked = true
 
-[node name="Bush_Common_Flowers" type="Node3D" parent="Vegetation/Bushes" unique_id=1631570678]
+[node name="Bush_Common_Flowers" type="Node3D" parent="Vegetation/Bushes" unique_id=2069308940]
 script = ExtResource("28_bl84p")
 proportion = 50
 override_cast_shadow = 0
@@ -4178,129 +4178,129 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/bush_common_flowers.res"
 metadata/baked = true
 
-[node name="Near_start" type="Node3D" parent="Vegetation/Bushes" unique_id=275593850]
+[node name="Near_start" type="Node3D" parent="Vegetation/Bushes" unique_id=1379097640]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_dm071")
 metadata/baked = true
 
-[node name="Road_start" type="Node3D" parent="Vegetation/Bushes" unique_id=1138260322]
+[node name="Road_start" type="Node3D" parent="Vegetation/Bushes" unique_id=2129106635]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_ty4nx")
 metadata/baked = true
 
-[node name="Near_hills1" type="Node3D" parent="Vegetation/Bushes" unique_id=1336154192]
+[node name="Near_hills1" type="Node3D" parent="Vegetation/Bushes" unique_id=36081764]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_f0mln")
 metadata/baked = true
 
-[node name="Road_hills1" type="Node3D" parent="Vegetation/Bushes" unique_id=1541044530]
+[node name="Road_hills1" type="Node3D" parent="Vegetation/Bushes" unique_id=486593497]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_8gh66")
 metadata/baked = true
 
-[node name="Near_ramp_jump" type="Node3D" parent="Vegetation/Bushes" unique_id=1333975198]
+[node name="Near_ramp_jump" type="Node3D" parent="Vegetation/Bushes" unique_id=1639715386]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_4pnk3")
 metadata/baked = true
 
-[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/Bushes" unique_id=1147781318]
+[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/Bushes" unique_id=1990917187]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_ttqx1")
 metadata/baked = true
 
-[node name="Near_ramp_around" type="Node3D" parent="Vegetation/Bushes" unique_id=511387159]
+[node name="Near_ramp_around" type="Node3D" parent="Vegetation/Bushes" unique_id=2135994511]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_no53i")
 metadata/baked = true
 
-[node name="Road_ramp_around" type="Node3D" parent="Vegetation/Bushes" unique_id=1239539393]
+[node name="Road_ramp_around" type="Node3D" parent="Vegetation/Bushes" unique_id=1165401037]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_2coj8")
 metadata/baked = true
 
-[node name="Near_hills2" type="Node3D" parent="Vegetation/Bushes" unique_id=1092782015]
+[node name="Near_hills2" type="Node3D" parent="Vegetation/Bushes" unique_id=1883260385]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_ttulv")
 metadata/baked = true
 
-[node name="Road_hills2" type="Node3D" parent="Vegetation/Bushes" unique_id=598568494]
+[node name="Road_hills2" type="Node3D" parent="Vegetation/Bushes" unique_id=729059374]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_q4cbi")
 metadata/baked = true
 
-[node name="Near_pond_water" type="Node3D" parent="Vegetation/Bushes" unique_id=524636839]
+[node name="Near_pond_water" type="Node3D" parent="Vegetation/Bushes" unique_id=183936469]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_qwb36")
 metadata/baked = true
 
-[node name="Road_pond_water" type="Node3D" parent="Vegetation/Bushes" unique_id=446417026]
+[node name="Road_pond_water" type="Node3D" parent="Vegetation/Bushes" unique_id=1428804271]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_5rvr5")
 metadata/baked = true
 
-[node name="Near_pond_bridge" type="Node3D" parent="Vegetation/Bushes" unique_id=922295502]
+[node name="Near_pond_bridge" type="Node3D" parent="Vegetation/Bushes" unique_id=903068675]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_2nj2j")
 metadata/baked = true
 
-[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/Bushes" unique_id=1756988968]
+[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/Bushes" unique_id=1898730962]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_mvplb")
 metadata/baked = true
 
-[node name="Near_cross_exposed" type="Node3D" parent="Vegetation/Bushes" unique_id=740749672]
+[node name="Near_cross_exposed" type="Node3D" parent="Vegetation/Bushes" unique_id=682825459]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_2f82b")
 metadata/baked = true
 
-[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/Bushes" unique_id=806520700]
+[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/Bushes" unique_id=1280890936]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_2aw46")
 metadata/baked = true
 
-[node name="Near_cross_sheltered" type="Node3D" parent="Vegetation/Bushes" unique_id=784854945]
+[node name="Near_cross_sheltered" type="Node3D" parent="Vegetation/Bushes" unique_id=1457737403]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_0fxs6")
 metadata/baked = true
 
-[node name="Road_cross_sheltered" type="Node3D" parent="Vegetation/Bushes" unique_id=2007747826]
+[node name="Road_cross_sheltered" type="Node3D" parent="Vegetation/Bushes" unique_id=327994824]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_f08yj")
 metadata/baked = true
 
-[node name="Near_bends" type="Node3D" parent="Vegetation/Bushes" unique_id=1578358123]
+[node name="Near_bends" type="Node3D" parent="Vegetation/Bushes" unique_id=2061950455]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_alnrf")
 metadata/baked = true
 
-[node name="Road_bends" type="Node3D" parent="Vegetation/Bushes" unique_id=722497693]
+[node name="Road_bends" type="Node3D" parent="Vegetation/Bushes" unique_id=389500132]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_5wslk")
 metadata/baked = true
 
-[node name="NoPond" type="Node3D" parent="Vegetation/Bushes" unique_id=353827294]
+[node name="NoPond" type="Node3D" parent="Vegetation/Bushes" unique_id=2132107668]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_xkopy")
 metadata/baked = true
 
-[node name="NoStream" type="Node3D" parent="Vegetation/Bushes" unique_id=2086886794]
+[node name="NoStream" type="Node3D" parent="Vegetation/Bushes" unique_id=1475748573]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_q02ym")
 metadata/baked = true
 
-[node name="Rocks" type="Node3D" parent="Vegetation" unique_id=1602582779]
+[node name="Rocks" type="Node3D" parent="Vegetation" unique_id=1897753300]
 script = ExtResource("20_ha6yp")
 global_seed = 8215
 force_rebuild_on_load = false
@@ -4310,7 +4310,7 @@ Performance/use_chunks = true
 Performance/chunk_dimensions = Vector3(15, 15, 15)
 metadata/baked = true
 
-[node name="Rock_Medium_1" type="Node3D" parent="Vegetation/Rocks" unique_id=536240469]
+[node name="Rock_Medium_1" type="Node3D" parent="Vegetation/Rocks" unique_id=365280000]
 script = ExtResource("28_bl84p")
 proportion = 30
 override_cast_shadow = 0
@@ -4320,7 +4320,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/rock_medium_1.res"
 metadata/baked = true
 
-[node name="Rock_Medium_2" type="Node3D" parent="Vegetation/Rocks" unique_id=421386570]
+[node name="Rock_Medium_2" type="Node3D" parent="Vegetation/Rocks" unique_id=609342026]
 script = ExtResource("28_bl84p")
 proportion = 30
 override_cast_shadow = 0
@@ -4330,7 +4330,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/rock_medium_2.res"
 metadata/baked = true
 
-[node name="Rock_Medium_3" type="Node3D" parent="Vegetation/Rocks" unique_id=267755421]
+[node name="Rock_Medium_3" type="Node3D" parent="Vegetation/Rocks" unique_id=1569605560]
 script = ExtResource("28_bl84p")
 proportion = 30
 override_cast_shadow = 0
@@ -4340,7 +4340,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/rock_medium_3.res"
 metadata/baked = true
 
-[node name="Plant_7" type="Node3D" parent="Vegetation/Rocks" unique_id=6965359]
+[node name="Plant_7" type="Node3D" parent="Vegetation/Rocks" unique_id=1548740845]
 script = ExtResource("28_bl84p")
 proportion = 25
 override_cast_shadow = 0
@@ -4350,7 +4350,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/plant_7.res"
 metadata/baked = true
 
-[node name="Pebble_Round_1" type="Node3D" parent="Vegetation/Rocks" unique_id=343698920]
+[node name="Pebble_Round_1" type="Node3D" parent="Vegetation/Rocks" unique_id=1644134109]
 script = ExtResource("28_bl84p")
 proportion = 15
 override_cast_shadow = 0
@@ -4360,7 +4360,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/pebble_round_1.res"
 metadata/baked = true
 
-[node name="Pebble_Round_2" type="Node3D" parent="Vegetation/Rocks" unique_id=1843018050]
+[node name="Pebble_Round_2" type="Node3D" parent="Vegetation/Rocks" unique_id=1820931510]
 script = ExtResource("28_bl84p")
 proportion = 15
 override_cast_shadow = 0
@@ -4370,7 +4370,7 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/pebble_round_2.res"
 metadata/baked = true
 
-[node name="Mushroom_Common" type="Node3D" parent="Vegetation/Rocks" unique_id=503734140]
+[node name="Mushroom_Common" type="Node3D" parent="Vegetation/Rocks" unique_id=111506655]
 script = ExtResource("28_bl84p")
 proportion = 8
 override_cast_shadow = 0
@@ -4380,129 +4380,129 @@ visibility_range_fade_mode = 1
 path = "res://world/vegetation/meshes/mushroom_common.res"
 metadata/baked = true
 
-[node name="Near_start" type="Node3D" parent="Vegetation/Rocks" unique_id=1093973515]
+[node name="Near_start" type="Node3D" parent="Vegetation/Rocks" unique_id=233588062]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_7f2iw")
 metadata/baked = true
 
-[node name="Road_start" type="Node3D" parent="Vegetation/Rocks" unique_id=1736615628]
+[node name="Road_start" type="Node3D" parent="Vegetation/Rocks" unique_id=858611983]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_5wl4j")
 metadata/baked = true
 
-[node name="Near_hills1" type="Node3D" parent="Vegetation/Rocks" unique_id=2118782184]
+[node name="Near_hills1" type="Node3D" parent="Vegetation/Rocks" unique_id=780823823]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_v8lsl")
 metadata/baked = true
 
-[node name="Road_hills1" type="Node3D" parent="Vegetation/Rocks" unique_id=1486052272]
+[node name="Road_hills1" type="Node3D" parent="Vegetation/Rocks" unique_id=1603587284]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_fkjfe")
 metadata/baked = true
 
-[node name="Near_ramp_jump" type="Node3D" parent="Vegetation/Rocks" unique_id=347480979]
+[node name="Near_ramp_jump" type="Node3D" parent="Vegetation/Rocks" unique_id=1044747090]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_ji46m")
 metadata/baked = true
 
-[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/Rocks" unique_id=70859635]
+[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/Rocks" unique_id=1116785630]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_unmqn")
 metadata/baked = true
 
-[node name="Near_ramp_around" type="Node3D" parent="Vegetation/Rocks" unique_id=1881380145]
+[node name="Near_ramp_around" type="Node3D" parent="Vegetation/Rocks" unique_id=463190467]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_m5n38")
 metadata/baked = true
 
-[node name="Road_ramp_around" type="Node3D" parent="Vegetation/Rocks" unique_id=838122794]
+[node name="Road_ramp_around" type="Node3D" parent="Vegetation/Rocks" unique_id=186662159]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_on667")
 metadata/baked = true
 
-[node name="Near_hills2" type="Node3D" parent="Vegetation/Rocks" unique_id=337019422]
+[node name="Near_hills2" type="Node3D" parent="Vegetation/Rocks" unique_id=549425523]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_kqhtt")
 metadata/baked = true
 
-[node name="Road_hills2" type="Node3D" parent="Vegetation/Rocks" unique_id=1209666203]
+[node name="Road_hills2" type="Node3D" parent="Vegetation/Rocks" unique_id=1269351578]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_v8f8t")
 metadata/baked = true
 
-[node name="Near_pond_water" type="Node3D" parent="Vegetation/Rocks" unique_id=1573769421]
+[node name="Near_pond_water" type="Node3D" parent="Vegetation/Rocks" unique_id=2037117742]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_ex8kc")
 metadata/baked = true
 
-[node name="Road_pond_water" type="Node3D" parent="Vegetation/Rocks" unique_id=1820970562]
+[node name="Road_pond_water" type="Node3D" parent="Vegetation/Rocks" unique_id=687337417]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_6liru")
 metadata/baked = true
 
-[node name="Near_pond_bridge" type="Node3D" parent="Vegetation/Rocks" unique_id=187476557]
+[node name="Near_pond_bridge" type="Node3D" parent="Vegetation/Rocks" unique_id=108832781]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_huv55")
 metadata/baked = true
 
-[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/Rocks" unique_id=555044215]
+[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/Rocks" unique_id=2095514079]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_0godn")
 metadata/baked = true
 
-[node name="Near_cross_exposed" type="Node3D" parent="Vegetation/Rocks" unique_id=1120699980]
+[node name="Near_cross_exposed" type="Node3D" parent="Vegetation/Rocks" unique_id=2147079560]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_wqabv")
 metadata/baked = true
 
-[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/Rocks" unique_id=1038366925]
+[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/Rocks" unique_id=989462801]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_n8568")
 metadata/baked = true
 
-[node name="Near_cross_sheltered" type="Node3D" parent="Vegetation/Rocks" unique_id=815897796]
+[node name="Near_cross_sheltered" type="Node3D" parent="Vegetation/Rocks" unique_id=966221927]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_qg3kc")
 metadata/baked = true
 
-[node name="Road_cross_sheltered" type="Node3D" parent="Vegetation/Rocks" unique_id=1674877065]
+[node name="Road_cross_sheltered" type="Node3D" parent="Vegetation/Rocks" unique_id=6856934]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_qu4lb")
 metadata/baked = true
 
-[node name="Near_bends" type="Node3D" parent="Vegetation/Rocks" unique_id=852986849]
+[node name="Near_bends" type="Node3D" parent="Vegetation/Rocks" unique_id=2111766512]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_bgy6k")
 metadata/baked = true
 
-[node name="Road_bends" type="Node3D" parent="Vegetation/Rocks" unique_id=7082128]
+[node name="Road_bends" type="Node3D" parent="Vegetation/Rocks" unique_id=1201014966]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_h1kph")
 metadata/baked = true
 
-[node name="NoPond" type="Node3D" parent="Vegetation/Rocks" unique_id=2124960080]
+[node name="NoPond" type="Node3D" parent="Vegetation/Rocks" unique_id=525748668]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_e32po")
 metadata/baked = true
 
-[node name="NoStream" type="Node3D" parent="Vegetation/Rocks" unique_id=1767790850]
+[node name="NoStream" type="Node3D" parent="Vegetation/Rocks" unique_id=1724611074]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_t6wx8")
 metadata/baked = true
 
-[node name="HedgeLeft" type="Node3D" parent="Vegetation" unique_id=1822049587]
+[node name="HedgeLeft" type="Node3D" parent="Vegetation" unique_id=226448956]
 script = ExtResource("20_ha6yp")
 global_seed = 77
 force_rebuild_on_load = false
@@ -4512,72 +4512,72 @@ Performance/use_chunks = true
 Performance/chunk_dimensions = Vector3(15, 15, 15)
 metadata/baked = true
 
-[node name="Bush_Common" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1921280919]
+[node name="Bush_Common" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=211523951]
 script = ExtResource("28_bl84p")
 visibility_range_end = 260.0
 path = "res://world/vegetation/meshes/bush_common.res"
 metadata/baked = true
 
-[node name="Row" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=689379266]
+[node name="Row" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1563097330]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_kt6nt")
 metadata/baked = true
 
-[node name="Road_start" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=187688192]
+[node name="Road_start" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=699273521]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_11un3")
 metadata/baked = true
 
-[node name="Road_hills1" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=860013050]
+[node name="Road_hills1" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1140012227]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_jo77u")
 metadata/baked = true
 
-[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=362122142]
+[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1723473553]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_adj4n")
 metadata/baked = true
 
-[node name="Road_ramp_around" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=739086011]
+[node name="Road_ramp_around" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=953276266]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_wxhfl")
 metadata/baked = true
 
-[node name="Road_hills2" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1902173467]
+[node name="Road_hills2" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=912564532]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_lqgip")
 metadata/baked = true
 
-[node name="Road_pond_water" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=969584543]
+[node name="Road_pond_water" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=863687224]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_n1wuu")
 metadata/baked = true
 
-[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=517621842]
+[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1515295029]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_f5es4")
 metadata/baked = true
 
-[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1186444847]
+[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1361468078]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_aiay0")
 metadata/baked = true
 
-[node name="Road_bends" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=208501023]
+[node name="Road_bends" type="Node3D" parent="Vegetation/HedgeLeft" unique_id=1628364718]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_w1sn2")
 metadata/baked = true
 
-[node name="HedgeRight" type="Node3D" parent="Vegetation" unique_id=1261298753]
+[node name="HedgeRight" type="Node3D" parent="Vegetation" unique_id=1227607835]
 script = ExtResource("20_ha6yp")
 global_seed = 78
 force_rebuild_on_load = false
@@ -4587,66 +4587,66 @@ Performance/use_chunks = true
 Performance/chunk_dimensions = Vector3(15, 15, 15)
 metadata/baked = true
 
-[node name="Bush_Common" type="Node3D" parent="Vegetation/HedgeRight" unique_id=128686771]
+[node name="Bush_Common" type="Node3D" parent="Vegetation/HedgeRight" unique_id=404218643]
 script = ExtResource("28_bl84p")
 visibility_range_end = 260.0
 path = "res://world/vegetation/meshes/bush_common.res"
 metadata/baked = true
 
-[node name="Row" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1425480077]
+[node name="Row" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1913550329]
 script = ExtResource("29_1ak82")
 shape = SubResource("Resource_h7c1r")
 metadata/baked = true
 
-[node name="Road_start" type="Node3D" parent="Vegetation/HedgeRight" unique_id=846163124]
+[node name="Road_start" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1486194210]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_qdwgp")
 metadata/baked = true
 
-[node name="Road_hills1" type="Node3D" parent="Vegetation/HedgeRight" unique_id=330766408]
+[node name="Road_hills1" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1816351696]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_4xh1u")
 metadata/baked = true
 
-[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/HedgeRight" unique_id=884312403]
+[node name="Road_ramp_jump" type="Node3D" parent="Vegetation/HedgeRight" unique_id=280272544]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_g4sv8")
 metadata/baked = true
 
-[node name="Road_ramp_around" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1182626960]
+[node name="Road_ramp_around" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1329716324]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_7oiqc")
 metadata/baked = true
 
-[node name="Road_hills2" type="Node3D" parent="Vegetation/HedgeRight" unique_id=657758029]
+[node name="Road_hills2" type="Node3D" parent="Vegetation/HedgeRight" unique_id=823510300]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_5mmjl")
 metadata/baked = true
 
-[node name="Road_pond_water" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1335702507]
+[node name="Road_pond_water" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1512904400]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_qopda")
 metadata/baked = true
 
-[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1114845158]
+[node name="Road_pond_bridge" type="Node3D" parent="Vegetation/HedgeRight" unique_id=1115759767]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_2jn2b")
 metadata/baked = true
 
-[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/HedgeRight" unique_id=719021414]
+[node name="Road_cross_exposed" type="Node3D" parent="Vegetation/HedgeRight" unique_id=433084479]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_4700e")
 metadata/baked = true
 
-[node name="Road_bends" type="Node3D" parent="Vegetation/HedgeRight" unique_id=20855127]
+[node name="Road_bends" type="Node3D" parent="Vegetation/HedgeRight" unique_id=969836580]
 script = ExtResource("29_1ak82")
 negative = true
 shape = SubResource("Resource_7x03j")

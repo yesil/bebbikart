@@ -36,7 +36,7 @@ One loop-free course, start → finish, **~25–35 s** for a balanced build. Fou
 | 1   | `hills`               | Bouncy hills and ramps. Boost zone on the last downhill.          | **ramp**: `jump` over a big ramp, or drive `around`           | Jump route is ~2 s shorter but needs `jump` ≥ 2. Weak jump = short landing = `bad_landing` slowdown. Wind mid-air pushes sideways (`stability` resists). |
 | 2   | `pond`                | Splash pond                                                       | **pond**: `water` shortcut or dry `bridge`                    | Water route is ~3 s shorter at `water` 4–5, a wash at 2, slower at 0–1 (`water_slow`). Rain doesn't matter here.                                         |
 | 3   | `crossing`            | Breezy elevated crossing (safe-looking, low rails, no scary drop) | **crossing**: `exposed` fast bridge or `sheltered` hedge path | Exposed is ~2 s shorter, but in wind needs `stability` or gets `wind_push` → can go `off_track`. Sheltered ignores wind.                                 |
-| 4   | `bends`               | Rainbow bends, then finish arch / toy castle                      | none                                                          | Pure grip test. Rain cuts grip. `speed` + `daring` + rain = `slip`. Boost zone on the straight before the arch.                                          |
+| 4   | `bends`               | Rainbow bends, then the finish gantry and grandstand              | none                                                          | Pure grip test. Rain cuts grip. `speed` + `daring` + rain = `slip`. Boost zone on the straight before the arch.                                          |
 
 Forks join back before the next section line, so splits are comparable whichever route was taken.
 
@@ -77,7 +77,16 @@ Forks join back before the next section line, so splits are comparable whichever
 
 ## World & art (3a)
 
-- Toy-land look from the brief: saturated but soft colours, rounded shapes, giant flowers, smiling finish castle, sunny light. Readable from the back of a meeting room.
+- Stylised-but-believable countryside: open meadow with gentle hills, wooded hills on the horizon, a pond and stream, a finish gantry with a grandstand, sunny HDRI light. Readable from the back of a meeting room.
+- Each fork alternative has a reason in the landscape. **Ramp:** a wooden kicker over a muddy dip, or a road round a knoll. **Pond:** a cobbled ford through the pond, or a fenced lakeside lane over a stone bridge. **Crossing:** a plank causeway with low rails over a shallow valley, or a lane between hedges round the valley head.
+
+### World pipeline
+
+- **Source of truth:** `apps/game/sim/course.gd` (racing line), plus `world/landscape.gd` (terrain features anchored to it).
+- **Tools:** Terrain3D (terrain, painting, grass instancer), Godot Road Generator (roads), ProtonScatter (trees, bushes, rocks, hedges). CC0 assets come from Quaternius, ambientCG and Poly Haven (`apps/game/assets/CREDITS.md`).
+- **Re-sync roads and terrain after a course edit:** `tools/layout_map.gd` (geometry checks), then `tools/bake_world.gd` (writes `world/course_world.tscn`), then `tools/world_check.gd`.
+- **Edit in the editor:** `world/decor.tscn` (landmarks) and `world/environment.tscn` (sky, sun, post-processing) are hand-editable and never overwritten by the bake. Materials in `world/materials/` and `world/vegetation/materials/` are kept across bakes.
+- **Checks:** `tools/layout_map.gd` checks spacing, crossings, slope, curvature, junctions and fork angles. `tools/world_check.gd` fails on scatter on roads or water, objects more than 0.3 m off the ground, terrain through a road, or missing assets. `tools/bench.gd` reports fps with 20 racers. `tools/shots.gd` takes the fixed screenshot set. Full commands are in `apps/game/README.md`.
 - **Weather visuals:** warning (clouds roll in, sky dims a little / leaves and flags start to flutter), rain (particles, puddle shine, splashes), wind (bending flowers, streaks, arrow icon). No flashes: keep changes gradual for photosensitive viewers.
 - **Sound:** cheerful loop, start beep, boost whoosh, splash, boing, finish fanfare, oops. Master volume in config.
 
@@ -108,7 +117,7 @@ Racers are **built in 3D from a `RacerSpec`** (contracts §5) that DeepSeek writ
 
 | #   | Task                                                                                              | Sub   | Size | Milestone |
 | --- | ------------------------------------------------------------------------------------------------- | ----- | ---- | --------- |
-| 1   | Grey-box course: route splines for all fork variants, section lines, boost zones, track widths    | 3a/3b | M    | M1        |
+| 1   | Course: route splines for all fork variants, section lines, boost zones, track widths              | 3a/3b | M    | M1        |
 | 2   | Sim core: fixed step, racer state, autopilot, forks, stat mapping, fails                          | 3b    | L    | M1        |
 | 2b  | Racer-to-racer collisions, overtaking, start lanes                                                | 3b    | M    | M1        |
 | 3   | Weather state machine + effects on sim                                                            | 3b    | M    | M1        |

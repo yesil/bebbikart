@@ -75,6 +75,21 @@ func cylinder(at: Vector3, radius: float, height: float, n := 8, top_radius := -
 			st.add_vertex(v[0])
 
 
+## Low-poly UV sphere centred at `at`.
+func sphere(at: Vector3, radius: float, rings := 6, sides := 10) -> void:
+	for j in rings:
+		var a0 := PI * j / rings - PI * 0.5
+		var a1 := PI * (j + 1) / rings - PI * 0.5
+		for i in sides:
+			var b0 := TAU * i / sides
+			var b1 := TAU * (i + 1) / sides
+			var p00 := at + Vector3(cos(a0) * cos(b0), sin(a0), cos(a0) * sin(b0)) * radius
+			var p01 := at + Vector3(cos(a0) * cos(b1), sin(a0), cos(a0) * sin(b1)) * radius
+			var p10 := at + Vector3(cos(a1) * cos(b0), sin(a1), cos(a1) * sin(b0)) * radius
+			var p11 := at + Vector3(cos(a1) * cos(b1), sin(a1), cos(a1) * sin(b1)) * radius
+			_quad(p01, p00, p10, p11, Vector2(b1, a0), Vector2(b0, a0), Vector2(b0, a1), Vector2(b1, a1))
+
+
 ## Ribbon strip through `left`/`right` edge points (same count); v runs along the strip.
 ## `facing` is roughly the direction the visible side should face (e.g. Vector3.UP for a deck);
 ## the strip is flipped if needed, so callers never have to reason about winding.
