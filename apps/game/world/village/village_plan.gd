@@ -60,7 +60,14 @@ var pond_box := Rect2()
 var hay_floor := 0.0                # ground height in the hay meadow where the jump lands
 var fountain := Vector2.ZERO
 var lime_tree := Vector2.ZERO
-var square: PackedVector2Array      # paved area of the Dorfplatz
+var square: PackedVector2Array      # roundabout island (paved, fountain and lime tree)
+## The whole roundabout ring (the race only drives part of it) and its side streets, which
+## buildings and props keep clear of like any road.
+var ring: Array[Vector2] = []       # racing-line circle
+var ring_hw := 0.0
+var arms: Array = []                # [from: Vector2 on the ring, to: Vector2] side streets
+const ARM_LENGTH := 16.0
+const ARM_HALF_WIDTH := 3.0
 var meadow_hollow := Vector4.ZERO   # x, z, radius, depth south of the causeway
 var hay_meadow := Vector4.ZERO      # x, z, radius along, radius across, between the ramp branches
 var hay_yaw := 0.0
@@ -79,6 +86,7 @@ func _init(p_course: VillageCourse) -> void:
 			var p := r.pos_at(s)
 			_road.append([Vector2(p.x, p.z), hw(id), id])
 			s += 1.0
+	_roundabout()
 	_water()
 	_square()
 	_landmarks()
@@ -100,6 +108,17 @@ func hw(id: String) -> float:
 func at(id: String, s: float, d: float) -> Vector2:
 	var p := route(id).world_at(s, d)
 	return Vector2(p.x, p.z)
+
+
+func _nearest_road_point(p: Vector2) -> Vector2:
+	var best := INF
+	var best_q := p
+	for q in _road:
+		var dd: float = p.distance_squared_to(q[0])
+		if dd < best:
+			best = dd
+			best_q = q[0]
+	return best_q
 
 
 ## Signed distance from p to the nearest road edge (negative on a road) and that road's id.
@@ -158,25 +177,45 @@ func _water() -> void:
 	brook.append(at("pond_water", mid, 4.0))
 
 
+## The full ring round the island, and two side streets on the arc the race doesn't drive:
+## one out to the pastures, one into the village.
+func _roundabout() -> void:
+	var rb: Dictionary = course.roundabout
+	var c: Vector2 = rb["centre"]
+	var radius: float = rb["radius"]
+	ring_hw = hw("bends")
+	for i in 72:
+		var t := TAU * i / 72.0
+		ring.append(c + Vector2(cos(t), sin(t)) * radius)
+		_road.append([ring[i], ring_hw, "roundabout"])
+	# Angles (anticlockwise, atan2) where the race joins and leaves the ring.
+	var a_in := (at("bends", rb["s0"], 0.0) - c).angle()
+	var a_out := (at("bends", rb["s1"], 0.0) - c).angle()
+	var free := wrapf(a_in - a_out, 0.0, TAU)   # unused arc, anticlockwise from the exit
+	for f: float in [0.33, 0.67]:
+		var a := a_out + free * f
+		var dir := Vector2(cos(a), sin(a))
+		var from := c + dir * (radius + ring_hw)
+		var to := from + dir * ARM_LENGTH
+		arms.append([from, to])
+		var k := 0.0
+		while k <= ARM_LENGTH:
+			_road.append([from + dir * k, ARM_HALF_WIDTH, "roundabout"])
+			k += 1.0
+
+
 func _square() -> void:
-	# The fountain sits at the centre of the bends' left-hand arc (the S round the square),
-	# the lime tree beside it, and the square is paved round both.
-	var r := route("bends")
-	var best_k := 0.0
-	var best_s := 0.0
-	var s := r.length * 0.6
-	while s < r.length - 3.0:
-		if r.curv_at(s) < best_k:
-			best_k = r.curv_at(s)
-			best_s = s
-		s += 0.5
-	var radius := 1.0 / absf(best_k)
-	fountain = at("bends", best_s, radius)
-	lime_tree = fountain + (at("bends", best_s - 9.0, radius) - fountain).normalized() * 5.0
-	var n := 24
+	# The fountain stands in the middle of the roundabout island with the lime tree beside it;
+	# the island is paved.
+	var rb: Dictionary = course.roundabout
+	fountain = rb["centre"]
+	var island: float = float(rb["radius"]) - ring_hw - 0.4
+	var toward_start := (at("start", 0.0, 0.0) - fountain).normalized()
+	lime_tree = fountain + toward_start.rotated(-1.2) * island * 0.55
+	var n := 32
 	for i in n:
 		var t := TAU * i / n
-		square.append(fountain + Vector2(cos(t), sin(t)) * (radius - hw("bends") - 0.3))
+		square.append(fountain + Vector2(cos(t), sin(t)) * island)
 	# The inn faces the square from the west, across the start line.
 	_fit("inn", "start", 3.0, 1, 0.0, "Gasthaus")
 
@@ -278,10 +317,7 @@ func _infill() -> void:
 			var e := road_edge(p)
 			if not _inside_loop(p) or float(e[0]) < INFILL_BAND.x or float(e[0]) > INFILL_BAND.y:
 				continue
-			var r := route(e[1])
-			var s := _closest_s(r, p)
-			var q := r.pos_at(s)
-			var to_road := Vector2(q.x, q.z) - p
+			var to_road := _nearest_road_point(p) - p
 			var yaw := atan2(to_road.x, to_road.y) + rng.randf_range(-0.15, 0.15)
 			var b := {"kind": "chalet", "pos": p, "yaw": yaw, "size": Vector2(KINDS["chalet"][0], KINDS["chalet"][1]),
 				"height": KINDS["chalet"][2], "label": ""}

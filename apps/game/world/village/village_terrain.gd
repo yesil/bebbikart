@@ -212,6 +212,42 @@ func _stamp_roads() -> void:
 						road_y[k] = c.y if is_nan(target) else target
 						structure[k] = 1 if is_nan(target) else 0
 			s += 0.5
+	# The roundabout ring and side streets: flat at the ring's road height.
+	var ry := roundabout_y()
+	var pts: Array = []
+	for i in 144:
+		var t := TAU * i / 144.0
+		pts.append([plan.fountain + Vector2(cos(t), sin(t)) * float(course.roundabout["radius"]), plan.ring_hw])
+	for arm in plan.arms:
+		var a: Vector2 = arm[0]
+		var b: Vector2 = arm[1]
+		var n := int(a.distance_to(b) * 2.0)
+		for i in n + 1:
+			pts.append([a.lerp(b, float(i) / n), VillagePlan.ARM_HALF_WIDTH])
+	for q in pts:
+		_stamp_point(q[0], ry, q[1])
+
+
+## Road height on the roundabout (the course is flat there).
+func roundabout_y() -> float:
+	var seg: Dictionary = course.segments["bends"]
+	return course.surface_y(seg, float(course.roundabout["s0"]))
+
+
+func _stamp_point(c: Vector2, y: float, hw: float) -> void:
+	var reach := hw + CORRIDOR_REACH
+	var i0 := maxi(0, int((c.x - reach - rect.position.x) / spacing))
+	var i1 := mini(w - 1, int((c.x + reach - rect.position.x) / spacing) + 1)
+	var j0 := maxi(0, int((c.y - reach - rect.position.y) / spacing))
+	var j1 := mini(h - 1, int((c.y + reach - rect.position.y) / spacing) + 1)
+	for j in range(j0, j1 + 1):
+		for i in range(i0, i1 + 1):
+			var e := cell_pos(i, j).distance_to(c) - hw
+			var k := j * w + i
+			if e < road_edge[k]:
+				road_edge[k] = e
+				road_y[k] = y
+				structure[k] = 0
 
 
 func _with_road(k: int, nat: float) -> float:

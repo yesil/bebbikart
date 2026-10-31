@@ -25,6 +25,12 @@ const MIN_FREE := 6.0              # shortest allowed solved straight
 const LEG_CHURCH := 76.0           # up the church hill (ramp fork)
 const LEG_BROOK := 178.0           # down to the brook (pond fork)
 const LEG_SOUTH := 262.0           # along the south edge (crossing fork)
+## Roundabout on the Dorfplatz (fountain on the island). Swiss traffic circulates
+## anticlockwise, so the right turn north is a right-hand entry, ROUNDABOUT_TURN degrees of
+## left-hand circulation round the island, and a right-hand exit.
+const ROUNDABOUT_R := 14.0         # racing line radius round the island
+const ROUNDABOUT_LANE_R := 10.5    # entry and exit curves
+const ROUNDABOUT_TURN := 120.0
 
 var segments := {}
 var ordered_ids: Array[String] = []
@@ -36,6 +42,8 @@ var errors: PackedStringArray = []
 ## into the start line.
 var free_hill := 0.0
 var free_north := 0.0
+## {centre: Vector2, radius: float (racing line), s0, s1 (circulating stretch on "bends")}
+var roundabout := {}
 
 
 func _init() -> void:
@@ -120,13 +128,20 @@ func _build(hill: float, north: float) -> void:
 		[[0.0, 0.4], [3.0, 0.4], [13.0, 1.4], [xl - 13.0, 1.4], [xl - 3.0, 0.4], [xl, 0.4]]), 2.6,
 		{"exposure": 1.0, "edge": Tuning.OFF_TRACK_MARGIN_RAILS})
 	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
-	# Square: a chicane past the bakery, right turn north, the S round the fountain, the line.
-	ops = [["S", 4.0], ["A", 12.0, -35.0], ["A", 12.0, 70.0], ["A", 12.0, -35.0], ["S", 3.0], ["A", 14.0, 360.0 - LEG_SOUTH],
-		["S", 3.0], ["A", 12.0, 45.0], ["A", 12.0, -90.0], ["A", 12.0, 45.0], ["S", north]]
-	p = _draw_ops(_end("cross_exposed"), _heading("cross_exposed"), ops, [[0.0, 0.4], [30.0, 0.2], [60.0, 0.0]])
+	# Square: a chicane past the bakery, then the roundabout round the fountain turns the
+	# course north to the line.
+	var lane := (360.0 - LEG_SOUTH + ROUNDABOUT_TURN) * 0.5
+	var chicane := [["S", 4.0], ["A", 12.0, -25.0], ["A", 12.0, 50.0], ["A", 12.0, -25.0], ["S", 12.0]]
+	ops = chicane + [["A", ROUNDABOUT_LANE_R, lane], ["A", ROUNDABOUT_R, -ROUNDABOUT_TURN], ["A", ROUNDABOUT_LANE_R, lane], ["S", north]]
+	p = _draw_ops(_end("cross_exposed"), _heading("cross_exposed"), ops, [[0.0, 0.4], [25.0, 0.0]])
 	_add("bends", "bends", "", "", p, 3.5, {})
 	var b: Dictionary = segments["bends"]
 	var blen: float = (b["route"] as Route).length
+	var rs0 := 16.0 + deg_to_rad(100.0) * 12.0 + deg_to_rad(lane) * ROUNDABOUT_LANE_R
+	var rs1 := rs0 + deg_to_rad(ROUNDABOUT_TURN) * ROUNDABOUT_R
+	var br: Route = b["route"]
+	var mid := br.world_at((rs0 + rs1) * 0.5, ROUNDABOUT_R)
+	roundabout = {"centre": Vector2(mid.x, mid.z), "radius": ROUNDABOUT_R, "s0": rs0, "s1": rs1}
 	b["boosts"] = [[blen - clampf(north, 4.0, 12.0), blen - 1.0]]
 
 

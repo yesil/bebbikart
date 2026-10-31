@@ -47,6 +47,7 @@ func _init() -> void:
 	_check_roads()
 	_check_forks()
 	_check_laps()
+	_check_roundabout()
 	_check_buildings()
 	_check_water()
 	var path := ProjectSettings.globalize_path(out) if out.begins_with("res://") else out
@@ -252,16 +253,63 @@ func _check_laps() -> void:
 
 
 ## Signed distance from p to the nearest road edge (negative on the road), and that road's id.
+var _edge_samples := {}
+
+
 func _road_edge(p: Vector2) -> Array:
 	var best := INF
 	var best_id := ""
+	if _edge_samples.is_empty():
+		for id in course.ordered_ids:
+			_edge_samples[id] = _samples(id, 1.0)
 	for id in course.ordered_ids:
-		for q in _samples(id, 1.0):
+		for q in _edge_samples[id]:
 			var dd: float = p.distance_to(q[1]) - _hw(id)
 			if dd < best:
 				best = dd
 				best_id = id
+	for q in plan.ring:
+		var dd: float = p.distance_to(q) - plan.ring_hw
+		if dd < best:
+			best = dd
+			best_id = "roundabout"
+	for arm in plan.arms:
+		var dd: float = VillagePlan.polyline_dist(p, arm) - VillagePlan.ARM_HALF_WIDTH
+		if dd < best:
+			best = dd
+			best_id = "roundabout arm"
 	return [best, best_id]
+
+
+## The roundabout's side streets keep clear of every course road beyond the ring.
+func _check_roundabout() -> void:
+	var rb: Dictionary = course.roundabout
+	notes.append("roundabout: radius %.1f m, centre (%.0f, %.0f), %d side streets" % [rb["radius"], rb["centre"].x, rb["centre"].y, plan.arms.size()])
+	var samples := {}
+	for id in course.ordered_ids:
+		samples[id] = _samples(id, 1.0)
+	# The ring itself touches only the bends (which drive part of it).
+	for id in course.ordered_ids:
+		if id == "bends":
+			continue
+		for q in samples[id]:
+			var gap: float = absf((q[1] as Vector2).distance_to(rb["centre"]) - float(rb["radius"])) - plan.ring_hw - _hw(id)
+			if gap < 2.0:
+				fails.append("roundabout ring is only %.1f m from %s at (%.0f, %.0f)" % [gap, id, q[1].x, q[1].y])
+				break
+	for arm in plan.arms:
+		var a: Vector2 = arm[0]
+		var b: Vector2 = arm[1]
+		var k := 3.0
+		while k <= a.distance_to(b):
+			var p := a + (b - a).normalized() * k
+			for id in course.ordered_ids:
+				var need := _hw(id) + VillagePlan.ARM_HALF_WIDTH + 2.0
+				for q in samples[id]:
+					if p.distance_to(q[1]) < need:
+						fails.append("roundabout side street at (%.0f, %.0f) runs into %s" % [p.x, p.y, id])
+						return
+			k += 1.0
 
 
 func _check_buildings() -> void:
@@ -378,6 +426,13 @@ func _svg() -> String:
 	o.append('<polyline points="%s" fill="none" stroke="#5aa9e6" stroke-width="%.1f" stroke-linecap="round" stroke-linejoin="round"/>' % [
 		_pts(plan.brook), VillagePlan.BROOK_HALF_WIDTH * 2.0 * SCALE])
 	o.append('<polygon points="%s" fill="#5aa9e6" stroke="#3d7fb8" stroke-width="2"/>' % _pts(Array(plan.pond)))
+	# Roundabout ring and side streets (not raced, drawn under the course).
+	var ring_line: Array = plan.ring.duplicate()
+	ring_line.append(plan.ring[0])
+	for line: Array in [ring_line] + plan.arms:
+		var w_ := plan.ring_hw if line == ring_line else VillagePlan.ARM_HALF_WIDTH
+		o.append('<polyline points="%s" fill="none" stroke="#6f6a63" stroke-width="%.1f" stroke-linejoin="round"/>' % [_pts(line), w_ * 2.0 * SCALE + 3.0])
+		o.append('<polyline points="%s" fill="none" stroke="#c9c1b3" stroke-width="%.1f" stroke-linejoin="round"/>' % [_pts(line), w_ * 2.0 * SCALE])
 	# Roads: grey bed, section colour centre stripe; detours outlined dashed.
 	for id in course.ordered_ids:
 		var line: Array = []
@@ -429,7 +484,7 @@ func _svg() -> String:
 	o.append('<circle cx="%s" cy="%s" r="%.1f" fill="#9fc9e6" stroke="#777" stroke-width="2"/>' % [fc[0], fc[1], 2.5 * SCALE])
 	var lc := _p(plan.lime_tree).split(",")
 	o.append('<circle cx="%s" cy="%s" r="%.1f" fill="#3f7f2f"/>' % [lc[0], lc[1], 3.5 * SCALE])
-	o.append(_label(plan.fountain + Vector2(0, -6), "Dorfplatz + Brunnen"))
+	o.append(_label(plan.fountain + Vector2(0, -6), "Kreisel + Brunnen"))
 	o.append(_label(Vector2(plan.hay_meadow.x, plan.hay_meadow.y), "Heuwiese"))
 	o.append(_label(Vector2(plan.meadow_hollow.x, plan.meadow_hollow.y - 10.0), "Matte (open, windy)"))
 	o.append(_label(_xz(br.pos_at(hs)) + Vector2(10, 0), "Covered bridge"))

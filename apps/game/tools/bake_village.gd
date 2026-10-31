@@ -334,6 +334,60 @@ func _bake_roads() -> void:
 		(cont as RoadContainer).rebuild_segments(true)
 	await process_frame
 	print("bake: roads %d containers" % mgr.get_child_count())
+	_roundabout()
+
+
+## The full roundabout ring and its side streets as road meshes with the asphalt material
+## (lane UVs so the edge lines are painted), a hair under the raced roads, plus the island's
+## white kerb. The raced part of the ring is the "bends" road on top.
+func _roundabout() -> void:
+	var asphalt: Material = _res(MAT_DIR + "road_asphalt.tres")
+	var stone := _std_material("kerb_stone", "", Color(0.86, 0.85, 0.82), 0.8)
+	if asphalt == null:
+		return
+	var node := Node3D.new()
+	_replace("Roundabout", node)
+	var c: Vector2 = plan.fountain
+	var radius: float = course.roundabout["radius"]
+	var y := shape.roundabout_y() - 0.015
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var strip := func(l0: Vector3, r0: Vector3, l1: Vector3, r1: Vector3) -> void:
+		for v: Array in [[l0, 0.0], [r1, 1.0], [r0, 1.0], [l0, 0.0], [l1, 0.0], [r1, 1.0]]:
+			st.set_normal(Vector3.UP)
+			st.set_uv(Vector2((1.0 + float(v[1])) / 8.0, 0.0))
+			st.add_vertex(v[0])
+	var n := 96
+	var inner := radius - plan.ring_hw
+	var outer := radius + plan.ring_hw
+	for i in n:
+		var t0 := TAU * i / n
+		var t1 := TAU * (i + 1) / n
+		var d0 := Vector2(cos(t0), sin(t0))
+		var d1 := Vector2(cos(t1), sin(t1))
+		var p := func(d: Vector2, r: float) -> Vector3: return Vector3(c.x + d.x * r, y, c.y + d.y * r)
+		strip.call(p.call(d0, outer), p.call(d0, inner), p.call(d1, outer), p.call(d1, inner))
+	for arm in plan.arms:
+		var a: Vector2 = arm[0]
+		var b: Vector2 = arm[1]
+		var dir := (b - a).normalized()
+		var side := Vector2(-dir.y, dir.x) * VillagePlan.ARM_HALF_WIDTH
+		var a0 := a - dir * 1.5
+		var ya := y
+		var yb := shape.height_at(b.x, b.y) + 0.04
+		strip.call(Vector3(a0.x - side.x, ya, a0.y - side.y), Vector3(a0.x + side.x, ya, a0.y + side.y),
+			Vector3(b.x - side.x, yb, b.y - side.y), Vector3(b.x + side.x, yb, b.y + side.y))
+	st.set_material(asphalt)
+	_mesh_node(node, "Ring", st.commit(), false)
+	# Island kerb: short stone blocks round the island edge.
+	var kerb := MeshBatch.new(1.0)
+	var island: float = inner - 0.25
+	var k := 48
+	for i in k:
+		var t := TAU * (i + 0.5) / k
+		var q := c + Vector2(cos(t), sin(t)) * island
+		kerb.box(Transform3D(Basis(Vector3.UP, -t), Vector3(q.x, y + 0.08, q.y)), Vector3(0.3, 0.2, TAU * island / k * 0.98))
+	_mesh_node(node, "IslandKerb", kerb.commit(stone))
 
 
 # ---------------------------------------------------------------- shared helpers
