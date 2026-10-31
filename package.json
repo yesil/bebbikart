@@ -19,7 +19,8 @@
     "game:mock": "godot --path apps/game",
     "build:web": "bun run --cwd apps/web build",
     "start": "bun run build:web && bun run --cwd apps/server start",
-    "fake-game": "bun apps/server/scripts/fake-game.js"
+    "fake-game": "bun apps/server/scripts/fake-game.js",
+    "sim-players": "bun apps/server/scripts/sim-players.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0"
