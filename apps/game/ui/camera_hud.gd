@@ -57,7 +57,11 @@ func set_inset(id: String) -> bool:
 	inset = id
 	_fwd = Vector3.ZERO
 	if _inset_label != null:
-		_inset_label.text = I18n.t("cam.inset_" + id) if id != "off" else ""
+		match id:
+			"face":
+				_inset_label.text = I18n.t("cam.inset_face")
+			"side":
+				_inset_label.text = I18n.t("cam.inset_side")
 	return true
 
 
