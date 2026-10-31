@@ -48,9 +48,8 @@ The options menu is where the game manager sets the game options on the big scre
 join and quit). It does not pause the race.
 
 - **Track**: mock mode reloads on the new course. Server mode sends `game.config.set {track}` to
-  the server; if a session is running the menu asks for a second click, then sends
-  `game.session.end`, `game.config.set` and `game.session.start` (new session, empty
-  leaderboard). The course reloads on `config.updated` once the racers are off the track.
+  the server, then `game.session.start`; if a session is running the menu first asks for a
+  second click and sends `game.session.end` (new session, empty leaderboard). The course reloads on `config.updated` once the racers are off the track.
   Refusals (`error`, e.g. `track_locked`) and a disconnected server show in red in the menu.
 - **Graphics** (`--quality=low|medium|high`, saved in `user://settings.cfg`, default Medium):
   caps the 3D resolution (Low 720p, Medium 1080p, High native; MetalFX upscaling on Metal, FSR

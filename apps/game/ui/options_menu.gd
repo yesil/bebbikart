@@ -196,7 +196,7 @@ func _set_track_note() -> void:
 	elif _session == "running":
 		_track_note.text = "Session running on %s. Switching ends it and starts a new one." % _current_track.capitalize()
 	else:
-		_track_note.text = "Session %s. The track you pick is sent to the server for the next session." % _session
+		_track_note.text = "Session %s. Picking a track starts a new session on it." % _session
 
 
 func _is_fullscreen() -> bool:

@@ -306,10 +306,9 @@ func _switch_track(id: String) -> void:
 	print("track change (options menu): asking the server for %s (session %s)" % [id, net.session_status])
 	if net.session_status == "running":
 		net.send("game.session.end", {})
-		net.send("game.config.set", {"track": id})
-		net.send("game.session.start", {})
-	else:
-		net.send("game.config.set", {"track": id})
+	net.send("game.config.set", {"track": id})
+	# Idle or ended (BK_AUTOSTART=0 leaves it ended): start one so players can race on it.
+	net.send("game.session.start", {})
 
 
 ## The countryside course world: baked from course.gd by tools/bake_world.gd, plus the
