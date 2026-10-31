@@ -1,8 +1,12 @@
 extends Camera3D
-## Simple placeholder camera (the camera director is WS3c): chase a racer, or a wide shot
-## that frames the whole field, or fixed vantage points at the three forks.
+## The big-screen camera: chase a racer, or a wide shot that frames the whole field, or fixed
+## vantage points at the three forks. Which racer it chases is up to world/camera_director.gd.
 
 enum Mode { FOLLOW, WIDE, FORKS }
+
+## A cut to a racer whose chase position is further than this from the camera jumps there
+## instead of flying across the map; closer ones get a quick swoop.
+const SNAP_DIST := 35.0
 
 var mode := Mode.FOLLOW
 var target: Node3D = null
@@ -10,6 +14,7 @@ var targets: Array = []      # all visible racer nodes, for WIDE framing
 var fork_shots: Array = []   # [[pos, look_at], ...]
 var fork_idx := 0
 var _look := Vector3.ZERO
+var _chased: Node3D = null   # the target the follow camera last framed
 
 
 func _ready() -> void:
@@ -34,6 +39,10 @@ func _process(delta: float) -> void:
 				var fwd := Vector3(sin(yaw), 0, cos(yaw))
 				want_pos = target.global_position - fwd * 9.0 + Vector3(0, 4.5, 0)
 				want_look = target.global_position + fwd * 6.0 + Vector3(0, 1.0, 0)
+				if target != _chased and position.distance_to(want_pos) > SNAP_DIST:
+					position = want_pos
+					_look = want_look
+				_chased = target
 		Mode.WIDE:
 			var c := Vector3(0, 0, 180)
 			var spread := 120.0
