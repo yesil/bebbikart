@@ -180,6 +180,11 @@ h2 {
 .go-bar .span2 {
   grid-column: 1 / -1;
 }
+/* The result's two-button bar (and a "join the race" call above it) is taller than the page's
+   bottom padding: room so the last stretch rows and laps scroll clear of it. */
+.go-bar-space {
+  height: 96px;
+}
 /* Who else is here (paddock.updated) */
 .paddock {
   margin: 4px 0 14px;

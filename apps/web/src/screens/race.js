@@ -190,6 +190,7 @@ export function Result({ ctx }) {
           </section>`
         : null
     }
+    <div class="go-bar-space" aria-hidden="true"></div>
     <div class="go-bar two">
       ${gridLeft ? html`<div class="span2"><${GridCall} s=${s} left=${gridLeft} /></div>` : null}
       <button class="ghost" onClick=${() => dispatch({ type: "clearResult", coach: r.coach })}>${COPY.result.change}</button>
