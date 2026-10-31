@@ -239,7 +239,7 @@
     },
     {
       "name": "bird",
-      "desc": "big bird or flying creature"
+      "desc": "big bird or flying creature (legs by default; give it wheels if the child drew wheels)"
     },
     {
       "name": "board",
@@ -259,7 +259,7 @@
     },
     {
       "name": "blob",
-      "desc": "anything else: a slime, a cloud, a shoe"
+      "desc": "anything else: a slime, a cloud, a shoe (plain shape, no face: add eyes as extras only if drawn)"
     }
   ],
   "wheelStyles": [

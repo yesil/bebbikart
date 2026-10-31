@@ -194,7 +194,8 @@ static func _animal4(main: Color, accent: Color) -> Dictionary:
 
 static func _bird(main: Color, accent: Color) -> Dictionary:
 	var d := _base(Vector3(0, 1.05, 0.08), {
-		"handle": Vector3(0, 1.12, -0.26), "hand_spread": 0.14,
+		"handle": Vector3(0, 1.12, -0.26), "hand_spread": 0.14, "wheel_r": 0.25,
+		"ground": _wheel_sets(0.25, 0.3, -0.42, 0.42),  # a flying creature on wheels, if drawn so
 		"hips": [Vector3(-0.14, 0.62, 0.02), Vector3(0.14, 0.62, 0.02)], "leg_len": 0.55,
 		"wing": Vector3(0.3, 0.92, 0.02), "tail": Vector3(0, 0.95, 0.46),
 		"sticker": {"pos": Vector3(0.31, 0.82, -0.08), "size": 0.26},
@@ -317,16 +318,11 @@ static func _blob(main: Color, accent: Color) -> Dictionary:
 	var bp := {"ax": 0.55, "ay": 0.44, "az": 0.6, "n": 2.0, "taper": 0.15, "flat_bottom": 0.15}
 	var core := P.node("Jelly", Vector3(0, 0.38, 0))
 	core.set_meta("jiggle", true)
+	# A plain jelly shape: blobs are shoes, clouds and slimes as often as creatures, so no built-in
+	# face (the designer adds eyes as extras when the child drew them).
 	core.add_child(P.mi(KitMesh.blob(bp), main))
-	for s in [-1, 1]:
-		var dir := KitMesh.face_dir(s * 0.32, 0.15)
-		eye(core, KitMesh.blob_point(bp, dir), dir, 0.09)
-	var mouth_pts := PackedVector3Array()
-	for i in 9:
-		var t := -0.3 + 0.6 * i / 8.0
-		var dir2 := KitMesh.face_dir(t, -0.12 - 0.08 * cos(t / 0.3 * PI / 2))
-		mouth_pts.append(KitMesh.blob_point(bp, dir2) + dir2 * 0.01)
-	core.add_child(P.mi(KitMesh.tube(mouth_pts, 0.02, 6, "blob_mouth"), P.DARK))
-	core.add_child(P.mi(KitMesh.sphere(0.12), accent, Vector3(0, 0.4, 0.05)))
+	var band := P.mi(KitMesh.torus(0.5, 0.58), accent, Vector3(0, -0.2, 0))
+	band.scale = Vector3(1.05, 0.6, 1.1)
+	core.add_child(band)
 	b.add_child(core)
 	return d

@@ -79,7 +79,10 @@ export const RACER_KIT = Object.freeze({
     { name: "car", desc: "closed car, van or bus with a see-through glass cabin over the driver" },
     { name: "bike", desc: "bicycle, scooter or motorbike" },
     { name: "animal4", desc: "four-legged animal: horse, dog, dinosaur" },
-    { name: "bird", desc: "big bird or flying creature" },
+    {
+      name: "bird",
+      desc: "big bird or flying creature (legs by default; give it wheels if the child drew wheels)",
+    },
     { name: "board", desc: "skateboard, surfboard, magic carpet" },
     { name: "rocket", desc: "rocket, plane, spaceship" },
     { name: "boat", desc: "boat or bathtub on wheels" },
@@ -87,7 +90,10 @@ export const RACER_KIT = Object.freeze({
       name: "sailboat",
       desc: "sailing boat: a tall mast behind the driver with a big sail in the accent colour; ride_top is the masthead",
     },
-    { name: "blob", desc: "anything else: a slime, a cloud, a shoe" },
+    {
+      name: "blob",
+      desc: "anything else: a slime, a cloud, a shoe (plain shape, no face: add eyes as extras only if drawn)",
+    },
   ],
   wheelStyles: [
     { name: "toy", desc: "chunky toy wheels" },
