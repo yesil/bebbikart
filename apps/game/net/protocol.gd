@@ -186,6 +186,7 @@ const DEFAULT_CONFIG = {
 	"runTimeCapMs": 90000,
 	"stuckTimeoutMs": 3000,
 	"launchCooldownMs": 2000,
+	"startCountdownMs": 3000,
 	"track": "countryside",
 	"lapsPerRun": 3,
 	"language": "en",
@@ -239,6 +240,7 @@ const MSG_ADMIN_TO_SERVER = [
 const MSG_GAME_TO_SERVER = [
 	"hello",
 	"game.run.started",
+	"game.run.grid",
 	"game.run.progress",
 	"game.run.section",
 	"game.run.lap",
@@ -261,6 +263,7 @@ const MSG_SERVER_TO_PHONE = [
 	"player.updated",
 	"player.removed",
 	"run.queued",
+	"run.grid",
 	"run.started",
 	"run.progress",
 	"run.lap",

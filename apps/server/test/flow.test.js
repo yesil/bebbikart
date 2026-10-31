@@ -165,6 +165,10 @@ test("phone → drawings → racer on the big screen → race → result", async
   const runId = start.payload.runId;
   expect(start.payload.build.stars.speed).toBe(DEFAULT_BUILD.stars.speed);
   await phone.wait("run.queued");
+  // The start countdown: the phone hears when the lights go green.
+  game.send("gameToServer", "game.run.grid", { runId, goInMs: 3000 });
+  const grid = await phone.wait("run.grid");
+  expect(grid.payload).toEqual({ runId, goInMs: 3000 });
   game.send("gameToServer", "game.run.started", { runId });
   await phone.wait("run.started");
   phone.send("phoneToServer", "phone.boost", { runId });

@@ -111,6 +111,10 @@ function onWs(s, type, p) {
               },
         me: s.me ? { ...s.me, currentRun: p.run } : s.me,
       };
+    case "run.grid":
+      // On the start grid: the big screen's lights go green in goInMs (contracts §2c).
+      if (!s.live || s.live.runId !== p.runId) return s;
+      return { ...s, live: { ...s.live, goAt: Date.now() + p.goInMs } };
     case "run.progress":
       if (s.live && s.live.runId !== p.runId) return s;
       return { ...s, live: { sections: {}, ...s.live, ...p } };

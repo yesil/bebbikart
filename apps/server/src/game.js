@@ -485,6 +485,12 @@ export function createGame({ db, settings, hub, log = console.log }) {
         pushPlayer(r.playerId);
         return;
       }
+      case "game.run.grid": {
+        // On the start grid in a countdown: the phone counts down to green with the big screen.
+        const r = gameRun(pl.runId);
+        if (r) hub.toPhone(r.playerId, "run.grid", pl);
+        return;
+      }
       case "game.run.progress": {
         const r = gameRun(pl.runId);
         if (!r) return;

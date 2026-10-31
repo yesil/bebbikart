@@ -21,6 +21,11 @@ var outbox: Array = []
 var pair_cool := {}             # "runA|runB" -> tick until which bumps are not logged
 var collisions_enabled := true
 var emit_messages := true       # sweep turns progress chatter off
+## Race start countdown (contracts §2c, config.startCountdownMs): runs that arrive while it is
+## open wait on the grid and leave together when it goes green.
+var grid_go := -1               # tick the open countdown goes green; -1 = none since start
+var go_tick := {}               # runId -> tick its countdown goes green (queued runs only)
+var grid_slot := {}             # runId -> front-row start lane it waits in, visible on the grid
 
 
 func _init(p_course, p_config: Dictionary, seed_: int) -> void:
@@ -41,7 +46,41 @@ func add_run(run_id: String, player_id: String, build: Dictionary) -> Racer:
 	r.setup(run_id, player_id, build, course, config, rng.randi())
 	by_run[run_id] = r
 	queue.append(r)
+	var countdown_ms := int(config.get("startCountdownMs", 0))
+	if countdown_ms > 0:
+		if grid_go <= tick:
+			grid_go = tick + int(ceil(countdown_ms * Tuning.HZ / 1000.0))
+		go_tick[run_id] = grid_go
+		_park_on_grid(r)
+		emit("game.run.grid", {"runId": run_id, "goInMs": int(round((grid_go - tick) * 1000.0 / Tuning.HZ))})
 	return r
+
+
+## The run waits for green in a free front-row slot near its own line, if one is left (the second
+## row waits out of sight and leaves as soon as the front row has pulled away).
+func _park_on_grid(r: Racer) -> void:
+	var home := r.lane_home * (r.half_width() - 0.7)
+	var taken := {}
+	for id in grid_slot:
+		taken[grid_slot[id]] = true
+	var best := INF
+	for lane in Tuning.START_LANES:
+		if taken.has(lane) or _start_gap(lane) < Tuning.START_GAP + Tuning.RADIUS * 2.0:
+			continue
+		if absf(lane - home) < absf(best - home):
+			best = lane
+	if best == INF:
+		return
+	grid_slot[r.run_id] = best
+	r.d = best
+	r.lane = best
+	r.d_target = best
+	r.y = course.surface_y(r.seg, 0.0)
+
+
+## Waiting on the grid, in a front-row slot (racer views show it parked there).
+func on_grid(run_id: String) -> bool:
+	return grid_slot.has(run_id)
 
 
 func boost(run_id: String) -> void:
@@ -65,6 +104,8 @@ func abort(run_id: String) -> void:
 	queue.erase(r)
 	racers.erase(r)
 	by_run.erase(run_id)
+	go_tick.erase(run_id)
+	grid_slot.erase(run_id)
 	emit("sim.removed", {"runId": run_id, "outcome": "aborted"})
 
 
@@ -97,23 +138,16 @@ func step() -> void:
 func _release_from_queue() -> void:
 	# A group pressing Go together leaves side by side: each racer takes the free slot nearest
 	# the line it likes to drive (lane_home), so nobody has to cut across another kart's nose.
+	# A racer parked on the grid leaves from its own slot.
 	while not queue.is_empty():
 		var q: Racer = queue[0]
-		var home := q.lane_home * (q.half_width() - 0.7)
+		if int(go_tick.get(q.run_id, 0)) > tick:
+			return  # the countdown hasn't gone green yet
+		var home: float = grid_slot.get(q.run_id, q.lane_home * (q.half_width() - 0.7))
 		var best_lane := 0.0
 		var best_miss := INF
 		for lane in Tuning.START_LANES:
-			var gap := 1000.0
-			for o in racers:
-				var r: Racer = o
-				if absf(r.d - lane) >= Tuning.RADIUS * 2.0:
-					continue
-				if r.seg_idx == 0:
-					gap = minf(gap, r.ls)
-				elif r.looping and r.seg_idx == r.segs.size() - 1:
-					# A lapping racer about to cross the line counts as close too.
-					gap = minf(gap, r.route().length - r.ls)
-			if gap < Tuning.START_GAP + Tuning.RADIUS * 2.0:
+			if _start_gap(lane) < Tuning.START_GAP + Tuning.RADIUS * 2.0:
 				continue
 			if absf(lane - home) < best_miss:
 				best_miss = absf(lane - home)
@@ -121,6 +155,8 @@ func _release_from_queue() -> void:
 		if best_miss == INF:
 			return
 		queue.pop_front()
+		go_tick.erase(q.run_id)
+		grid_slot.erase(q.run_id)
 		q.state = "racing"
 		q.d = best_lane
 		q.lane = best_lane
@@ -128,6 +164,21 @@ func _release_from_queue() -> void:
 		q.y = course.surface_y(q.seg, 0.0)
 		racers.append(q)
 		emit("game.run.started", {"runId": q.run_id})
+
+
+## Free metres ahead of a start slot (1000 when nobody is near it).
+func _start_gap(lane: float) -> float:
+	var gap := 1000.0
+	for o in racers:
+		var r: Racer = o
+		if absf(r.d - lane) >= Tuning.RADIUS * 2.0:
+			continue
+		if r.seg_idx == 0:
+			gap = minf(gap, r.ls)
+		elif r.looping and r.seg_idx == r.segs.size() - 1:
+			# A lapping racer about to cross the line counts as close too.
+			gap = minf(gap, r.route().length - r.ls)
+	return gap
 
 
 # ---------------------------------------------------------------- traffic queries

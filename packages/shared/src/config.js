@@ -12,6 +12,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
   launchCooldownMs: 2_000, // after a run ends, before the same racer can launch again
+  startCountdownMs: 3_000, // race start: Go opens a countdown; everyone who presses Go in it starts together (0 = instant)
   track: "countryside", // TrackId; changes only while no session is running
   lapsPerRun: 3, // loop tracks: a run ends after this many laps (or earlier on "Pit in")
   language: "en", // Language: set on the big screen; every phone follows it
@@ -55,6 +56,7 @@ export const ConfigSchema = z.object({
   runTimeCapMs: ms,
   stuckTimeoutMs: ms,
   launchCooldownMs: ms,
+  startCountdownMs: ms,
   track: z.enum(TRACK_IDS),
   lapsPerRun: z.number().int().positive(),
   language: z.enum(LANGUAGES),

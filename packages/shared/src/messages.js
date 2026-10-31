@@ -80,6 +80,9 @@ export const CHANNELS = {
   gameToServer: {
     hello,
     "game.run.started": z.object({ runId: z.string() }),
+    // The run is on the start grid; it leaves (game.run.started) in goInMs, with everyone else
+    // who pressed Go in the same countdown (config.startCountdownMs).
+    "game.run.grid": z.object({ runId: z.string(), goInMs: ms }),
     "game.run.progress": z.object({
       runId: z.string(),
       progress,
@@ -133,6 +136,8 @@ export const CHANNELS = {
     // The player quit (or the admin removed them): the phone goes back to the join screen.
     "player.removed": z.object({ playerId: z.string() }),
     "run.queued": z.object({ run: RunSchema }),
+    // Relayed game.run.grid: on the start grid, the lights go green in goInMs.
+    "run.grid": z.object({ runId: z.string(), goInMs: ms }),
     "run.started": z.object({ run: RunSchema }),
     "run.progress": z.object({
       runId: z.string(),

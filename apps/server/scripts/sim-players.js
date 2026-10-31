@@ -306,7 +306,12 @@ class Race {
     await phone.wait("run.started", (p) => p.run.id === this.runId, 60_000);
     this.startedAt = performance.now();
     this.r.goToStartedMs = this.startedAt - this.goAt;
-    line(phone.tag, `on track after ${(this.r.goToStartedMs / 1000).toFixed(2)} s`);
+    // Start countdown (contracts §2c): how far the phone's green was from the real release.
+    if (this.greenAt !== undefined) this.r.greenToStartedMs = this.startedAt - this.greenAt;
+    line(
+      phone.tag,
+      `on track after ${(this.r.goToStartedMs / 1000).toFixed(2)} s${this.greenAt !== undefined ? ` (countdown, ${Math.round(this.r.greenToStartedMs)} ms after green)` : ""}`,
+    );
     this.scheduleTaps();
     const ended = await phone.wait("run.ended", (p) => p.run.id === this.runId, capMs);
     this.onEnded(ended);
@@ -339,7 +344,10 @@ class Race {
   onMessage(m, at) {
     const p = m.payload;
     if (p?.runId !== this.runId && p?.run?.id !== this.runId) return;
-    if (m.type === "run.progress") {
+    if (m.type === "run.grid") {
+      this.greenAt = at + p.goInMs;
+      this.r.gridGoInMs = p.goInMs;
+    } else if (m.type === "run.progress") {
       this.r.progress++;
       this.lastProgressAt = at;
       this.firstProgressAt ??= at;
@@ -479,6 +487,7 @@ async function main() {
   console.log(`join → racer ready           ${stats(phones.map((p) => p.t.readyMs))}`);
   console.log(`Go → run.queued              ${stats(all.map((r) => r.goToQueuedMs))}`);
   console.log(`Go → on track (run.started)  ${stats(all.map((r) => r.goToStartedMs))}`);
+  console.log(`countdown green → on track   ${stats(all.map((r) => r.greenToStartedMs))}`);
   console.log(
     `boost tap → seen on phone    ${stats(all.flatMap((r) => r.boosts))}  (includes ≤200 ms progress interval)`,
   );

@@ -7,6 +7,7 @@ const CameraHud = preload("res://ui/camera_hud.gd")
 
 var racer = null   # sim/racer.gd
 var nickname := ""
+var parked := false  # waiting on the start grid for the countdown (main sets it from the sim)
 var toy: ToyRacer
 var _body: Node3D
 var _was_air := false
@@ -75,7 +76,7 @@ func shot_frame() -> Dictionary:
 func sync() -> void:
 	if racer == null:
 		return
-	visible = racer.state == "racing"
+	visible = racer.state == "racing" or parked
 	if not visible:
 		return
 	position = racer.world_pos()

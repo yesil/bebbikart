@@ -7,6 +7,7 @@ const CameraHud = preload("res://ui/camera_hud.gd")
 var racer = null   # sim/racer.gd
 var color := Color.WHITE
 var nickname := ""
+var parked := false  # waiting on the start grid for the countdown (main sets it from the sim)
 var _body: Node3D
 var _label: Label3D
 var _boost: MeshInstance3D
@@ -102,7 +103,7 @@ func _part(mesh: Mesh, m: Material, pos: Vector3) -> MeshInstance3D:
 func sync() -> void:
 	if racer == null:
 		return
-	visible = racer.state == "racing"
+	visible = racer.state == "racing" or parked
 	if not visible:
 		return
 	position = racer.world_pos() - Vector3(0, 0.0, 0)

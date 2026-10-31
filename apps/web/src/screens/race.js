@@ -25,6 +25,18 @@ export function Run({ ctx }) {
   const lastSection = SECTION_IDS.filter((id) => live.sections?.[id]).pop();
   const last = lastSection ? live.sections[lastSection] : null;
   const onCamera = !!live.runId && s.camera?.runId === live.runId;
+  // The start countdown, in step with the lights on the big screen.
+  const counting = !started && live.goAt !== undefined;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!counting) return;
+    const t = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(t);
+  }, [counting]);
+  const left = counting ? Math.ceil((live.goAt - now) / 1000) : 0;
+  useEffect(() => {
+    if (counting && left <= 0) navigator.vibrate?.(120);
+  }, [counting, left <= 0]);
 
   // On the big screen now: a little buzz, and "Show me" can be asked again after this shot.
   useEffect(() => {
@@ -70,7 +82,10 @@ export function Run({ ctx }) {
             </div>`
           : null
       }
-      <div class="timer">${started ? secs(loop ? (live.lapMs ?? live.elapsedMs) : live.elapsedMs) : COPY.run.queued}</div>
+      ${counting ? html`<div class="get-ready">${COPY.run.getReady}</div>` : null}
+      <div class=${`timer ${counting ? `count ${left > 0 ? "" : "go"}` : ""}`}>
+        ${started ? secs(loop ? (live.lapMs ?? live.elapsedMs) : live.elapsedMs) : counting ? (left > 0 ? left : COPY.run.go) : COPY.run.queued}
+      </div>
       ${
         loop && lastLap
           ? html`<div class=${`lap-result ${lastLap.isLapBest ? "good" : lastLap.deltaVsBestLapMs > 0 ? "bad" : ""}`}>

@@ -10,6 +10,7 @@ extends CanvasLayer
 ##  - Banners (top centre): each finish and each oops as it happens.
 ##  - Problems (top centre, red): errors for the facilitator. No fallbacks: shown, never hidden.
 ##  - Podium (centre): the session's top three when it ends, for PODIUM_S.
+##  - Countdown (upper middle): the race start lights (contracts §2c) with everyone on the grid.
 ## The bottom of the screen belongs to the camera director (on-camera name tag bottom left,
 ## picture-in-picture bottom right, the name pop after a cut at 56 % down).
 ## main.gd feeds it (set_roster, set_leaderboard, run_result, run_gone, problem) and calls
@@ -66,6 +67,13 @@ var _banners: VBoxContainer
 var _problems: VBoxContainer
 var _session := ""
 var _podium: Control = null
+var _countdown: PanelContainer
+var _count_label: Label
+var _count_names: HBoxContainer
+var _count_key := ""            # who is on the grid now, to rebuild the name chips on change
+var _green_tick := -1           # the countdown that last went green (GO! shows for GO_S)
+var _go_until := -1.0
+const GO_S := 1.2
 
 
 func _ready() -> void:
@@ -88,6 +96,7 @@ func _ready() -> void:
 	_banners.add_theme_constant_override("separation", 8)
 	_banners.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_banners)
+	_build_countdown()
 	_problems = VBoxContainer.new()
 	_problems.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_problems.offset_left = -380
@@ -221,6 +230,7 @@ func update(delta: float, sim, views: Dictionary) -> void:
 		if _t - float(h["done_t"]) > RESULT_HOLD_S or (_empty_since >= 0.0 and _t - _empty_since > EMPTY_HOLD_S):
 			_heat.erase(run_id)
 	var order := _order(sim)
+	_update_countdown(sim)
 	_update_board(order, sim)
 	_update_tags(order, sim, views, delta)
 	_paddock_t -= delta
@@ -332,7 +342,7 @@ func _update_board(order: Array, sim) -> void:
 		_fill_chip(row["chip"], pid, col)
 		row["name"].text = _nick(pid)
 		row["name"].add_theme_color_override("font_color", col.lightened(0.25))
-		row["place"].text = str(i + 1) if state != "failed" else "–"
+		row["place"].text = str(i + 1) if state == "racing" or state == "finished" else ""
 		row["place"].add_theme_color_override("font_color", _place_color(i + 1) if state == "finished" else Color.WHITE)
 		var info := ""
 		var time := ""
@@ -379,7 +389,8 @@ func _update_tags(order: Array, sim, views: Dictionary, delta: float) -> void:
 	# tag on its head and the ones behind move up out of its way.
 	var shown: Array = []
 	var vp := get_viewport().get_visible_rect()
-	for r in sim.racers:
+	var parked: Array = sim.queue.filter(func(q): return sim.on_grid(q.run_id))
+	for r in sim.racers + parked:
 		var v: Node3D = views.get(r.run_id)
 		var tag: PanelContainer = _tags.get(r.run_id)
 		if tag == null:
@@ -400,6 +411,9 @@ func _update_tags(order: Array, sim, views: Dictionary, delta: float) -> void:
 		tag.visible = true
 		var badge: Label = tag.get_meta("badge")
 		badge.text = str(places.get(r.run_id, 0))
+		if badge.get_parent().visible != (r.state == "racing"):
+			badge.get_parent().visible = r.state == "racing"  # no place while waiting on the grid
+			tag.reset_size()
 		var k := clampf(TAG_NEAR / maxf(dist, 0.1), 0.55, 1.0)
 		tag.scale = Vector2(k, k)
 		shown.append({"tag": tag, "p": p, "dist": dist, "size": tag.get_combined_minimum_size() * k})
@@ -426,10 +440,9 @@ func _update_tags(order: Array, sim, views: Dictionary, delta: float) -> void:
 		else:
 			tag.position = tag.position.lerp(rect.position, 1.0 - exp(-delta * 14.0))
 	for run_id in _tags.keys():
-		if not sim.by_run.has(run_id) or sim.by_run[run_id].state != "racing":
-			if not sim.queue.any(func(q): return q.run_id == run_id):
-				_tags[run_id].queue_free()
-				_tags.erase(run_id)
+		if not sim.by_run.has(run_id) or (sim.by_run[run_id].state != "racing" and not sim.on_grid(run_id)):
+			_tags[run_id].queue_free()
+			_tags.erase(run_id)
 
 
 func _make_tag(pid: String) -> PanelContainer:
@@ -550,6 +563,73 @@ func _rebuild_paddock(sim) -> void:
 		_paddock.add_child(row)
 	if pids.size() > PADDOCK_MAX_ROWS:
 		_paddock.add_child(_label(I18n.f("hud.more", [pids.size() - PADDOCK_MAX_ROWS]), 18, Color(0.8, 0.84, 0.92)))
+
+
+# ---------------------------------------------------------------- countdown
+
+func _build_countdown() -> void:
+	_countdown = _panel(Color(0.06, 0.07, 0.1, 0.78), 22, Color("#ffd23a"), 4)
+	_countdown.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_countdown.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_countdown.offset_top = 210
+	_countdown.visible = false
+	add_child(_countdown)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	_countdown.add_child(box)
+	var title := _label(I18n.t("hud.get_ready"), 34, Color("#ffd23a"))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	_count_label = _label("", 130, Color.WHITE)
+	_count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_count_label)
+	_count_names = HBoxContainer.new()
+	_count_names.alignment = BoxContainer.ALIGNMENT_CENTER
+	_count_names.add_theme_constant_override("separation", 10)
+	box.add_child(_count_names)
+	set_meta("count_title", title)
+
+
+## Lights while a countdown runs: seconds to green, and who is lined up; then GO! for a moment.
+func _update_countdown(sim) -> void:
+	var waiting: Array = []
+	var go := -1
+	for q in sim.queue:
+		var t := int(sim.go_tick.get(q.run_id, -1))
+		if t > sim.tick:
+			waiting.append(q)
+			go = t if go < 0 else mini(go, t)
+	if waiting.is_empty() and sim.grid_go > 0 and sim.grid_go <= sim.tick and sim.grid_go != _green_tick:
+		_green_tick = sim.grid_go
+		_go_until = _t + GO_S
+	var title: Label = get_meta("count_title")
+	if not waiting.is_empty():
+		_countdown.visible = true
+		title.visible = true
+		var left := float(go - sim.tick) / 60.0
+		_count_label.text = str(ceili(left))
+		_count_label.add_theme_color_override("font_color", Color("#ff4b4b") if left > 1.0 else Color("#ffd23a"))
+		var key := ",".join(waiting.map(func(q): return q.run_id))
+		if key != _count_key:
+			_count_key = key
+			for c in _count_names.get_children():
+				c.queue_free()
+			for q in waiting:
+				var chip := _panel(color_for(q.player_id).darkened(0.35), 10, color_for(q.player_id), 3)
+				chip.add_child(_label(_nick(q.player_id), 26, Color.WHITE))
+				_count_names.add_child(chip)
+	elif _t < _go_until:
+		_countdown.visible = true
+		title.visible = false
+		_count_label.text = I18n.t("hud.go")
+		_count_label.add_theme_color_override("font_color", Color("#33d17a"))
+	else:
+		_countdown.visible = false
+		_count_key = ""
+	if _countdown.visible:
+		_countdown.reset_size()
+		_countdown.offset_left = -_countdown.size.x * 0.5
+		_countdown.offset_right = _countdown.size.x * 0.5
 
 
 # ---------------------------------------------------------------- podium

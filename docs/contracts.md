@@ -30,6 +30,7 @@ export const DEFAULT_CONFIG = {
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
   launchCooldownMs: 2_000, // after a run ends, before the same racer can launch again
+  startCountdownMs: 3_000, // race start countdown (§2c); 0 = each racer leaves as soon as there is room
   track: "countryside", // TrackId; changes only while no session is running (409 track_locked)
   lapsPerRun: 3, // loop tracks: a run ends after this many laps, or earlier on "Pit in"
   language: "en", // Language; set on the big screen, every phone follows it (§2b)
@@ -64,6 +65,18 @@ The game manager picks the **language** (`language`: `"en"` English or `"de"` Ge
 - Every user-facing string lives in one string table per app with the same keys in `en` and `de`: `apps/web/src/copy.js` (phone), `apps/game/data/strings.json` (big screen), `COACH_COPY` in `packages/shared/src/coach.js` (coach tips, written by the server in `config.language`). `bun test` checks the key sets match.
 - **No fallback language:** a missing key or an unknown language throws (JS) or `push_error`s and shows the missing key on screen (Godot). It never quietly shows English.
 - Racer titles, taglines and personality words come from the racer designer and stay in the language it wrote them in.
+
+## 2c. Race start (countdown)
+
+Kids in a group press Go a few seconds apart; the countdown makes them race each other. When a run
+reaches the game and no countdown is open, the game opens one of `startCountdownMs`: the big screen
+shows the lights (3, 2, 1, GO) and the racers lined up, and every run that arrives before the lights
+go green joins it. The game sends `game.run.grid { runId, goInMs }` for each run as it joins; the
+server relays it to that racer's phone as `run.grid`, which counts down too. At green the group
+leaves together (`game.run.started` each): side by side in the four start slots, a second row as
+soon as the first has pulled away. A run that arrives after green opens the next countdown. With
+`startCountdownMs: 0` there is no countdown and no `game.run.grid`. Run times start when the racer
+leaves, so waiting on the grid never costs time.
 
 ## 3. Enums
 
@@ -391,6 +404,7 @@ interface Envelope<T extends string, P> {
 | `player.updated`             | `PlayerView`                                                                                   | Any change to this player (job progress, build, best) |
 | `player.removed`             | `{ playerId }`                                                                                 | The player quit or the admin removed them: back to the join screen |
 | `run.queued` / `run.started` | `{ run }`                                                                                      |                                                       |
+| `run.grid`                   | `{ runId, goInMs }`                                                                            | On the start grid: the lights go green in goInMs (§2c) |
 | `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1 |
 | `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
@@ -454,6 +468,7 @@ interface RunStart {
 | type                | payload                                                                                      |
 | ------------------- | -------------------------------------------------------------------------------------------- |
 | `game.run.started`  | `{ runId }` (racer crossed the start line)                                                   |
+| `game.run.grid`     | `{ runId, goInMs }`: the run joined the start countdown (§2c); relayed to its phone as `run.grid` |
 | `game.run.progress` | `{ runId, progress, elapsedMs, section, boostsLeft, lap?, lapMs? }`, ≤ 5 Hz (lap fields on loops) |
 | `game.run.section`  | `{ runId, section, splitMs }`                                                                |
 | `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, isBest }`: loop tracks, each line crossing (`isBest` within this run) |

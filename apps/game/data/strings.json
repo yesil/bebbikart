@@ -123,7 +123,9 @@
     "hud.status_needs_review": "waiting for a grown-up",
     "hud.paddock": "Racers",
     "hud.best_time": "%.2f s",
-    "hud.podium_title": "Time's up! The podium"
+    "hud.podium_title": "Time's up! The podium",
+    "hud.get_ready": "Get ready!",
+    "hud.go": "GO!"
   },
   "de": {
     "lang.en": "English",
@@ -248,6 +250,8 @@
     "hud.status_needs_review": "wartet auf Erwachsene",
     "hud.paddock": "Rennfahrer",
     "hud.best_time": "%.2f s",
-    "hud.podium_title": "Zeit um! Das Podest"
+    "hud.podium_title": "Zeit um! Das Podest",
+    "hud.get_ready": "Bereit machen!",
+    "hud.go": "LOS!"
   }
 }

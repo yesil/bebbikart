@@ -766,8 +766,9 @@ func _process(delta: float) -> void:
 	camera.target = views.get(follow_run)
 	audio.follow_run = follow_run
 	camera.targets = views.values()
-	for v in views.values():
-		v.sync()
+	for id in views:
+		views[id].parked = sim.on_grid(id)
+		views[id].sync()
 	_update_camera_hud()
 	hud.update(delta, sim, views)
 	_update_overlay(racing)
@@ -777,7 +778,7 @@ func _process(delta: float) -> void:
 		_screenshot(args["screenshot"])
 	# --shots=DIR [--shot-every=SEC]: a screenshot every few seconds while racers are on the
 	# track (multiplayer harness: start grid, mid-race, finish), named by time and racer count.
-	if args.has("shots") and run_time >= next_shot and not sim.racers.is_empty():
+	if args.has("shots") and run_time >= next_shot and sim.active_count() > 0:
 		next_shot = run_time + float(args.get("shot-every", "2"))
 		_screenshot("%s/t%05.1f_r%d.jpg" % [args["shots"], run_time, sim.racers.size()])
 	if dur > 0.0 and run_time >= dur:
