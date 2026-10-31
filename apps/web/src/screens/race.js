@@ -27,13 +27,13 @@ export function Run({ ctx }) {
   const onCamera = !!live.runId && s.camera?.runId === live.runId;
   // The start countdown, in step with the lights on the big screen.
   const counting = !started && live.goAt !== undefined;
-  const [now, setNow] = useState(Date.now());
+  const [, tick] = useState(0);
   useEffect(() => {
     if (!counting) return;
-    const t = setInterval(() => setNow(Date.now()), 100);
+    const t = setInterval(() => tick((n) => n + 1), 100);
     return () => clearInterval(t);
   }, [counting]);
-  const left = counting ? Math.ceil((live.goAt - now) / 1000) : 0;
+  const left = counting ? Math.ceil((live.goAt - Date.now()) / 1000) : 0;
   useEffect(() => {
     if (counting && left <= 0) navigator.vibrate?.(120);
   }, [counting, left <= 0]);

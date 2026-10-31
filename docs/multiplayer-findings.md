@@ -36,6 +36,17 @@ GO! as they leave; place tags over every kart; the race board turns into the res
 finish. Polished after this round: tags that slide under a HUD panel are hidden; compact standings
 rows fit 20 racers above the camera's name tag.
 
+## Rounds 3 and 4 (2026-10-31): 4 phones on the village loop with Pit in, Go 0.9-1.2 s apart
+
+| Area | Found | Status |
+|---|---|---|
+| Track switch | Phones that pressed Go right after a track switch raced the **old** course: the game reloads the new world only once its track is empty, but the run.start came first. The server read the results as village runs: no laps, no times. | **fixed** (ce1ee06): the game's hello says which track it has loaded; Go is refused with `track_changing` ("The big screen is changing track. Try again in a moment!") until it matches. Round 4: one refusal, 1 s later all 4 left together on the village. |
+| Countdown | Go pressed 0.9 s apart: all 4 left together at green, the phone's green within 15-38 ms. Go pressed 1.2 s apart: the 4th pressed 3.6 s after the first and missed the 3 s countdown, raced alone 3.6 s behind. | the "join the race" call below; length is ilyas's pick (3 or 5 s) |
+| Racing again together | Kids reading their results press Go at different times. | **added**: every phone hears who is on the open grid (`grid.updated`): "Mia & Noah are on the grid! Join the race: 2", Go turns into "Join the race!" (checked on the real phone page) |
+| Group results | Each phone only knew its own time and session rank. | **added** (9cc6fc6): runs that left within 2.5 s are a heat; every phone gets everyone's places as they come home ("This race · 2nd of 4!", the rest "racing…"). All 4 phones got the same complete result 0-1 ms after the last finisher. [Phone screen](screens/multiplayer-phone-heat.jpg) |
+| Village laps | Lap 1 51-64 s (standing start), lap 2 48-61 s; Pit in after lap 1 ends the run at the next line. Board shows "Lap 2 · pit" and "best lap". | fine |
+| Load | ~300 KB per phone for 2 two-lap races; boost tap → seen median 81-98 ms. | fine |
+
 ## Big-screen HUD (`apps/game/ui/race_hud.gd`)
 
 - A tag over every kart: place badge and name in the racer's colour, pushed apart so tags never

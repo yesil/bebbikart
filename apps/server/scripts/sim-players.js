@@ -403,6 +403,7 @@ class Race {
       pb: e.isPersonalBest,
       coach: e.coach?.text,
       endedAt: performance.now(),
+      startedAt: this.startedAt,
       wallMs: performance.now() - this.startedAt,
       progressHz: this.firstProgressAt
         ? (this.r.progress * 1000) / Math.max(1, this.lastProgressAt - this.firstProgressAt)
@@ -432,8 +433,25 @@ const stats = (xs, f = ms) => {
 
 /** Group results on the phones (run.heat): every racer of a heat gets the same, complete result. */
 function checkHeats(phones, n, lastEnd) {
+  // Racers who left within 2.5 s of each other are a heat (the server's rule); one who left
+  // alone (e.g. pressed Go after the countdown went green) gets no group result.
+  const starts = phones
+    .map((ph) => ({ ph, at: ph.races.find((r) => r.race === n)?.startedAt }))
+    .filter((x) => x.at !== undefined)
+    .sort((a, b) => a.at - b.at);
+  const alone = new Set();
+  for (let i = 0; i < starts.length; ) {
+    let j = i;
+    while (j + 1 < starts.length && starts[j + 1].at - starts[i].at <= 2500) j++;
+    if (j === i) alone.add(starts[i].ph);
+    i = j + 1;
+  }
   const byHeat = new Map();
   for (const ph of phones) {
+    if (alone.has(ph)) {
+      line(ph.tag, `race ${n}: left alone, no group result expected`);
+      continue;
+    }
     const h = ph.heats.filter((x) => x.done).at(-1);
     if (!h || h.at < lastEnd - 120_000) {
       fail(ph.tag, `race ${n}: no complete group result (run.heat done) on the phone`);

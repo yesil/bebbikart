@@ -26,12 +26,13 @@ export const isLoop = (track) => LOOP_TRACKS.includes(track);
 /** Seconds until an open start countdown (grid.updated) goes green, or 0 when there is none to
  *  join: none open, already green, or I'm on that grid. Re-renders while it counts. */
 export function useGridCall(s) {
-  const [now, setNow] = useState(Date.now());
+  const [, tick] = useState(0);
+  const now = Date.now(); // not a stored clock: a call that just arrived counts from now
   const g = s.grid;
   const open = !!g && g.goAt > now && !g.racers.some((r) => r.playerId === s.me?.id);
   useEffect(() => {
     if (!open) return;
-    const t = setInterval(() => setNow(Date.now()), 200);
+    const t = setInterval(() => tick((n) => n + 1), 200);
     return () => clearInterval(t);
   }, [open, g]);
   return open ? Math.ceil((g.goAt - now) / 1000) : 0;
