@@ -210,7 +210,17 @@ export const partNames = (parts) => parts.map((p) => p.name);
 export const CHARACTER_SOCKETS = RACER_KIT.sockets.filter((s) => s.on === "character");
 export const RIDE_SOCKETS = RACER_KIT.sockets.filter((s) => s.on === "ride");
 export const FLAT_EXTRA_SHAPES = Object.freeze([
-  "star", "heart", "lightning", "flame", "moon", "flower", "leaf", "cloud", "diamond", "drop", "bowtie",
+  "star",
+  "heart",
+  "lightning",
+  "flame",
+  "moon",
+  "flower",
+  "leaf",
+  "cloud",
+  "diamond",
+  "drop",
+  "bowtie",
 ]);
 
 /** Number ranges the RacerSpec clamps to. */

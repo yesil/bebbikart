@@ -282,8 +282,10 @@ full of personality and different from every other racer?
 Check, one by one:
 - likeness: is every defining feature of each drawing there, with the right count, colour, size and place? What's
   missing or wrong? Is anything there that the child did not draw and that clashes with the drawing?
-- colour: does the palette match the crayons used? Are the main colours on the right parts? Are markings (stripes,
-  spots…) and the colouring style captured with patterns?
+- colour: does the palette match the crayons used? Are the main colours on the right parts? Remember the ride's
+  "accent" paints bumpers, seat back and trim, a big part of a kart: if the drawn vehicle is mostly one colour, the
+  accent must be that colour or a shade of it. Are markings (stripes, spots…) and the colouring style captured with
+  patterns?
 - personality: do face, motion, title, tagline and sound fit the drawing's mood? Is it bland?
 - proportions and readability: exaggerations kept? Extras big enough to see, placed sensibly (ears on the head side,
   horns on top), not floating or buried?

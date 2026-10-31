@@ -5,8 +5,9 @@ export const DEEPSEEK_DEFAULTS = {
   baseUrl: "https://api.deepseek.com",
   // Looks at the photos (look + critique passes): the vision model, thinking at max effort.
   visionModel: "deepseek-flash",
-  // Writes the spec (design + refine passes): the strongest text model.
-  designModel: "deepseek-v4-pro",
+  // Writes the spec (design + refine passes). deepseek-v4-pro gave no better designs in a side-by-side
+  // test and was 2–4× slower (166–271 s per design), so the flash model with thinking it is.
+  designModel: "deepseek-flash",
   timeoutMs: 150_000,
 };
 
@@ -15,7 +16,8 @@ export class DeepSeekError extends Error {}
 /**
  * @param {{ apiKey?: string, baseUrl?: string, visionModel?: string, designModel?: string, timeoutMs?: number, fetch?: typeof fetch }} [opts]
  * @returns {{ name: string, complete: (messages: object[], opts?: CompleteOpts) => Promise<string> }}
- * @typedef {{ vision?: boolean, temperature?: number, effort?: "low"|"high"|"max", maxTokens?: number }} CompleteOpts
+ * @typedef {{ vision?: boolean, temperature?: number, effort?: "off"|"low"|"high"|"max", maxTokens?: number }} CompleteOpts
+ * effort "off" disables thinking.
  */
 export function createDeepSeekClient(opts = {}) {
   const env = process.env;
@@ -47,8 +49,9 @@ export function createDeepSeekClient(opts = {}) {
         temperature,
         max_tokens: maxTokens,
         stream: false,
-        thinking: { type: "enabled" },
-        reasoning_effort: effort,
+        ...(effort === "off"
+          ? { thinking: { type: "disabled" } }
+          : { thinking: { type: "enabled" }, reasoning_effort: effort }),
       };
       let res;
       try {

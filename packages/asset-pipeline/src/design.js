@@ -22,6 +22,35 @@ export const STAGES = JOB_STAGES;
 /** Fields the designer must always write for new racers (optional in the stored schema for old ones). */
 const REQUIRED_NEW = ["tagline", "motion", "sound"];
 
+/**
+ * Thinking effort per pass. Measured on deepseek-flash (2026-10-31, 4 racers at a time):
+ *   look      high/max 12–37 s
+ *   design    off 7–20 s · low 55–80 s, timed out at 150 s on a real drawing · high 50–145 s
+ *   critique  off ~10 s · low/high 40–120 s
+ *   refine    off ~10 s · low 10–60 s
+ * Thinking on the text passes gave no clear gain once the look pass had described the drawings in
+ * detail, so only the look pass thinks: ~45–60 s per racer.
+ * Override with DEEPSEEK_EFFORT="look,design,critique,refine", e.g. "max,low,off,off".
+ */
+export const DESIGN_EFFORT = effortFromEnv(process.env.DEEPSEEK_EFFORT) ?? {
+  look: "high",
+  design: "off",
+  critique: "off",
+  refine: "off",
+};
+
+function effortFromEnv(v) {
+  if (!v) return null;
+  const parts = v.split(",").map((s) => s.trim());
+  const ok = ["off", "low", "high", "max"];
+  if (parts.length !== 4 || parts.some((p) => !ok.includes(p)))
+    throw new Error(
+      `DEEPSEEK_EFFORT must be 4 of ${ok.join("|")} for look,design,critique,refine; got "${v}"`,
+    );
+  const [look, design, critique, refine] = parts;
+  return { look, design, critique, refine };
+}
+
 class StageFailed extends Error {}
 
 /**
@@ -109,7 +138,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
           approved: !!input.skipCheck,
           previousErrors: errors,
         }),
-      { vision: true, effort: "max", temperature: 0.3 },
+      { vision: true, effort: DESIGN_EFFORT.look, temperature: 0.3 },
       (v) => validateLook(v, !!input.skipCheck),
     );
     if (look.rejected) return reject(look.rejected.reason, look.rejected.image, look.rejected.seen);
@@ -121,7 +150,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       "design",
       (errors) =>
         buildDesignMessages({ observations, reroll: input.reroll, previousErrors: errors }),
-      { effort: "high", temperature: input.reroll ? 1.1 : 0.9 },
+      { effort: DESIGN_EFFORT.design, temperature: input.reroll ? 1.1 : 0.9 },
       validateDesign,
     );
 
@@ -136,7 +165,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
           observations,
           design: { featureMap: design.featureMap, spec: design.spec, notes: design.notes },
         }),
-      { vision: true, effort: "high", temperature: 0.4 },
+      { vision: true, effort: DESIGN_EFFORT.critique, temperature: 0.4 },
       validateCritique,
     );
 
@@ -151,7 +180,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
           critique,
           previousErrors: errors,
         }),
-      { effort: "high", temperature: 0.7 },
+      { effort: DESIGN_EFFORT.refine, temperature: 0.7 },
       validateDesign,
     );
 

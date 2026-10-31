@@ -7,41 +7,43 @@
 
 Kids' drawings will be **very raw**: a few lines, scribbled colour, maybe a face. We don't copy the lines. We capture the **spirit and the colours** and turn them into a **living 3D toy racer** that drives, jumps, gets dizzy, celebrates and waves, with facial expressions and an **avatar** on the kid's phone.
 
-**How:** DeepSeek looks at the drawings and **writes a design**, not a picture: a small JSON `RacerSpec` that says which toy parts to use, their colours, sizes and positions, the face, and up to a dozen extra shapes for the unique details. The Godot game **builds the racer in 3D** from that spec and animates it. One AI call per racer, no image generation, cost in cents for the whole event.
+**How:** DeepSeek looks at the drawings and **writes a design**, not a picture: a small JSON `RacerSpec` that says which toy parts to use, their colours, sizes and positions, the face, and up to a dozen extra shapes for the unique details. The Godot game **builds the racer in 3D** from that spec and animates it. Four AI passes per racer (look, design, critique, refine), no image generation, cost in cents for the whole event.
 
 Why this beats generating images:
 - **Real 3D**, so every pose and expression is just animation: unlimited, smooth, always the same character.
 - **One house style for free:** every racer is assembled from the same toy-part kit, so they all belong in the toy world.
-- **Fast and cheap:** one DeepSeek call (~10–20 s), no image model, no background removal.
+- **Cheap, and worth the wait:** four DeepSeek passes (~1 min), no image model, no background removal. A single fast call (~5 s) gave flat, samey racers, so we trade time for likeness and personality.
 - **Editable:** a spec is small JSON, so a facilitator (or the kid, later) can tweak a colour or swap a hat.
 
 ## 1. Pipeline
 
 ```
-photos ─► 1 Normalise ─► 2 DeepSeek: check + design ─► 3 Validate & clamp ─► 4 Game builds the racer ─► 5 Game renders avatars ─► phone
-              (sharp)          (one vision call)              (zod)              (instant, 3D)               (PNG back to server)
+photos ─► 1 Normalise ─► 2 Look ─► 3 Design ─► 4 Critique ─► 5 Refine ─► validate ─► game builds ─► avatars ─► phone
+              (sharp)    (vision)    (text)     (vision)      (text)       (zod)
 ```
 
 1. **Normalise** (`sharp`): EXIF rotate, strip metadata, longest side ≤ 1536 px. Also save a cropped copy of the drawing for the "drawn by me" view and the optional **drawing sticker** on the ride (§4).
-2. **Check + design** (`onStatus("designing")`): one call to `deepseek-v4-flash-vision-exp` with both photos, JSON output mode, and a prompt containing:
-   - the **kit catalog** (every part name with a one-line description, generated from the game's kit, §3),
-   - the `RacerSpec` schema and rules (ranges, max extras),
-   - 3 worked examples (drawing description → spec),
-   - the instruction to capture spirit, colours and the 2–4 most distinctive features, and to keep it cute and kid-friendly.
-     The reply contains `check` (drawing vs real photo, real person, empty page) and `spec`. Real photo / person → `rejected` with a friendly retake message. Call fails → `needs_review` (the facilitator approves by eye, then the job reruns).
-3. **Validate & clamp** with the zod schema: unknown part names → nearest valid part, numbers clamped to ranges, extras capped. If it's badly broken, retry once with the validation errors added to the prompt. Still broken → use a safe default spec recoloured with the drawing's palette (the kid can still race).
+2. **Four DeepSeek passes** (`deepseek-flash`; thinking only in the look pass, see `DESIGN_EFFORT` in `src/design.js` for measured timings; prompts in `src/prompt.js`; `onStatus` reports each stage, `JOB_STAGES` in shared):
+   - `looking` (vision, thinking): checks both photos (real photo, real person, empty page, unreadable → `rejected` with a friendly retake message) and describes every feature of each drawing with colours, counts, proportions, mood and what makes it unmistakable. The designer never sees the pictures, so this description is its only input.
+   - `designing` (text): turns the description into a `RacerSpec` plus a `featureMap` (which spec fields show which feature). The prompt holds the kit catalog, the schema, a geometry guide (sockets, axes, typical sizes) and design rules: faithful first, the child's colours and markings as patterns, exaggerations kept, visible personality (face, motion, tagline, sound), 1–3 imaginative touches, no bland defaults.
+   - `critiquing` (vision): looks at the drawings again next to the spec and lists concrete fixes (must / should / could) with scores.
+   - `refining` (text): applies the fixes and writes the final spec. `_meta/<name>.json` keeps the description, first design, critique and timings for tuning.
+   Each pass retries once with the validation errors; a second failure, or a failed call, fails the job with the reason (no default racer). New racers must have `tagline`, `motion` and `sound`.
+   `deepseek-v4-pro` was tried for the text passes: no better designs and 2–4× slower. Env overrides: `DEEPSEEK_VISION_MODEL`, `DEEPSEEK_DESIGN_MODEL`, `DEEPSEEK_TIMEOUT_MS` (per call, default 150 s).
+3. **Validate & clamp** with the zod schema: unknown part names → nearest valid part, numbers clamped to ranges, extras capped. If it's badly broken, retry once with the validation errors added to the prompt. Still broken → the job fails with the reason.
 4. **Build:** the server stores the spec (`player.updated`, `roster.updated`). The game assembles the racer immediately. The player is `ready` as soon as the spec is valid.
 5. **Avatars:** right after building, the game renders the racer offscreen (a `SubViewport`) as `hero.png` (full racer, 3/4 view) and `avatar_happy/excited/sad.png` (head and shoulders, 512 px), and uploads them to the server (contracts §6). The phone shows those. If the game isn't running, the phone shows a placeholder in the racer's colours until it is.
 
-"**Try another look**" (max 3) reruns step 2 with a "make a different interpretation" hint.
+"**Try another look**" (max 3) reruns the passes with a "make a different interpretation" hint in the design pass.
 
 ## 2. What the spec captures (summary; full schema in contracts §5)
 
 - **Spirit:** `title` ("The Purple Flash"), `personality` (2–3 words), which also tunes idle animation (bouncy vs calm), engine sound pitch and celebration style.
-- **Palette:** 3–5 colours taken from the drawing. Parts reference palette slots, so the whole racer stays in the kid's colours.
+- **Look:** `tagline` (a funny one-line bio for the reveal), `motion` (idle style: bouncy, wobbly, proud, sneaky… and energy), `sound` (engine loop, pitch, horn), patterns (stripes, spots, crayon strokes…) and finishes (matte, metallic, sparkle, glow) on body, head and ride, and a racing number.
+- **Palette:** 3–8 colours taken from the drawing. Parts reference palette slots, so the whole racer stays in the kid's colours.
 - **Character:** body shape, head shape, skin/fur colour, **face** (eye style, eye colour, mouth style, brows, cheeks), hair, hat, arms.
 - **Ride:** a base (`kart`, `bike`, `animal4`, `bird`, `board`, `rocket`, `boat`, `blob`) with wheels / legs / wings / tail options, colours and proportions.
-- **Extras:** up to 6 on the character and 8 on the ride. Each is a primitive shape (`sphere`, `capsule`, `box`, `cone`, `cylinder`, `torus`, `star`, `heart`) attached to a named socket with offset, scale, rotation and palette colour. This is where the unique bits go: three horns, a lightning bolt, a propeller, spots.
+- **Extras:** up to 10 on the character and 12 on the ride. Each is a shape from the kit (primitives plus flat stickers like `lightning`, `flame`, `moon`, `flower`, and `glasses`, `cape`) attached to a named socket with offset, scale, rotation and palette colour. This is where the unique bits go: three horns, a lightning bolt, a propeller, spots.
 - **Drawing sticker:** optional. The kid's actual drawing, as a rounded sticker on the side of the ride, so the link to the paper stays visible.
 
 ## 3. Kit catalog (shared with WS3)
@@ -67,7 +69,7 @@ export function runDesignJob(
     skipCheck?: boolean;
     reroll?: boolean;
   },
-  onStatus: (s: JobStatus) => void,
+  onStatus: (s: JobStage | "ready" | "rejected") => void, // looking → designing → critiquing → refining
 ): Promise<
   | { status: "ready"; spec: RacerSpec }
   | { status: "rejected"; reason: RejectReason; image: "character" | "vehicle"; message: string }

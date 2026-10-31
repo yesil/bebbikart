@@ -467,13 +467,14 @@ const MOCK_LOOK_EXTRAS = {
 
 /**
  * Mock DesignClient: answers each pass (ctx.stage: look, design, critique, refine) with hand-written
- * replies. Unknown drawings get `spec: null`, so the job fails the same way a broken real reply would.
+ * replies. `designId` (e.g. "pair02") answers with that design whatever the files are called (server
+ * tests upload under other names). Unknown drawings get `spec: null`, so the job fails the same way a broken real reply would.
  */
-export function createMockClient() {
+export function createMockClient({ designId } = {}) {
   return {
-    name: "mock",
+    name: designId ? `mock:${designId}` : "mock",
     async complete(_messages, _opts, ctx) {
-      const id = mockDesignId(ctx.characterPath, ctx.vehiclePath);
+      const id = designId ?? mockDesignId(ctx.characterPath, ctx.vehiclePath);
       const design = id ? MOCK_DESIGNS[id] : null;
       if (ctx.stage === "look") {
         const reply = { check: {} };

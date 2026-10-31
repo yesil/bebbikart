@@ -4,7 +4,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MOCK_DESIGNS } from "@bebbikart/asset-pipeline";
+import { createMockClient } from "@bebbikart/asset-pipeline";
 import { DEFAULT_CONFIG, makeMsg } from "@bebbikart/shared";
 import { loadSettings, REPO_ROOT } from "../src/env.js";
 import { startServer } from "../src/index.js";
@@ -19,11 +19,7 @@ beforeAll(() => {
     ...loadSettings({}),
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-test-")),
-    designClient: {
-      name: "fake",
-      complete: async () =>
-        JSON.stringify({ check: {}, spec: MOCK_DESIGNS.pair01.spec, notes: "test" }),
-    },
+    designClient: createMockClient({ designId: "pair01" }),
     config: { ...DEFAULT_CONFIG, launchCooldownMs: 0 },
   };
   settings.dbFile = ":memory:";
@@ -241,8 +237,7 @@ test("a DeepSeek failure fails the job loudly: no sample design, phone sees the 
 });
 
 test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
-  settings.designClient.complete = async () =>
-    JSON.stringify({ check: {}, spec: MOCK_DESIGNS.pair02.spec, notes: "test" });
+  settings.designClient.complete = createMockClient({ designId: "pair02" }).complete;
   const admin = { "x-admin-pin": settings.adminPin, "content-type": "application/json" };
   const locked = await fetch(`${base}/api/admin/config`, {
     method: "PATCH",
