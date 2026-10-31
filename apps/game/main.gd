@@ -8,7 +8,8 @@
 # Options (after --): --mock (default), --server[=URL], --game-key=KEY, --racers=N, --seed=N,
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
 #   --track=countryside|village (mock mode; with --server the session config picks the track),
-#   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full
+#   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full,
+#   --quality=low|medium|high (default: last pick in the options menu, else medium)
 # Keys: C camera mode, Tab next racer, F next fork shot, R/W start next rain/wind phase,
 #   K toggle forced calm, B boost the followed racer, H hide overlay,
 #   Esc or ⌘, options menu (fullscreen, track, quit), ⌃⌘F or F11 fullscreen, ⌘Q quit.
@@ -33,6 +34,19 @@ const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
 const OptionsMenu = preload("res://ui/options_menu.gd")
+
+## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
+## resolution (0 = native; upscaled with MetalFX on Metal, FSR elsewhere), so a fullscreen 5K
+## Retina window does not render 15 M pixels a frame; veg scales the vegetation visibility ranges.
+const QUALITY := {
+	"low": {"render_height": 720, "shadow_atlas": 2048, "soft_shadows": 0, "shadow_distance": 70.0, "ssao": false, "glow": false, "veg": 0.5},
+	"medium": {"render_height": 1080, "shadow_atlas": 4096, "soft_shadows": 1, "shadow_distance": 120.0, "ssao": false, "glow": true, "veg": 0.75},
+	"high": {"render_height": 0, "shadow_atlas": 8192, "soft_shadows": 3, "shadow_distance": 170.0, "ssao": true, "glow": true, "veg": 1.0},
+}
+const DEFAULT_QUALITY := "medium"
+const SETTINGS_PATH := "user://settings.cfg"
+const FPS_CAP := 60          # also caps 120 Hz ProMotion displays
+const FPS_UNFOCUSED := 30    # window in the background: still smooth enough for a big screen
 
 const FORCED := {"calm": [0.0, 0.0], "rain": [1.0, 0.0], "wind": [0.0, 0.8], "storm": [1.0, 0.8]}
 
@@ -63,6 +77,7 @@ var shot_taken := false
 var forced_calm := false
 var menu: OptionsMenu
 var quitting := false
+var quality := ""
 
 
 func _ready() -> void:
@@ -164,6 +179,80 @@ func _build_scene() -> void:
 	menu.track_chosen.connect(_switch_track)
 	menu.quit_pressed.connect(_quit)
 	_add_native_menu()
+	var q: String = args.get("quality", _saved_quality())
+	if not QUALITY.has(q):
+		push_error("unknown quality \"%s\" (known: %s)" % [q, ", ".join(QUALITY.keys())])
+		get_tree().quit(1)
+		return
+	apply_quality(q)
+	get_viewport().size_changed.connect(_apply_render_scale)
+	menu.quality_chosen.connect(func(id: String): apply_quality(id); _save_quality(id))
+	Engine.max_fps = FPS_CAP
+
+
+func _saved_quality() -> String:
+	var cfg := ConfigFile.new()
+	var err := cfg.load(SETTINGS_PATH)
+	if err == ERR_FILE_NOT_FOUND:
+		return DEFAULT_QUALITY
+	if err != OK:
+		push_error("could not read %s (%s); using the default quality" % [SETTINGS_PATH, error_string(err)])
+		_result("ERROR settings unreadable: %s" % error_string(err))
+		return DEFAULT_QUALITY
+	return String(cfg.get_value("graphics", "quality", DEFAULT_QUALITY))
+
+
+func _save_quality(id: String) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value("graphics", "quality", id)
+	var err := cfg.save(SETTINGS_PATH)
+	if err != OK:
+		push_error("could not save %s: %s" % [SETTINGS_PATH, error_string(err)])
+		menu.show_error("Could not save the quality setting: %s" % error_string(err))
+
+
+## Applies a QUALITY preset to the viewport, sun, environment and vegetation.
+func apply_quality(id: String) -> void:
+	var q: Dictionary = QUALITY[id]
+	quality = id
+	_apply_render_scale()
+	RenderingServer.directional_shadow_atlas_set_size(q["shadow_atlas"], true)
+	RenderingServer.directional_soft_shadow_filter_set_quality(q["soft_shadows"])
+	sun.directional_shadow_max_distance = q["shadow_distance"]
+	env.ssao_enabled = q["ssao"]
+	env.glow_enabled = q["glow"]
+	_scale_visibility(self, q["veg"])
+	menu.set_quality(id)
+
+
+## 3D resolution for the current quality and window size; re-run whenever the window resizes.
+func _apply_render_scale() -> void:
+	var vp := get_viewport()
+	var h := float(vp.get_visible_rect().size.y)
+	var cap := float(QUALITY[quality]["render_height"])
+	var k := 1.0 if cap <= 0.0 or h <= cap else cap / h
+	vp.scaling_3d_scale = k
+	var metal := RenderingServer.get_current_rendering_driver_name() == "metal"
+	if k >= 1.0:
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+	else:
+		vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_METALFX_SPATIAL if metal else Viewport.SCALING_3D_MODE_FSR
+	print("graphics quality: %s, window %dpx tall, 3D at %d%% (%s)" % [quality, int(h), int(k * 100),
+		"native" if k >= 1.0 else "MetalFX" if metal else "FSR"])
+
+
+## Scales every authored visibility_range_end (vegetation, props) by k from its original value.
+func _scale_visibility(n: Node, k: float) -> void:
+	if n is GeometryInstance3D:
+		var g := n as GeometryInstance3D
+		if not g.has_meta("vis_end"):
+			g.set_meta("vis_end", g.visibility_range_end)
+		var end: float = g.get_meta("vis_end")
+		if end > 0.0:
+			g.visibility_range_end = end * k
+	for c in n.get_children():
+		_scale_visibility(c, k)
 
 
 ## macOS: put "Options…  ⌘," in the application menu, next to Quit.
@@ -510,8 +599,13 @@ func _toggle_fullscreen() -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		_quit()
+	match what:
+		NOTIFICATION_WM_CLOSE_REQUEST:
+			_quit()
+		NOTIFICATION_APPLICATION_FOCUS_OUT:
+			Engine.max_fps = FPS_UNFOCUSED
+		NOTIFICATION_APPLICATION_FOCUS_IN:
+			Engine.max_fps = FPS_CAP
 
 
 func _screenshot(path: String) -> void:
