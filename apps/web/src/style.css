@@ -537,10 +537,18 @@ h2 {
   color: var(--muted);
   font-size: 0.8rem;
 }
+/* Up to 10 stars per ability: two rows of five keep the row phone-width. */
+.stat .stars {
+  display: grid;
+  grid-template-columns: repeat(5, auto);
+  justify-content: center;
+  column-gap: 1px;
+  line-height: 1;
+}
 .stat .stars i {
   font-style: normal;
   color: #e7dccb;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
 }
 .stat .stars i.on {
   color: var(--accent-2);
