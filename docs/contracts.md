@@ -213,6 +213,7 @@ interface Run {
   endedAt?: string;
   elapsedMs?: number; // sim time, finished runs only
   track?: TrackId; // set by the server when the run is queued
+  lapsPerRun?: number; // loop tracks: the laps this run races (config.lapsPerRun when queued); the big screen and the phone show and race this
   laps?: number[]; // loop tracks: every completed lap (ms), in order
   bestLapMs?: number; // loop tracks: fastest of laps; this ranks
   splits?: Partial<Record<SectionId, number>>; // ms spent in each section (loop tracks: of the best lap)
@@ -550,6 +551,7 @@ interface RunStart {
   build: Build;
   bestTrace?: GhostTrace;
   bestSplits?: Partial<Record<SectionId, number>>;
+  lapsPerRun?: number; // loop tracks, required there: the laps to race (no default; the game refuses a loop run without it)
 }
 ```
 

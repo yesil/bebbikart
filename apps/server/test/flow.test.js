@@ -335,6 +335,9 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
   const runId = start.payload.runId;
   const queued = await phone.wait("run.queued");
   expect(queued.payload.run.track).toBe("village");
+  // The laps travel with the run, to the big screen and the phone.
+  expect(start.payload.lapsPerRun).toBe(DEFAULT_CONFIG.lapsPerRun);
+  expect(queued.payload.run.lapsPerRun).toBe(DEFAULT_CONFIG.lapsPerRun);
   game.send("gameToServer", "game.run.started", { runId });
   const splits = { hills: 5000, pond: 5000, crossing: 5000, bends: 5000 };
   // Village stretches of a lap of `ms`: the farm takes `farm` of it.

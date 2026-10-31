@@ -128,7 +128,9 @@
     "hud.go": "GO!",
     "hud.lap_pit": "Lap %d · pit",
     "hud.best_lap": "best lap",
-    "hud.secs_live": "%.1f s"
+    "hud.secs_live": "%.1f s",
+    "log.no_laps": "ERROR run %s (%s): no lap count from the server for this loop run",
+    "hud.laps_missing": "laps?"
   },
   "de": {
     "lang.en": "English",
@@ -258,6 +260,8 @@
     "hud.go": "LOS!",
     "hud.lap_pit": "Runde %d · Box",
     "hud.best_lap": "beste Runde",
-    "hud.secs_live": "%.1f s"
+    "hud.secs_live": "%.1f s",
+    "log.no_laps": "FEHLER Lauf %s (%s): keine Rundenzahl vom Server für diesen Rundkurs-Lauf",
+    "hud.laps_missing": "Runden?"
   }
 }

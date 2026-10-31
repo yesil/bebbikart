@@ -116,6 +116,7 @@ const en = {
   },
   run: {
     lap: (n, of) => `Lap ${n} of ${of}`,
+    lapsMissing: "Lap count missing (server error)",
     lastLap: "Last lap",
     bestLap: "Best lap! 🎉",
     pitIn: "🏁 Pit in",
@@ -357,6 +358,7 @@ const de = {
   },
   run: {
     lap: (n, of) => `Runde ${n} von ${of}`,
+    lapsMissing: "Rundenzahl fehlt (Serverfehler)",
     lastLap: "Letzte Runde",
     bestLap: "Beste Runde! 🎉",
     pitIn: "🏁 Boxenstopp",

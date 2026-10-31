@@ -18,6 +18,8 @@ export function Run({ ctx }) {
   const [pitting, setPitting] = useState(false);
   const [asked, setAsked] = useState(false);
   const loop = isLoop(s.me.currentRun?.track ?? s.config.track);
+  // The laps this run races (set when it was queued); never the config's, which may have changed.
+  const runLaps = s.me.currentRun?.lapsPerRun;
   const lapsDone = live.laps ?? [];
   const lastLap = lapsDone[lapsDone.length - 1];
   const started = s.me.currentRun?.status === "running" || live.elapsedMs > 0;
@@ -77,7 +79,11 @@ export function Run({ ctx }) {
       ${
         loop && started
           ? html`<div class="lap-head">
-              <span>${COPY.run.lap(Math.min(live.lap ?? lapsDone.length + 1, s.config.lapsPerRun), s.config.lapsPerRun)}</span>
+              <span>${
+                runLaps
+                  ? COPY.run.lap(Math.min(live.lap ?? lapsDone.length + 1, runLaps), runLaps)
+                  : html`<b class="bad">${COPY.run.lapsMissing}</b>`
+              }</span>
               <span class="muted">${secs(live.elapsedMs)}</span>
             </div>`
           : null

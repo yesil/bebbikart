@@ -43,7 +43,6 @@ var camera: Camera3D
 var avatar_of := Callable()
 ## Mock mode has no server leaderboard: bests come from the runs finished here.
 var local_bests := false
-var laps_per_run := 3
 
 var _font: SystemFont
 var _t := 0.0
@@ -67,6 +66,7 @@ var _paddock_t := 0.0
 var _banners: VBoxContainer
 var _problems: VBoxContainer
 var _session := ""
+var _laps_missing := {}         # runId -> true once reported (a loop run without a lap count)
 var _podium: Control = null
 var _countdown: PanelContainer
 var _count_label: Label
@@ -371,7 +371,14 @@ func _update_board(order: Array, sim) -> void:
 			"racing":
 				var r = h["racer"]
 				if r.looping:
-					info = I18n.f("hud.lap", [mini(r.lap + 1, laps_per_run), laps_per_run])
+					# The laps this run races (it brought them from the server), not a setting here.
+					info = I18n.f("hud.lap", [mini(r.lap + 1, r.laps_max), r.laps_max])
+					if r.laps_max <= 0:
+						info = I18n.t("hud.laps_missing")
+						if not _laps_missing.has(r.run_id):
+							_laps_missing[r.run_id] = true
+							push_error("race HUD: loop run %s has no lap count" % r.run_id)
+							problem(I18n.f("log.no_laps", [r.run_id, _nick(String(h["pid"]))]))
 					if r.pit_requested:
 						info = I18n.f("hud.lap_pit", [r.lap + 1])  # finishes at the next line
 					time = I18n.f("hud.secs_live", [r.lap_ms() / 1000.0])

@@ -44,12 +44,16 @@ func emit(type: String, payload: Dictionary) -> void:
 	outbox.append({"type": type, "payload": payload})
 
 
-func add_run(run_id: String, player_id: String, build: Dictionary) -> Racer:
+## laps: the laps this run races, from the server (run.start lapsPerRun); tools without a server
+## pass none and the racer takes config.lapsPerRun.
+func add_run(run_id: String, player_id: String, build: Dictionary, laps := 0) -> Racer:
 	if not course.errors.is_empty():
 		push_error("sim: refusing run %s, course %s is broken: %s" % [run_id, course.NAME, "; ".join(course.errors)])
 		return null
 	var r := Racer.new()
 	r.setup(run_id, player_id, build, course, config, rng.randi())
+	if laps > 0:
+		r.laps_max = laps
 	by_run[run_id] = r
 	queue.append(r)
 	var countdown_ms := int(config.get("startCountdownMs", 0))

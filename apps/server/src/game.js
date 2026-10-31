@@ -166,6 +166,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function runStart(run) {
     const p = players.get(run.playerId);
     const out = { runId: run.id, playerId: run.playerId, build: builds.get(run.buildId) };
+    if (run.lapsPerRun) out.lapsPerRun = run.lapsPerRun;
     const best = p?.bestRunId ? runs.get(p.bestRunId) : undefined;
     if (best?.splits) out.bestSplits = best.splits;
     const trace = best && config.ghostEnabled ? traces.get(best.id) : undefined;
@@ -453,6 +454,8 @@ export function createGame({ db, settings, hub, log = console.log }) {
       queuedAt: now(),
       track: config.track,
     };
+    // The laps travel with the run (big screen and phone show and race this, not their config).
+    if (isLoop(config.track)) run.lapsPerRun = config.lapsPerRun;
     saveRun(run);
     hub.toGame("run.start", runStart(run));
     hub.toPhone(playerId, "run.queued", { run });
@@ -810,7 +813,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   const capTimer = setInterval(() => {
     for (const r of runs.values()) {
       // runTimeCapMs applies per lap on loop tracks.
-      const limit = config.runTimeCapMs * (isLoop(r.track) ? config.lapsPerRun : 1) + 30_000;
+      const limit = config.runTimeCapMs * (isLoop(r.track) ? r.lapsPerRun : 1) + 30_000;
       if (r.status !== "done" && Date.now() - Date.parse(r.queuedAt) > limit)
         abortRun(r, "timeout");
     }

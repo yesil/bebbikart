@@ -3,8 +3,9 @@ extends SceneTree
 ## podium at the end of a session, the standings with a full house of 20 racers (compact rows),
 ## and the race board with 16 racers on the track (compact rows, "+6 more"). Must run windowed (the dummy renderer saves blank images):
 ##   godot --path apps/game --resolution 1920x1080 --script res://tools/hud_check.gd -- --out=DIR [--language=de]
-## Exits 1 if the standings would run into the camera's name tag at the bottom left, or the race
-## board into its picture-in-picture at the bottom right.
+## Exits 1 if the standings would run into the camera's name tag at the bottom left, the race
+## board into its picture-in-picture at the bottom right, or the board shows a loop run's laps from
+## anywhere but the run itself (a 2-lap run with config.lapsPerRun 3 must read "Lap 1/2").
 
 const RaceHud = preload("res://ui/race_hud.gd")
 const I18n = preload("res://ui/i18n.gd")
@@ -13,6 +14,7 @@ const NAMES := ["Mia", "Noah", "Lina", "Ben", "Ella", "Finn", "Zoe", "Leo", "Ava
 const CAMERA_TAG_TOP := 930.0   # ui/camera_hud.gd: the on-camera tag's top edge at 1080 p
 const INSET_TOP := 716.0        # ui/camera_hud.gd: the picture-in-picture's top edge (1080 - 24 - 340)
 const Course = preload("res://sim/course.gd")
+const VillageCourse = preload("res://sim/village_course.gd")
 const Sim = preload("res://sim/sim.gd")
 const Builds = preload("res://sim/builds.gd")
 const Messages = preload("res://net/messages.gd")
@@ -93,6 +95,27 @@ func _initialize() -> void:
 	var board_panel: Control = hud.get("_board_panel")
 	var board_bottom := board_panel.get_global_rect().end.y
 	print("race board bottom at %.0f px with %d racers (inset starts at %.0f)" % [board_bottom, race.racers.size(), INSET_TOP])
+	# Village runs that race 2 laps (the server's lapsPerRun, sent with each run) while this
+	# game's config still says 3: the board must show the run's laps.
+	var vcfg: Dictionary = Messages.default_config()
+	vcfg["startCountdownMs"] = 0
+	vcfg["lapsPerRun"] = 3
+	var loop := Sim.new(VillageCourse.new(), vcfg, 4)
+	for i in 3:
+		loop.add_run("v%d" % i, "p%d" % i, Builds.random_build(rng), 2)
+	for t in 60 * 4:
+		loop.step()
+		loop.outbox.clear()
+	for f in 3:
+		hud.update(0.1, loop, {})
+		await process_frame
+	var lap_text := String(hud.get("_board_rows")[0]["info"].text)
+	var want := I18n.f("hud.lap", [1, 2])
+	print("village 2-lap run on the board: \"%s\" (want \"%s\")" % [lap_text, want])
+	if lap_text != want:
+		print("HUD CHECK FAILED: the board doesn't show the run's own lap count")
+		quit(1)
+		return
 	if bottom > CAMERA_TAG_TOP:
 		print("HUD CHECK FAILED: the standings run into the camera's name tag")
 		quit(1)

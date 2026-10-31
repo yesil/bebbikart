@@ -8,7 +8,7 @@ const gameKey = process.env.BK_GAME_KEY ?? "bebbikart-dev";
 const ws = new WebSocket(url);
 const send = (type, payload) => ws.send(JSON.stringify(makeMsg("gameToServer", type, payload)));
 const runs = new Map();
-let config = { track: "countryside", lapsPerRun: 3 };
+let config = { track: "countryside" };
 
 ws.onopen = () =>
   ws.send(JSON.stringify(makeMsg("phoneToServer", "hello", { role: "game", gameKey })));
@@ -137,7 +137,12 @@ function race(start) {
 function raceLoop(start) {
   const r = { boostsLeft: 3, boosts: 0, pitIn: false, stop: () => {} };
   runs.set(start.runId, r);
-  console.log(`[fake-game] loop run ${start.runId} (${config.lapsPerRun} laps)`);
+  const lapsPerRun = start.lapsPerRun;
+  if (!lapsPerRun) {
+    console.error(`[fake-game] ERROR loop run ${start.runId} without lapsPerRun: not racing it`);
+    return;
+  }
+  console.log(`[fake-game] loop run ${start.runId} (${lapsPerRun} laps)`);
   const lapTarget = 8000;
   const laps = [];
   let t = 0;
@@ -176,7 +181,7 @@ function raceLoop(start) {
     lapT = 0;
     r.boosts = 0;
     lapLen = lapTarget + Math.round(Math.random() * 1500);
-    if (laps.length >= config.lapsPerRun || r.pitIn) {
+    if (laps.length >= lapsPerRun || r.pitIn) {
       clearInterval(timer);
       const best = Math.min(...laps);
       send("game.run.finished", {

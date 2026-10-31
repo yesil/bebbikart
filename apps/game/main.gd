@@ -241,7 +241,6 @@ func _build_scene() -> void:
 func _setup_race_hud() -> void:
 	hud = RaceHud.new()
 	hud.camera = camera
-	hud.laps_per_run = int(config["lapsPerRun"])
 	hud.local_bests = assets == null
 	if assets != null:
 		hud.avatar_of = assets.avatar_for
@@ -638,6 +637,14 @@ func _handle(msg: Dictionary) -> void:
 	var pl = msg["payload"]  # Dictionary, or a bare Array for roster.updated
 	match msg["type"]:
 		Messages.RUN_START:
+			# A loop run races the laps the server gave it (run.start lapsPerRun), never a default.
+			var laps := int(pl.get("lapsPerRun", 0))
+			if course.get("loop") == true and laps <= 0:
+				var lerr := I18n.f("log.no_laps", [pl["runId"], nicks.get(pl["playerId"], "?")])
+				push_error(lerr)
+				_result(lerr)
+				hud.problem(lerr)
+				return
 			var v  # server: KitRacerView from the player's RacerSpec; mock: placeholder RacerView
 			if assets != null:
 				var spec: Dictionary = assets.spec_for(pl["playerId"])
@@ -655,18 +662,18 @@ func _handle(msg: Dictionary) -> void:
 					_result(err.left(160))
 					hud.problem(err.left(300))
 					return
-				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], laps)
 				v = KitRacerView.new()
 				add_child(v)
 				v.setup(r, spec, assets.drawing_for(pl["playerId"]), nicks.get(pl["playerId"], "?"))
 			elif not kit_specs.is_empty():
-				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], laps)
 				var i: int = net.players.map(func(p): return p["playerId"]).find(pl["playerId"])
 				v = KitRacerView.new()
 				add_child(v)
 				v.setup(r, kit_specs[maxi(i, 0) % kit_specs.size()], null, nicks.get(pl["playerId"], "?"))
 			else:
-				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"], laps)
 				v = RacerView.new()
 				add_child(v)
 				v.setup(r, colors.get(pl["playerId"], Color.WHITE), nicks.get(pl["playerId"], "?"))
@@ -699,7 +706,6 @@ func _handle(msg: Dictionary) -> void:
 				language_sent = I18n.language
 				net.send("game.config.set", {"language": I18n.language})
 		"config.updated":
-			hud.laps_per_run = int(config["lapsPerRun"])
 			var lang := String(pl.get("language", ""))
 			if language_sent != "":
 				if lang == language_sent:

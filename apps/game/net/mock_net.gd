@@ -121,6 +121,8 @@ func _launch(p: Dictionary) -> void:
 	p["hints"] = _boost_hints(p["build"])
 	by_run[run_id] = p
 	var payload := {"runId": run_id, "playerId": p["playerId"], "build": p["build"]}
+	if course != null and course.get("loop") == true:
+		payload["lapsPerRun"] = int(cfg.get("lapsPerRun", 0))  # like the server: the laps travel with the run
 	inbox.append(Messages.make_msg(Messages.RUN_START, payload))
 
 

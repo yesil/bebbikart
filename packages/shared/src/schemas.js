@@ -100,6 +100,7 @@ export const RunSchema = z.object({
   endedAt: iso.optional(),
   elapsedMs: ms.optional(), // sim time, finished runs only
   track: TrackIdSchema.optional(), // set by the server when the run is queued
+  lapsPerRun: z.number().int().positive().optional(), // loop tracks: the laps this run races (config.lapsPerRun when it was queued)
   laps: z.array(ms).optional(), // loop tracks: every completed lap, in order
   bestLapMs: ms.optional(), // loop tracks: fastest of `laps` (what ranks)
   splits: SplitsSchema.optional(), // loop tracks: the best lap's splits
@@ -210,6 +211,7 @@ export const RunStartSchema = z.object({
   build: BuildSchema,
   bestTrace: GhostTraceSchema.optional(),
   bestSplits: SplitsSchema.optional(),
+  lapsPerRun: z.number().int().positive().optional(), // loop tracks (required there): the laps to race
 });
 
 export const CoachTipSchema = z.object({
