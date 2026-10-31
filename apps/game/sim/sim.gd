@@ -95,9 +95,13 @@ func step() -> void:
 # ---------------------------------------------------------------- start
 
 func _release_from_queue() -> void:
+	# A group pressing Go together leaves side by side: each racer takes the free slot nearest
+	# the line it likes to drive (lane_home), so nobody has to cut across another kart's nose.
 	while not queue.is_empty():
+		var q: Racer = queue[0]
+		var home := q.lane_home * (q.half_width() - 0.7)
 		var best_lane := 0.0
-		var best_gap := -INF
+		var best_miss := INF
 		for lane in Tuning.START_LANES:
 			var gap := 1000.0
 			for o in racers:
@@ -109,12 +113,14 @@ func _release_from_queue() -> void:
 				elif r.looping and r.seg_idx == r.segs.size() - 1:
 					# A lapping racer about to cross the line counts as close too.
 					gap = minf(gap, r.route().length - r.ls)
-			if gap > best_gap:
-				best_gap = gap
+			if gap < Tuning.START_GAP + Tuning.RADIUS * 2.0:
+				continue
+			if absf(lane - home) < best_miss:
+				best_miss = absf(lane - home)
 				best_lane = lane
-		if best_gap < Tuning.START_GAP + Tuning.RADIUS * 2.0:
+		if best_miss == INF:
 			return
-		var q: Racer = queue.pop_front()
+		queue.pop_front()
 		q.state = "racing"
 		q.d = best_lane
 		q.lane = best_lane

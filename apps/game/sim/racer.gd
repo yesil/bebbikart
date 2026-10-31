@@ -212,10 +212,15 @@ func _plan(corner_f: float, decel: float) -> Array:
 func _replan_lane(sim) -> void:
 	follow_v = -1.0
 	var hw := half_width() - 0.7
+	# Fresh off the grid, keep the start slot's line: karts released side by side don't swerve
+	# across each other towards their own lines until the group has strung out.
+	var home := lane_home * hw
+	if lap == 0 and gs() < Tuning.START_HOLD_M:
+		home = lane
 	var ahead = sim.racer_ahead(self, 4.0 + 0.6 * v, 2.0)
 	if ahead == null or ahead.v >= v - 0.3:
 		pass_side = 0.0
-		d_target = clampf(lane_home * hw, -hw, hw)
+		d_target = clampf(home, -hw, hw)
 		return
 	var off: float = Tuning.STYLE_PASS_OFFSET[style]
 	var best_side := 0.0

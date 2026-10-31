@@ -93,6 +93,7 @@ const BUMPED_WINDOW_S := 1.5
 # Start
 const START_LANES: Array[float] = [-3.0, -1.0, 1.0, 3.0]
 const START_GAP := 2.0            # free metres ahead of the racer's body before release
+const START_HOLD_M := 35.0        # first lap: drive the start slot's line this far before the own line
 
 # Events
 const EVENT_MIN_LOSS_MS := 60
