@@ -967,9 +967,10 @@ func update(dt: float) -> void:
 					hy += sin(tt * 21.0) * 0.38 * ws * amp
 					hr += sin(tt * 21.0 + 0.6) * 0.08 * ws * amp
 				G.READY:
-					gp -= 0.2 * ws
-					gl -= 0.015 * ws
-					hp += 0.12 * ws  # eyes on the road while leaning in
+					# Leaning right in over the handle, eyes up on the road, bouncing to go.
+					gp -= 0.32 * ws
+					gl -= 0.03 * ws - 0.008 * ws * absf(sin(tt * 9.0)) * amp
+					hp += 0.2 * ws
 				G.TAP:
 					hp -= 0.08 * ws
 				G.SCRATCH:

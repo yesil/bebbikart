@@ -25,8 +25,10 @@ const SIDE_LANE := Vector2(0.9, 3.5)  # … this far apart sideways …
 const SIDE_SPEED := 1.2      # … at about the same speed (m/s) …
 const SIDE_S := 1.0          # … for this long, then one of them waves or taunts
 const SIDE_COOL := 10.0      # s before the same pair does it again
+const SIDE_AFTER_S := 5.0    # s after leaving the grid: a group pulling away together is no rivalry
 const CRASH_NEAR := 14.0     # m: racers this close to a crash flinch
 const FINISH_TOGETHER_S := 1.0
+const TOGETHER_NEAR := 10.0  # m: and close enough to see each other; each finisher cheers together once
 const PASSED_MOOD := -0.35   # mood memory per pass (RacerGestures.remember)
 const PASSING_MOOD := 0.3
 const GRID_LEAN_S := 2.4     # s before green the drivers start leaning in
@@ -83,6 +85,7 @@ func _process(delta: float) -> void:
 			_next_id += 1
 		v.react_cool = maxf(0.0, v.react_cool - delta)
 		v.brace_cool = maxf(0.0, v.brace_cool - delta)
+		v.race_t += delta
 		_kits.append(v)
 	for i in _kits.size():
 		for j in range(i + 1, _kits.size()):
@@ -180,7 +183,8 @@ func _side_of(v, other) -> int:
 ## other, they look at each other, and a friendly rival may wave back.
 func _alongside(lo, hi, key: int, along: float, lat2: float, delta: float) -> void:
 	var beside: bool = absf(along) < SIDE_ALONG and lat2 > SIDE_LANE.x * SIDE_LANE.x and lat2 < SIDE_LANE.y * SIDE_LANE.y \
-		and absf(lo.racer.v - hi.racer.v) < SIDE_SPEED and lo.racer.v > 4.0 and hi.racer.v > 4.0
+		and absf(lo.racer.v - hi.racer.v) < SIDE_SPEED and lo.racer.v > 4.0 and hi.racer.v > 4.0 \
+		and lo.race_t > SIDE_AFTER_S and hi.race_t > SIDE_AFTER_S
 	if not beside:
 		_side_t.erase(key)
 		return
@@ -225,7 +229,9 @@ func _left_course() -> void:
 		elif v.leaving == "finished":
 			for f in _finishers:
 				var o = f[1]
-				if _clock - float(f[0]) <= FINISH_TOGETHER_S and is_instance_valid(o) and o.leaving == "finished":
+				if not v.cheered and _clock - float(f[0]) <= FINISH_TOGETHER_S and is_instance_valid(o) \
+						and o.leaving == "finished" and not o.cheered \
+						and o.global_position.distance_squared_to(v.global_position) < TOGETHER_NEAR * TOGETHER_NEAR:
 					_cheer_together(v, o)
 			_finishers.append([_clock, v])
 	while not _finishers.is_empty() and _clock - float(_finishers[0][0]) > FINISH_TOGETHER_S:
@@ -233,6 +239,8 @@ func _left_course() -> void:
 
 
 func _cheer_together(a, b) -> void:
+	a.cheered = true
+	b.cheered = true
 	for p in [[a, b], [b, a]]:
 		var g: Gestures = p[0].toy.gestures
 		g.stop(g.sig_pose)

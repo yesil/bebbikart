@@ -389,7 +389,7 @@ func update(dt: float) -> void:
 
 	# Squash and stretch: stretched while falling, a squash with overshoot on landing.
 	var sq_t := 0.07 if r.airborne and r.vy < -1.0 else 0.0
-	sq_t -= 0.05 * _crouch_s
+	sq_t -= 0.08 * _crouch_s
 	var sq_w := 11.0 if base != "blob" else 8.0
 	var sq_z := 0.22 if base != "blob" else 0.1
 	_sq_v += (sq_w * sq_w * (sq_t - _sq) - 2.0 * sq_z * sq_w * _sq_v) * sdt
@@ -399,16 +399,16 @@ func update(dt: float) -> void:
 	var rear := _envelope(_rear_t, REAR_S, 0.3, 0.45)
 
 	# Bends: wheeled bodies roll on their springs, carvers lean as a whole, boats bank a little.
-	var gain := 0.011 if base in WHEELED else (0.024 if base in CARVERS else 0.006)
+	var gain := 0.016 if base in WHEELED else (0.024 if base in CARVERS else 0.006)
 	var roll_t := clampf(_turn_s * r.speed * gain, -0.32, 0.32)
 	_roll_v += (90.0 * (roll_t - _roll_s) - 2.0 * 0.3 * 9.5 * _roll_v) * sdt
 	_roll_s += _roll_v * sdt
-	var pitch_t := clampf(_a_long * 0.006, -0.07, 0.08) - 0.06 * _crouch_s + 0.12 * go
+	var pitch_t := clampf(_a_long * 0.006, -0.07, 0.08) - 0.09 * _crouch_s + 0.12 * go
 	_pitch_v += (70.0 * (pitch_t - _pitch_s) - 2.0 * 0.35 * 8.4 * _pitch_v) * sdt
 	_pitch_s += _pitch_v * sdt
 
 	if base in WHEELED:
-		var rev := sin(_t * 38.0) * 0.012 * _fidget_t / FIDGET_S
+		var rev := sin(_t * 38.0) * 0.012 * (_fidget_t / FIDGET_S + 0.7 * _crouch_s)  # revving on the grid
 		var s := _sq + rev
 		var b := Basis.from_euler(Vector3(_pitch_s, 0.0, _roll_s)).scaled(Vector3(1.0 - 0.5 * s, 1.0 + s, 1.0 - 0.5 * s))
 		var piv := Vector3(_sway_p.x, _sway_p.y, _axle_back if _pitch_s > 0.0 else _axle_front)
@@ -447,13 +447,13 @@ static func _envelope(left: float, total: float, rise: float, fall: float) -> fl
 
 func _animal(rear: float, go: float, moving: float) -> void:
 	var buck := sin(clampf(1.0 - _buck_t / BUCK_S, 0.0, 1.0) * PI) if _buck_t > 0.0 else 0.0
-	pitch = _rear_max * rear + 0.4 * _rear_max * go - _buck_max * buck - 0.07 * _crouch_s + _pitch_s * 0.4
+	pitch = _rear_max * rear + 0.4 * _rear_max * go - _buck_max * buck - 0.1 * _crouch_s + _pitch_s * 0.4
 	roll = _roll_s * 0.6
 	if _head:
 		var stomp := _fidget_t / FIDGET_S if _fidget_k == 0 else 0.0
 		var shake := sin(_t * 26.0) * 0.35 * (_fidget_t / FIDGET_S) if _fidget_k == 1 else 0.0
 		var hp := sin(_stride * 2.0) * 0.07 * moving + 0.4 * rear * (0.8 + 0.2 * sin(_t * 9.0)) - 0.2 * buck \
-			- 0.15 * _crouch_s - 0.1 * stomp
+			- 0.22 * _crouch_s - 0.1 * stomp
 		var hy := clampf(r.ahead_turn * 0.4, -0.35, 0.35) + shake
 		_head.transform = Transform3D(Basis.from_euler(Vector3(hp, hy, shake * 0.3)), _head_rest.origin
 			+ Vector3(0.0, sin(_stride * 2.0) * 0.02 * moving, 0.0))

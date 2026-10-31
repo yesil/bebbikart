@@ -18,6 +18,8 @@ var counts := {"go": 0, "overtake": 0, "alongside": 0, "flinch": 0, "finish_toge
 var ready_seen := {}   # views seen leaning in on the grid
 var off_road := 0      # frames a coasting finisher was off its road
 var coast_frames := 0
+var early_rivals := 0  # rival moments right after the grid (a group leaving together)
+var together := {}     # finisher -> joint cheers
 
 
 func _initialize() -> void:
@@ -38,6 +40,11 @@ func _process(delta: float) -> bool:
 	if rr != null:
 		for e in rr.events:
 			counts[e.type] = int(counts.get(e.type, 0)) + 1
+			if e.type == "alongside" and (e.by.race_t < 5.0 or e.to.race_t < 5.0):
+				early_rivals += 1
+			if e.type == "finish_together":
+				for v in e.views:
+					together[v] = int(together.get(v, 0)) + 1
 	for k in main.views:
 		var v = main.views[k]
 		if v.get_script() == KitRacerView and v.grid_ready:
@@ -63,6 +70,11 @@ func _report() -> void:
 			bad.append("no %s" % k)
 	if ready_seen.is_empty():
 		bad.append("nobody leaned in on the grid")
+	if early_rivals > 0:
+		bad.append("%d rival moments while a group was still leaving the grid" % early_rivals)
+	var twice := together.values().filter(func(n): return n > 1).size()
+	if twice > 0:
+		bad.append("%d finishers cheered together more than once" % twice)
 	if off_road > 0:
 		bad.append("coasting finishers off the road for %d of %d frames" % [off_road, coast_frames])
 	print("race reactions in %.0f s: %s, leaning in on the grid: %d racers, coasting finishers on the road: %d frames%s" % [

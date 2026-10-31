@@ -20,6 +20,8 @@ var grid_t := -1.0       # seconds waiting on the start grid; -1 = not on it
 var grid_next := 0.0     # grid_t of the next fidget
 var grid_beat := 0       # whole seconds to green at the last nod
 var grid_ready := false  # leaning in for the start
+var race_t := 0.0        # seconds since it left the grid (race_reactions.gd)
+var cheered := false     # already cheered together with another finisher
 ## "" while racing, else the outcome being shown ("finished" / "failed") before the view frees.
 var leaving := ""
 var _leave_t := 0.0
@@ -183,7 +185,9 @@ func _process(delta: float) -> void:
 	if leaving == "":
 		return
 	_leave_t -= delta
-	_leave_v = maxf(0.0, _leave_v - delta * maxf(8.0, _leave_v * 2.5))
+	# Past the end of a point-to-point road it brakes hard, so it stops by the line, not in the meadow.
+	var brake := 3.0 if _leave_ls > float(_leave_seg["route"].length) and not racer.looping else 1.0
+	_leave_v = maxf(0.0, _leave_v - delta * maxf(8.0, _leave_v * 2.5) * brake)
 	_leave_ls += _leave_v * delta
 	var rt = _leave_seg["route"]
 	if _leave_ls > rt.length and racer.looping and not racer.segs.is_empty() and _leave_seg != racer.segs[0]:

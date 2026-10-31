@@ -294,6 +294,11 @@ func _ride_expect(r: ToyRacer, ev: String) -> Array:
 				out.append(["roll", 0.15, "carves into the bend"])
 			if m.base == "blob":
 				out.append(["jelly_lean", 0.06, "leans out of the bend"])
+		"grid":
+			if wheeled:
+				out.append(["-sway_sy", -0.96, "crouches on its wheels"])
+			if m.base == "animal4":
+				out.append(["-pitch", 0.05, "crouches"])
 		"state:air":
 			if not m._wings.is_empty():
 				out.append(["wing_flap", 0.9, "flaps hard"])
