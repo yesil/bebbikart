@@ -25,6 +25,7 @@ const PALETTE := [
 	Color("#a8e03a"), Color("#c08457"), Color("#e8e8f0"), Color("#7a8cff"),
 ]
 const BOARD_ROWS := 10
+const BOARD_FULL_ROWS := 8      # more racers on the board: compact rows
 const BOARD_W := 480
 const PADDOCK_W := 330
 const PADDOCK_FULL_ROWS := 10    # more racers than this: compact one-line rows
@@ -321,10 +322,28 @@ func _build_board() -> void:
 	box.add_child(_board_more)
 
 
+## More than BOARD_FULL_ROWS racers: smaller rows, so the board stays clear of the camera's
+## picture-in-picture at the bottom right.
+func _set_board_compact(on: bool) -> void:
+	if _board_panel.get_meta("compact", false) == on:
+		return
+	_board_panel.set_meta("compact", on)
+	for row in _board_rows:
+		var chip: Control = row["chip"]["root"]
+		chip.custom_minimum_size = Vector2.ONE * (32 if on else 44)
+		row["chip"]["tex"].custom_minimum_size = Vector2.ONE * (26 if on else 38)
+		row["chip"]["initial"].add_theme_font_size_override("font_size", 17 if on else 24)
+		for k in ["place", "name", "time"]:
+			row[k].add_theme_font_size_override("font_size", 22 if on else (30 if k == "place" else 28))
+		row["info"].add_theme_font_size_override("font_size", 16 if on else 20)
+	_board_panel.reset_size()
+
+
 func _update_board(order: Array, sim) -> void:
 	_board_panel.visible = not order.is_empty()
 	if order.is_empty():
 		return
+	_set_board_compact(order.size() > BOARD_FULL_ROWS)
 	var racing := false
 	for run_id in order:
 		if _heat[run_id]["state"] == "racing" or _heat[run_id]["state"] == "queued":
