@@ -156,64 +156,76 @@ func lane_free(me: Racer, d: float, dist: float) -> float:
 
 # ---------------------------------------------------------------- collisions
 
+## Racers are circles in the world's ground plane, not per road piece: where a fork splits or
+## merges, or the loop wraps, karts on different pieces are side by side and must not pass
+## through each other. Each push and impulse is split back into the racer's own (s, d) frame.
 func _collide() -> void:
-	var by_seg := {}
-	for o in racers:
-		var r: Racer = o
-		var id: String = r.seg_id
-		if not by_seg.has(id):
-			by_seg[id] = []
-		by_seg[id].append(r)
+	var n := racers.size()
+	var pos := PackedVector3Array()
+	var tan := PackedVector3Array()
+	var nor := PackedVector3Array()
+	pos.resize(n)
+	tan.resize(n)
+	nor.resize(n)
+	for i in n:
+		var r: Racer = racers[i]
+		var rt := r.route()
+		pos[i] = r.world_pos()
+		tan[i] = rt.tangent_at(r.ls)
+		nor[i] = rt.normal_at(r.ls)
 	var min_d := Tuning.RADIUS * 2.0
-	for id in by_seg:
-		var list: Array = by_seg[id]
-		for i in list.size():
-			for j in range(i + 1, list.size()):
-				var a: Racer = list[i]
-				var b: Racer = list[j]
-				var ds := b.ls - a.ls
-				var dd := b.d - a.d
-				if absf(ds) >= min_d or absf(dd) >= min_d or absf(a.y - b.y) > 1.2:
-					continue
-				var dist := sqrt(ds * ds + dd * dd)
-				if dist >= min_d:
-					continue
-				var nx := 1.0
-				var ny := 0.0
-				if dist > 0.0001:
-					nx = ds / dist
-					ny = dd / dist
-				var ima := 1.0 / a.mass
-				var imb := 1.0 / b.mass
-				var overlap := min_d - dist
-				var share_a := ima / (ima + imb)
-				a.ls -= nx * overlap * share_a
-				a.d -= ny * overlap * share_a
-				b.ls += nx * overlap * (1.0 - share_a)
-				b.d += ny * overlap * (1.0 - share_a)
-				# Approaching speed along the normal (a -> b).
-				var vrel := (a.v - b.v) * nx + (a.vd - b.vd) * ny
-				if vrel <= 0.0:
-					continue
-				var jimp := (1.0 + Tuning.RESTITUTION) * vrel / (ima + imb)
-				a.v = maxf(0.0, a.v - jimp * nx * ima)
-				a.vd -= jimp * ny * ima
-				b.v = maxf(0.0, b.v + jimp * nx * imb)
-				b.vd += jimp * ny * imb
-				if vrel < Tuning.BUMP_LOG_IMPULSE:
-					continue
-				var key: String = a.run_id + "|" + b.run_id if a.run_id < b.run_id else b.run_id + "|" + a.run_id
-				if int(pair_cool.get(key, -1)) > tick:
-					continue
-				pair_cool[key] = tick + Tuning.HZ
-				# Hitter = whoever moves faster towards the other.
-				var a_toward := a.v * nx + a.vd * ny
-				var b_toward := -(b.v * nx + b.vd * ny)
-				var hitter: Racer = a if a_toward >= b_toward else b
-				var victim: Racer = b if hitter == a else a
-				victim.got_bumped(hitter.player_id)
-				hitter.bumped_other(victim.player_id)
-				emit("sim.bump", {"hitter": hitter.run_id, "victim": victim.run_id, "pos": victim.world_pos()})
+	for i in n:
+		for j in range(i + 1, n):
+			var a: Racer = racers[i]
+			var b: Racer = racers[j]
+			var dx := pos[j].x - pos[i].x
+			var dz := pos[j].z - pos[i].z
+			if absf(dx) >= min_d or absf(dz) >= min_d or absf(a.y - b.y) > 1.2:
+				continue
+			var dist := sqrt(dx * dx + dz * dz)
+			if dist >= min_d:
+				continue
+			# World normal a -> b (along a's heading if they sit exactly on top of each other).
+			var nw := tan[i]
+			if dist > 0.0001:
+				nw = Vector3(dx / dist, 0.0, dz / dist)
+			var ima := 1.0 / a.mass
+			var imb := 1.0 / b.mass
+			var overlap := min_d - dist
+			var share_a := ima / (ima + imb)
+			var push_a := -nw * overlap * share_a
+			var push_b := nw * overlap * (1.0 - share_a)
+			a.ls = maxf(0.0, a.ls + push_a.dot(tan[i]))
+			a.d += push_a.dot(nor[i])
+			b.ls = maxf(0.0, b.ls + push_b.dot(tan[j]))
+			b.d += push_b.dot(nor[j])
+			# Approaching speed along the normal (a -> b).
+			var va := tan[i] * a.v + nor[i] * a.vd
+			var vb := tan[j] * b.v + nor[j] * b.vd
+			var vrel := (va - vb).dot(nw)
+			if vrel <= 0.0:
+				continue
+			var jimp := (1.0 + Tuning.RESTITUTION) * vrel / (ima + imb)
+			var ja := -nw * jimp * ima
+			var jb := nw * jimp * imb
+			a.v = maxf(0.0, a.v + ja.dot(tan[i]))
+			a.vd += ja.dot(nor[i])
+			b.v = maxf(0.0, b.v + jb.dot(tan[j]))
+			b.vd += jb.dot(nor[j])
+			if vrel < Tuning.BUMP_LOG_IMPULSE:
+				continue
+			var key: String = a.run_id + "|" + b.run_id if a.run_id < b.run_id else b.run_id + "|" + a.run_id
+			if int(pair_cool.get(key, -1)) > tick:
+				continue
+			pair_cool[key] = tick + Tuning.HZ
+			# Hitter = whoever moves faster towards the other.
+			var a_toward := va.dot(nw)
+			var b_toward := -vb.dot(nw)
+			var hitter: Racer = a if a_toward >= b_toward else b
+			var victim: Racer = b if hitter == a else a
+			victim.got_bumped(hitter.player_id)
+			hitter.bumped_other(victim.player_id)
+			emit("sim.bump", {"hitter": hitter.run_id, "victim": victim.run_id, "pos": victim.world_pos()})
 
 
 # ---------------------------------------------------------------- render helpers
