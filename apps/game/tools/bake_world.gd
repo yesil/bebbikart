@@ -574,7 +574,9 @@ func _causeway(parent: Node, wood: Material, paint: Material) -> void:
 	while s <= r.length:
 		var c := r.pos_at(s)
 		if c.y - y0 > 0.3:
-			var hw := road_hw(seg, s) + 0.15
+			# Outside the band a kart clamped at the low rail reaches (centre at hw - RAIL_INSET,
+			# body 0.5 m wide each side), with room for it to lean in the wind.
+			var hw := float(seg["half_width"]) - Course.RAIL_INSET + 0.5 + 0.35
 			var nrm := r.normal_at(s)
 			for side: float in [-1.0, 1.0]:
 				var base := c + nrm * side * hw
@@ -611,6 +613,10 @@ func _lane_fence(parent: Node, wood: Material) -> void:
 		var nrm := r.normal_at(s)
 		for side: float in [-1.0, 1.0]:
 			var p := c + nrm * side * hw
+			if course.corridor_at(Vector2(p.x, p.z), 0.2, "pond_bridge") != "":
+				# Where the lane still runs beside the ford, the fence would stand on it.
+				prev.erase(side)
+				continue
 			var g := shape.height_at(p.x, p.z)
 			fence.cylinder(Vector3(p.x, g - 0.2, p.z), 0.07, 1.15, 6)
 			var top := Vector3(p.x, g + 0.85, p.z)
@@ -1027,9 +1033,16 @@ func _path_shape(name: String, r: Route, thickness: float, negative: bool) -> Pr
 	return sh
 
 
-## Hedges: dense rows of bushes along both sides of the sheltered lane. Near the junctions the
-## inner row would cross the causeway, so negative road shapes + "Remove Outside Shapes" drop
-## any hedge plant that lands on (or next to) another road.
+## Hedge bush: Bush_Common is 1.06 m in radius; randomize_transforms grows it by up to
+## HEDGE_SCALE_JITTER. HEDGE_REACH is that radius at full size plus a little air.
+const HEDGE_SCALE_JITTER := Vector3(0.25, 0.3, 0.25)
+const HEDGE_REACH := 1.06 * 1.25 + 0.2
+
+
+## Hedges: dense rows of bushes along both sides of the sheltered lane, each bush clear of the
+## lane's drivable corridor (Course.corridor_half). Near the junctions the inner row would cross
+## the causeway, so negative road shapes + "Remove Outside Shapes" drop any hedge plant that
+## reaches into another road's corridor.
 func _hedges(parent: Node, meshes: Dictionary, terrain: Node3D) -> void:
 	var seg: Dictionary = course.segments["cross_sheltered"]
 	var r: Route = seg["route"]
@@ -1053,7 +1066,7 @@ func _hedges(parent: Node, meshes: Dictionary, terrain: Node3D) -> void:
 		ps.curve = Curve3D.new()
 		var s := 6.0
 		while s <= r.length - 6.0:
-			var p := r.world_at(s, side * (road_hw(seg, s) + 1.6))
+			var p := r.world_at(s, side * (Course.corridor_half(seg) + HEDGE_REACH))
 			ps.curve.add_point(Vector3(p.x, 0, p.z))
 			s += 2.0
 		sh.shape = ps
@@ -1062,7 +1075,8 @@ func _hedges(parent: Node, meshes: Dictionary, terrain: Node3D) -> void:
 		for id in course.ordered_ids:
 			if id != "cross_sheltered":
 				var other: Dictionary = course.segments[id]
-				sc.add_child(_path_shape("Road_" + id, other["route"], 2.0 * (float(other["half_width"]) + TerrainShape.SCATTER_CLEAR), true))
+				sc.add_child(_path_shape("Road_" + id, other["route"], 2.0 * maxf(Course.corridor_half(other) + HEDGE_REACH,
+					float(other["half_width"]) + TerrainShape.SCATTER_CLEAR), true))
 		var stack := ProtonScatterModifierStack.new()
 		var along := preload("res://addons/proton_scatter/src/modifiers/create_along_edge_even.gd").new()
 		along.spacing = 1.3
@@ -1076,7 +1090,7 @@ func _hedges(parent: Node, meshes: Dictionary, terrain: Node3D) -> void:
 		stack.add(proj)
 		var randomize := preload("res://addons/proton_scatter/src/modifiers/randomize_transforms.gd").new()
 		randomize.rotation = Vector3(0.0, 360.0, 0.0)
-		randomize.scale = Vector3(0.25, 0.3, 0.25)
+		randomize.scale = HEDGE_SCALE_JITTER
 		stack.add(randomize)
 		sc.modifier_stack = stack
 		_mark(sc)

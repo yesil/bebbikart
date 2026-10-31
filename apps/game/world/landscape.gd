@@ -11,13 +11,15 @@ const Route = preload("res://sim/route.gd")
 
 ## Pond shore relative to the pond junction (start of "pond_water"). The west shore follows the
 ## fenced bridge lane ~7 m inside it; the ford enters at the south shore (s ~ 12) and leaves at
-## the north shore (s ~ 87), matching its water range s 10..90.
+## the north shore (s ~ 87), as drawn for a water range of POND_DRAWN_WATER. _init stretches the
+## south and north halves to the ford's actual water range.
 const POND_LOCAL: Array[Vector2] = [
 	Vector2(0, 12.5), Vector2(5, 9.9), Vector2(10, 11.9), Vector2(15, 19.1), Vector2(17, 33.1), Vector2(17.5, 50.1),
 	Vector2(17, 66.1), Vector2(15, 80.1), Vector2(10, 87.9), Vector2(5, 90.1), Vector2(0, 86.7), Vector2(-4.5, 82.3),
 	Vector2(-8.5, 78.5), Vector2(-15.8, 76.3), Vector2(-20.5, 70.9), Vector2(-22.7, 63.9), Vector2(-23, 50.1),
 	Vector2(-22.7, 36.1), Vector2(-20.5, 29.1), Vector2(-15.8, 23.7), Vector2(-8.5, 20.9), Vector2(-4.5, 16.7),
 ]
+const POND_DRAWN_WATER := Vector2(10.0, 90.0)
 const POND_LEVEL := 0.12          # water surface y; the ford road sits ~0.3 m below it
 const POND_FLOOR := -1.4          # deepest point away from the ford
 
@@ -29,6 +31,10 @@ const STREAM_LEVEL := 0.16
 const STREAM_BED := -0.9
 
 const KNOLL_HEIGHT := 3.0
+## Jump dip: its centre sits DIP_SHIFT m off the jump road, away from the around lane, and
+## its rim blends out to DIP_RIM radii (world/terrain_shape.gd).
+const DIP_SHIFT := 1.0
+const DIP_RIM := 1.35
 
 ## Shallow valley under the causeway. Points: x offset from the causeway, z offset from its
 ## middle, rim half width, floor y. The head is added relative to the hedged lane.
@@ -70,8 +76,15 @@ var finish := Vector3.ZERO
 
 func _init(course: Course) -> void:
 	var jp: Vector3 = (course.segments["pond_water"]["route"] as Route).pos_at(0.0)
+	var wr: Array = course.segments["pond_water"]["water"][0]
+	var pm := (POND_DRAWN_WATER.x + POND_DRAWN_WATER.y) * 0.5
 	for q in POND_LOCAL:
-		pond.append(Vector2(jp.x, jp.z) + q)
+		var z := q.y
+		if z < pm:
+			z = pm - (pm - z) * (pm - float(wr[0])) / (pm - POND_DRAWN_WATER.x)
+		else:
+			z = pm + (z - pm) * (float(wr[1]) - pm) / (POND_DRAWN_WATER.y - pm)
+		pond.append(Vector2(jp.x + q.x, jp.z + z))
 	# Bridge hump = highest point of the bridge lane; the stream runs under it into the pond.
 	var br: Route = course.segments["pond_bridge"]["route"]
 	var s := 0.0
@@ -99,17 +112,10 @@ func _init(course: Course) -> void:
 	while not Geometry2D.is_point_in_polygon(shore, pond) and shore.x < jp.x:
 		shore.x += 0.5
 	stream.append(shore + Vector2(2.0, 0.0))
-	# Dip between the ramp lip and the landing, a little wider than the jump road.
+	# Knoll between the jump road and the apex of the around road.
 	var seg: Dictionary = course.segments["ramp_jump"]
 	var jr: Route = seg["route"]
 	var rp: Dictionary = seg["ramp"]
-	var lip := float(rp["lip_s"])
-	var land := float(rp["land_s"])
-	var mid := jr.pos_at((lip + land) * 0.5)
-	dip_radii = Vector2(9.0, (land - lip) * 0.5 - 0.7)
-	dip_center = Vector2(mid.x - 1.0, mid.z)
-	dip_floor = mid.y - float(rp["pit_depth"])
-	# Knoll between the jump road and the apex of the around road.
 	var ar: Route = course.segments["ramp_around"]["route"]
 	var x0 := jr.pos_at(0.0).x
 	var apex := ar.pos_at(0.0)
@@ -119,6 +125,22 @@ func _init(course: Course) -> void:
 			apex = ar.pos_at(s)
 		s += 0.5
 	var side := signf(apex.x - x0)
+	# Dip between the ramp lip and the landing, a little wider than the jump road, shifted
+	# away from the around lane; its soft rim (DIP_RIM radii) ends at that lane's drivable edge.
+	var lip := float(rp["lip_s"])
+	var land := float(rp["land_s"])
+	var mid := jr.pos_at((lip + land) * 0.5)
+	var around_x := INF
+	s = 0.0
+	while s <= ar.length:
+		var q := ar.pos_at(s)
+		if absf(q.z - mid.z) < 1.0:
+			around_x = minf(around_x, absf(q.x - mid.x))
+		s += 0.25
+	var reach := around_x - Course.corridor_half(course.segments["ramp_around"])
+	dip_radii = Vector2(minf(9.0, (reach + DIP_SHIFT) / DIP_RIM), (land - lip) * 0.5 - 0.7)
+	dip_center = Vector2(mid.x - side * DIP_SHIFT, mid.z)
+	dip_floor = mid.y - float(rp["pit_depth"])
 	var jump_edge := x0 + float(seg["half_width"]) * side
 	var around_edge := apex.x - float(course.segments["ramp_around"]["half_width"]) * side
 	knoll_center = Vector2((jump_edge + around_edge) * 0.5, apex.z)

@@ -42,11 +42,14 @@ func _init() -> void:
 		[[0.0, 0.0], [14.0, 1.0], [28.0, 0.4], [40.0, 0.0]])
 	_add("hills1", "hills", "", "", p, 4.0, {"bumps": [12.0, 26.0]})
 	# Jump: straight over a muddy dip. Around: an S out to the right round a knoll and back.
+	# The kicker starts only once the around lane is clear of the jump road (_split_s).
 	var ramp_out := [["S", 3.0], ["A", 20.0, 48.4], ["A", 20.0, -48.4], ["S", 2.0], ["A", 20.0, -48.4], ["A", 20.0, 48.4], ["S", 3.0]]
 	var j1 := _end("hills1")
 	var around_pts := _draw("ramp_around", j1, ramp_out, [[0.0, 0.0]])
-	_add("ramp_jump", "hills", "ramp", "jump", _draw("ramp_jump", j1, [["S", _forward_pts(around_pts)]], [[0.0, 0.0]]), 3.0, {
-		"ramp": {"kick_a": 9.0, "lip_s": 15.0, "lip_h": 2.0, "land_s": 33.0, "pit_depth": 0.4},
+	var jump_pts := _draw("ramp_jump", j1, [["S", _forward_pts(around_pts)]], [[0.0, 0.0]])
+	var kick := ceilf(_split_s(jump_pts, 3.0, {}, around_pts, 3.5, {}).x * 2.0) * 0.5
+	_add("ramp_jump", "hills", "ramp", "jump", jump_pts, 3.0, {
+		"ramp": {"kick_a": kick, "lip_s": kick + 6.0, "lip_h": 2.0, "land_s": kick + 24.0, "pit_depth": 0.4},
 	})
 	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {})
 	p = _draw("hills2", _end("ramp_jump"), [["S", 25.0]], [[0.0, 0.0], [13.0, 1.0], [25.0, 0.4]])
@@ -60,9 +63,12 @@ func _init() -> void:
 	var bl := _length(bridge_pts)
 	bridge_pts = _draw("pond_bridge", j3, bridge_ops, [[0.0, 0.4], [bl * 0.5 - 12.0, 0.4], [bl * 0.5, 1.6], [bl * 0.5 + 12.0, 0.4], [bl, 0.4]])
 	var ford_len := _forward_pts(bridge_pts)
+	# The ford only dips into the water once the bridge lane is clear of it.
+	var ford_flat := _draw("pond_water", j3, [["S", ford_len]], [[0.0, 0.4]])
+	var fs := _split_s(ford_flat, 4.0, {}, bridge_pts, 2.8, {"rails": true})
 	_add("pond_water", "pond", "pond", "water", _draw("pond_water", j3, [["S", ford_len]],
-		[[0.0, 0.4], [9.0, 0.4], [18.0, -0.2], [ford_len - 18.0, -0.2], [ford_len - 9.0, 0.4], [ford_len, 0.4]]), 4.0,
-		{"water": [[10.0, 90.0]]})
+		[[0.0, 0.4], [fs.x, 0.4], [fs.x + 9.0, -0.2], [fs.y - 9.0, -0.2], [fs.y, 0.4], [ford_len, 0.4]]), 4.0,
+		{"water": [[fs.x + 1.0, fs.y - 1.0]]})
 	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true})
 	# Exposed: a low causeway straight across a shallow valley. Sheltered: a hedged lane that
 	# loops right round the valley head. The causeway only starts to climb once the lane has
@@ -71,8 +77,9 @@ func _init() -> void:
 	var shelter_ops := [["S", 3.0], ["A", 14.0, 64.6], ["A", 14.0, -64.6], ["S", 7.0], ["A", 14.0, -64.6], ["A", 14.0, 64.6], ["S", 3.0]]
 	var shelter_pts := _draw("cross_sheltered", j4, shelter_ops, [[0.0, 0.4]])
 	var xl := _forward_pts(shelter_pts)
+	var cs := _split_s(_draw("cross_exposed", j4, [["S", xl]], [[0.0, 0.4]]), 2.6, {"low_rails": true}, shelter_pts, 3.5, {})
 	_add("cross_exposed", "crossing", "crossing", "exposed", _draw("cross_exposed", j4, [["S", xl]],
-		[[0.0, 0.4], [12.0, 0.4], [22.0, 1.4], [xl - 22.0, 1.4], [xl - 12.0, 0.4], [xl, 0.4]]), 2.6,
+		[[0.0, 0.4], [cs.x, 0.4], [cs.x + 10.0, 1.4], [cs.y - 10.0, 1.4], [cs.y, 0.4], [xl, 0.4]]), 2.6,
 		{"exposure": 1.0, "low_rails": true})
 	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
 	# Rainbow bends: two mirrored chicanes, then the finish straight.
@@ -126,6 +133,42 @@ static func _key_y(keys: Array, s: float) -> float:
 		if s <= float(b[0]):
 			return lerpf(float(a[1]), float(b[1]), smoothstep(float(a[0]), float(b[0]), s))
 	return float(keys[keys.size() - 1][1])
+
+
+## [first, last] distance along the direct road `direct` where the detour `detour` is laterally
+## clear of it: each road's surface outside the other's drivable corridor (corridor_half), so
+## the two may differ in height there and nowhere else. `*_extra` are the segment flags that
+## change the corridor (rails, edge).
+static func _split_s(direct: Array, direct_hw: float, direct_extra: Dictionary, detour: Array, detour_hw: float, detour_extra: Dictionary) -> Vector2:
+	var a := {"half_width": direct_hw, "edge": Tuning.OFF_TRACK_MARGIN, "rails": false}
+	a.merge(direct_extra, true)
+	var b := {"half_width": detour_hw, "edge": Tuning.OFF_TRACK_MARGIN, "rails": false}
+	b.merge(detour_extra, true)
+	var need := maxf(corridor_half(a) + surface_half(b), corridor_half(b) + surface_half(a))
+	var line: Array[Vector2] = []
+	for q: Vector3 in detour:
+		line.append(Vector2(q.x, q.z))
+	var first := INF
+	var last := -INF
+	var acc := 0.0
+	for i in direct.size():
+		var q: Vector3 = direct[i]
+		if i > 0:
+			acc += Vector2(q.x, q.z).distance_to(Vector2(direct[i - 1].x, direct[i - 1].z))
+		if _polyline_dist(Vector2(q.x, q.z), line) >= need:
+			first = minf(first, acc)
+			last = maxf(last, acc)
+	assert(first < last, "course: detour never clears the direct road")
+	return Vector2(first, last)
+
+
+static func _polyline_dist(p: Vector2, line: Array[Vector2]) -> float:
+	var best := INF
+	for i in line.size() - 1:
+		var ab := line[i + 1] - line[i]
+		var t := clampf((p - line[i]).dot(ab) / maxf(ab.length_squared(), 1e-9), 0.0, 1.0)
+		best = minf(best, p.distance_to(line[i] + ab * t))
+	return best
 
 
 ## Half width of the band a kart's body can reach: the centre-line limit the sim enforces

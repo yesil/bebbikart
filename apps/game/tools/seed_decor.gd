@@ -13,6 +13,10 @@ const TerrainShape = preload("res://world/terrain_shape.gd")
 const MeshBatch = preload("res://world/mesh_batch.gd")
 
 const DECOR_PATH := "res://world/decor.tscn"
+## Gap kept between a post or tower and any road's drivable corridor (Course.corridor_half).
+const PROP_CLEAR := 0.2
+const SIGN_POST_R := 0.12
+const FORD_POST_R := 0.08
 const MAT_DIR := "res://world/materials/"
 const TEX := "res://assets/textures/"
 
@@ -260,7 +264,7 @@ func _start() -> void:
 		for side: float in [-1.0, 1.0]:
 			_box(slot, "Side%+d" % int(side), Vector3(0.1, 0.01, 1.8), Vector3(side * 0.85, 0, 0), mats.white)
 		_box(slot, "Front", Vector3(1.8, 0.01, 0.1), Vector3(0, 0, 0.85), mats.white)
-	_gantry(g, "StartGantry", 3.5, hw, "START", mats.metal_blue, true)
+	_gantry(g, "StartGantry", 3.5, Course.corridor_half(seg), "START", mats.metal_blue, true)
 
 
 func _finish() -> void:
@@ -277,7 +281,7 @@ func _finish() -> void:
 	line.material_override = mats.checker_road
 	line.position = Vector3(0, 0.015, -0.7)
 	g.add_child(line)
-	_gantry(g, "FinishGantry", 0.0, hw + 0.6, "FINISH", mats.metal_red, false)
+	_gantry(g, "FinishGantry", 0.0, Course.corridor_half(seg), "FINISH", mats.metal_red, false)
 	# Flag line on both sides of the finish straight.
 	var colors := [Color(0.9, 0.15, 0.15), Color(1.0, 0.8, 0.1), Color(0.15, 0.45, 0.9), Color(0.2, 0.7, 0.3)]
 	var i := 0
@@ -291,11 +295,12 @@ func _finish() -> void:
 
 
 ## Gantry spanning the road: two lattice towers, a deep beam with a chequered trim and the
-## caption on both faces. z_off along the road from the group origin.
+## caption on both faces. z_off along the road from the group origin. The towers' feet (0.6 m
+## half width) stand clear outside half_span, the road's drivable corridor.
 func _gantry(parent: Node, name: String, z_off: float, half_span: float, caption: String, paint: Material, lights: bool) -> void:
 	var g := _group(parent, name, Transform3D(Basis.IDENTITY, Vector3(0, 0, z_off)))
 	var h := 5.6
-	var x := half_span + 0.9
+	var x := half_span + 0.6 + PROP_CLEAR
 	for side: float in [-1.0, 1.0]:
 		var tower := _group(g, "Tower" + ("L" if side < 0.0 else "R"), Transform3D(Basis.IDENTITY, Vector3(side * x, 0, 0)))
 		var mb := MeshBatch.new()
@@ -398,7 +403,8 @@ func _crowd(parent: Node3D, length: float, steps: int) -> void:
 
 # ---------------------------------------------------------------- forks
 
-## Signpost on the island where each fork's branches separate, facing the oncoming racers.
+## Signpost on the island where each fork's branches separate, facing the oncoming racers:
+## the first spot where the post fits between the two drivable corridors on dry ground.
 func _signposts() -> void:
 	var forks := [
 		["ramp", "ramp_jump", "ramp_around", "JUMP", "AROUND"],
@@ -410,21 +416,33 @@ func _signposts() -> void:
 		var detour: Dictionary = course.segments[f[2]]
 		var rd: Route = direct["route"]
 		var rt: Route = detour["route"]
-		var need: float = float(direct["half_width"]) + float(detour["half_width"]) + 3.0
+		var cd := Course.corridor_half(direct)
+		var ct := Course.corridor_half(detour)
+		var found := false
 		var s := 2.0
+		var p := Vector3.ZERO
+		var q := Vector3.ZERO
+		var mid := Vector3.ZERO
 		while s < rt.length * 0.5:
-			var p := rt.pos_at(s)
-			var q := rd.pos_at(_closest_s(rd, Vector2(p.x, p.z)))
-			if Vector2(p.x - q.x, p.z - q.z).length() >= need:
+			p = rt.pos_at(s)
+			q = rd.pos_at(_closest_s(rd, Vector2(p.x, p.z)))
+			var gap := Vector2(p.x - q.x, p.z - q.z).length()
+			# Halfway between the two corridor edges.
+			mid = q + (p - q) * ((cd + (gap - cd - ct) * 0.5) / gap)
+			var xz := Vector2(mid.x, mid.z)
+			if course.corridor_at(xz, SIGN_POST_R + PROP_CLEAR) == "" and not land.in_pond(xz, 1.0) \
+					and land.stream_dist(xz) > Landscape.STREAM_HALF_WIDTH + 1.0:
+				found = true
 				break
 			s += 0.5
-		var p := rt.pos_at(s)
-		var q := rd.pos_at(_closest_s(rd, Vector2(p.x, p.z)))
-		var mid := (p + q) * 0.5
+		if not found:
+			push_error("seed_decor: no dry spot for the %s signpost between the %s and %s corridors" % [f[0], f[1], f[2]])
+			failed = true
+			continue
 		mid.y = _ground(mid)
 		var fwd := rd.tangent_at(0.0)
 		var g := _group(decor, "Signpost_" + f[0], Transform3D(Basis(fwd.cross(Vector3.UP) * -1.0, Vector3.UP, fwd), mid))
-		_cyl(g, "Post", 0.12, 3.4, Vector3.ZERO, mats.wood)
+		_cyl(g, "Post", SIGN_POST_R, 3.4, Vector3.ZERO, mats.wood)
 		var detour_side := signf((p - q).dot(fwd.cross(Vector3.UP) * -1.0))
 		for k in 2:
 			var to_detour := k == 1
@@ -486,18 +504,34 @@ func _stone_bridge() -> void:
 	g.add_child(mi)
 
 
-## Red-and-white depth posts at both ends of the ford so the water route reads instantly.
+## Red-and-white depth posts at both ends of the ford so the water route reads instantly: a
+## pair just outside the ford's drivable corridor, at the first spot from each end of the water
+## where both are clear of every other road too.
 func _ford_posts() -> void:
 	var seg: Dictionary = course.segments["pond_water"]
 	var r: Route = seg["route"]
 	var wr: Array = seg["water"][0]
 	var g := _group(decor, "FordPosts")
 	var stripe := _flag_mat("depth_post", Color(0.85, 0.12, 0.1), Color.WHITE, 6.0, 0.0)
+	var off := Course.corridor_half(seg) + FORD_POST_R + PROP_CLEAR
 	var i := 0
-	for s: float in [float(wr[0]) + 3.0, float(wr[1]) - 3.0]:
+	for end in [[float(wr[0]) + 3.0, 0.5], [float(wr[1]) - 3.0, -0.5]]:
+		var s: float = end[0]
+		while s > float(wr[0]) and s < float(wr[1]):
+			var ok := true
+			for side: float in [-1.0, 1.0]:
+				var p := r.world_at(s, side * off)
+				ok = ok and course.corridor_at(Vector2(p.x, p.z), FORD_POST_R + PROP_CLEAR, "pond_water") == ""
+			if ok:
+				break
+			s += float(end[1])
+		if s <= float(wr[0]) or s >= float(wr[1]):
+			push_error("seed_decor: no spot for the ford posts clear of the other roads")
+			failed = true
+			return
 		for side: float in [-1.0, 1.0]:
-			var p := r.world_at(s, side * (float(seg["half_width"]) + 0.6))
+			var p := r.world_at(s, side * off)
 			p.y = _ground(p)
-			var post := _cyl(g, "Post%d" % i, 0.08, 1.6, p - Vector3(0, 0.4, 0), stripe)
+			var post := _cyl(g, "Post%d" % i, FORD_POST_R, 1.6, p - Vector3(0, 0.4, 0), stripe)
 			post.name = "Post%d" % i
 			i += 1

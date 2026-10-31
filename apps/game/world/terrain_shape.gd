@@ -283,8 +283,8 @@ func _natural(p: Vector2, dist: float, ry: float) -> float:
 		y = lerpf(0.0, y, smoothstep(0.0, 10.0, out))
 	# Jump dip: an oval of mud at the pit depth with soft rims.
 	var q := ((p - land.dip_center) / land.dip_radii).length()
-	if q < 1.35:
-		y = lerpf(land.dip_floor, y, smoothstep(0.75, 1.35, q))
+	if q < Landscape.DIP_RIM:
+		y = lerpf(land.dip_floor, y, smoothstep(0.75, Landscape.DIP_RIM, q))
 	# Valley.
 	var vi: Array = land.valley_info(p)
 	var vd: float = vi[0]
