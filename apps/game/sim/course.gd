@@ -21,10 +21,15 @@ const RAIL_INSET := 0.45
 ##   low_rails (bool, optional: clamped too, but a kart hitting them with |vd| > RAIL_TOPPLE_VD
 ##   tips over: off_track),
 ##   exposure (0..1 wind), water: [[a,b]], boosts: [[a,b]], bumps: [s...],
-##   ramp: {} or {kick_a, lip_s, lip_h, land_s, pit_depth}, offset (route s at segment start; per path)
+##   ramp: {} or {kick_a, lip_s, lip_h, land_s, pit_depth}, offset (route s at segment start; per path),
+##   stretch (the stretch it belongs to: Protocol.TRACK_STRETCHES[NAME], contracts §2d)
 ## }
+const NAME := "countryside"
+
 var segments := {}
 var ordered_ids: Array[String] = []
+## Problems found while building (a segment without a known stretch). The sim refuses to race.
+var errors: PackedStringArray = []
 
 
 func _init() -> void:
@@ -35,12 +40,12 @@ func _init() -> void:
 	# way. Heights come from smooth (s, y) keys. tools/layout_map.gd checks the result against
 	# the terrain features in world/landscape.gd.
 	var p := _draw("start", Vector3.ZERO, [["S", 15.0]], [[0.0, 0.0]])
-	_add("start", "hills", "", "", p, 5.0, {})
+	_add("start", "hills", "", "", p, 5.0, {"stretch": "bumpy_road"})
 	# Gentle double chicane over two crests.
 	p = _draw("hills1", _end("start"), [["S", 3.0], ["A", 18.0, 15.0], ["A", 18.0, -30.0], ["A", 18.0, 15.0],
 		["A", 18.0, -15.0], ["A", 18.0, 30.0], ["A", 18.0, -15.0]],
 		[[0.0, 0.0], [14.0, 1.0], [28.0, 0.4], [40.0, 0.0]])
-	_add("hills1", "hills", "", "", p, 4.0, {"bumps": [12.0, 26.0]})
+	_add("hills1", "hills", "", "", p, 4.0, {"bumps": [12.0, 26.0], "stretch": "bumpy_road"})
 	# Jump: straight over a muddy dip. Around: an S out to the right round a knoll and back.
 	# The kicker starts only once the around lane is clear of the jump road (_split_s).
 	var ramp_out := [["S", 3.0], ["A", 20.0, 48.4], ["A", 20.0, -48.4], ["S", 2.0], ["A", 20.0, -48.4], ["A", 20.0, 48.4], ["S", 3.0]]
@@ -50,10 +55,11 @@ func _init() -> void:
 	var kick := ceilf(_split_s(jump_pts, 3.0, {}, around_pts, 3.5, {}).x * 2.0) * 0.5
 	_add("ramp_jump", "hills", "ramp", "jump", jump_pts, 3.0, {
 		"ramp": {"kick_a": kick, "lip_s": kick + 6.0, "lip_h": 2.0, "land_s": kick + 24.0, "pit_depth": 0.4},
+		"stretch": "kicker",
 	})
-	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {})
+	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {"stretch": "knoll_road"})
 	p = _draw("hills2", _end("ramp_jump"), [["S", 25.0]], [[0.0, 0.0], [13.0, 1.0], [25.0, 0.4]])
-	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[10.0, 20.0]]})
+	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[10.0, 20.0]], "stretch": "hilltop"})
 	# Water: a shallow stone ford straight through the pond. Bridge: a fenced lane that swings
 	# west round the pond and crosses its inflow stream on a humped stone bridge.
 	var j3 := _end("hills2")
@@ -68,8 +74,8 @@ func _init() -> void:
 	var fs := _split_s(ford_flat, 4.0, {}, bridge_pts, 2.8, {"rails": true})
 	_add("pond_water", "pond", "pond", "water", _draw("pond_water", j3, [["S", ford_len]],
 		[[0.0, 0.4], [fs.x, 0.4], [fs.x + 9.0, -0.2], [fs.y - 9.0, -0.2], [fs.y, 0.4], [ford_len, 0.4]]), 4.0,
-		{"water": [[fs.x + 1.0, fs.y - 1.0]]})
-	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true})
+		{"water": [[fs.x + 1.0, fs.y - 1.0]], "stretch": "ford"})
+	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true, "stretch": "stone_bridge"})
 	# Exposed: a low causeway straight across a shallow valley. Sheltered: a hedged lane that
 	# loops right round the valley head. The causeway only starts to climb once the lane has
 	# split off, so the two never overlap at different heights.
@@ -80,15 +86,16 @@ func _init() -> void:
 	var cs := _split_s(_draw("cross_exposed", j4, [["S", xl]], [[0.0, 0.4]]), 2.6, {"low_rails": true}, shelter_pts, 3.5, {})
 	_add("cross_exposed", "crossing", "crossing", "exposed", _draw("cross_exposed", j4, [["S", xl]],
 		[[0.0, 0.4], [cs.x, 0.4], [cs.x + 10.0, 1.4], [cs.y - 10.0, 1.4], [cs.y, 0.4], [xl, 0.4]]), 2.6,
-		{"exposure": 1.0, "low_rails": true})
-	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
+		{"exposure": 1.0, "low_rails": true, "stretch": "causeway"})
+	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0, "stretch": "hedge_lane"})
 	# Rainbow bends: two mirrored chicanes, then the finish straight.
 	p = _draw("bends", _end("cross_exposed"), [["S", 6.0], ["A", 12.0, -55.0], ["A", 12.0, 110.0], ["A", 12.0, -55.0],
 		["A", 12.0, 55.0], ["A", 12.0, -110.0], ["A", 12.0, 55.0], ["S", 20.0]], [[0.0, 0.4], [30.0, 0.2], [70.0, 0.0]])
-	_add("bends", "bends", "", "", p, 3.5, {})
+	_add("bends", "bends", "", "", p, 3.5, {"stretch": "rainbow_bends"})
 	var b: Dictionary = segments["bends"]
 	var bl2: float = (b["route"] as Route).length
 	b["boosts"] = [[bl2 - 18.0, bl2 - 8.0]]
+	errors.append_array(stretch_errors(segments, NAME))
 
 
 ## Control points every metre along straights ("S", length) and arcs ("A", radius, degrees;
@@ -239,6 +246,25 @@ func _add(id: String, section: String, fork: String, choice: String, ctrl: Array
 		seg[k] = extra[k]
 	segments[id] = seg
 	ordered_ids.append(id)
+
+
+## Every segment must carry a stretch of `track` (Protocol.TRACK_STRETCHES): runs report the time
+## on each (contracts §2d). Returns the problems, empty when all is well.
+static func stretch_errors(segs: Dictionary, track: String) -> PackedStringArray:
+	var out: PackedStringArray = []
+	if not Protocol.TRACK_STRETCHES.has(track):
+		out.append("track \"%s\" has no stretches in Protocol.TRACK_STRETCHES" % track)
+		return out
+	var known := {}
+	for st in Protocol.TRACK_STRETCHES[track]:
+		known[st["id"]] = true
+	for id in segs:
+		var tag = segs[id].get("stretch")
+		if tag == null:
+			out.append("segment %s has no stretch" % id)
+		elif not known.has(tag):
+			out.append("segment %s: stretch \"%s\" is not a %s stretch" % [id, tag, track])
+	return out
 
 
 ## Segment ids in driving order for a build's route choices.

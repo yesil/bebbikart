@@ -522,7 +522,12 @@ func _load_countryside_world() -> bool:
 func _make_course(id: String):
 	match id:
 		"countryside":
-			return Course.new()
+			var cc := Course.new()
+			if not cc.errors.is_empty():
+				push_error("countryside course is broken: %s" % "; ".join(cc.errors))
+				get_tree().quit(1)
+				return null
+			return cc
 		"village":
 			var c := VillageCourse.new()
 			if not c.errors.is_empty():

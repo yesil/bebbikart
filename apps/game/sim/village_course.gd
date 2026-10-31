@@ -69,6 +69,8 @@ func _init() -> void:
 	var miss := _end("bends").distance_to(Vector3.ZERO)
 	if miss > 0.05:
 		_error("loop misses the start line by %.2f m" % miss)
+	for e in Course.stretch_errors(segments, NAME):
+		_error(e)
 
 
 func _error(msg: String) -> void:
@@ -81,12 +83,12 @@ func _build(hill: float, north: float) -> void:
 	var p := _draw_ops(Vector3.ZERO, 0.0, [["S", 14.0]], [[0.0, 0.0]])
 	# Boost out of the square: a boost before the downhill corners after the church sent
 	# racers off the road.
-	_add("start", "hills", "", "", p, 5.0, {"boosts": [[3.0, 12.0]]})
+	_add("start", "hills", "", "", p, 5.0, {"boosts": [[3.0, 12.0]], "stretch": "main_street"})
 	# Main street: a gentle S between the chalets, then right up the church hill.
 	var ops := [["S", 3.0], ["A", 22.0, 16.0], ["A", 22.0, -16.0], ["S", 2.0], ["A", 18.0, LEG_CHURCH], ["S", 4.0]]
 	var l1 := 3.0 + deg_to_rad(32.0) * 22.0 + 2.0 + deg_to_rad(LEG_CHURCH) * 18.0 + 4.0
 	p = _draw_ops(_end("start"), _heading("start"), ops, [[0.0, 0.0], [8.0, 0.3], [l1 - 6.0, 2.9], [l1, 3.0]])
-	_add("hills1", "hills", "", "", p, 4.0, {"bumps": [16.0]})
+	_add("hills1", "hills", "", "", p, 4.0, {"bumps": [16.0], "stretch": "main_street"})
 	# Ramp fork. Around: a lane peeling left round the churchyard wall. Jump: straight over the
 	# wooden ski-jump kicker into the hay meadow.
 	var j1 := _end("hills1")
@@ -96,8 +98,9 @@ func _build(hill: float, north: float) -> void:
 	var jump_len := _along(around_pts, h1)
 	_add("ramp_jump", "hills", "ramp", "jump", _draw_ops(j1, h1, [["S", jump_len]], [[0.0, 3.0]]), 3.0, {
 		"ramp": {"kick_a": 22.0, "lip_s": 28.0, "lip_h": 2.0, "land_s": 46.0, "pit_depth": 0.4},
+		"stretch": "kicker",
 	})
-	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {})
+	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {"stretch": "churchyard"})
 	# Over the hill top, then right and down to the brook.
 	# Two easier half-turns with a breather between: one long 100-degree arc downhill threw
 	# daring racers off in the rain.
@@ -105,7 +108,7 @@ func _build(hill: float, north: float) -> void:
 	ops = [["S", hill], ["A", 24.0, half], ["S", 5.0], ["A", 24.0, half], ["S", 8.0]]
 	var l2 := hill + deg_to_rad(half * 2.0) * 24.0 + 13.0
 	p = _draw_ops(_end("ramp_jump"), _heading("ramp_jump"), ops, [[0.0, 3.0], [hill, 3.0], [l2, 0.4]])
-	_add("hills2", "hills", "", "", p, 4.0, {})
+	_add("hills2", "hills", "", "", p, 4.0, {"stretch": "church_hill"})
 	# Pond fork. Bridge: the lane swings left over the inflow brook on a covered wooden bridge.
 	# Water: a stone ford straight through the duck pond.
 	var j3 := _end("hills2")
@@ -117,31 +120,31 @@ func _build(hill: float, north: float) -> void:
 	var ford_len := _along(bridge_pts, h3)
 	_add("pond_water", "pond", "pond", "water", _draw_ops(j3, h3, [["S", ford_len]],
 		[[0.0, 0.4], [12.0, 0.4], [20.0, -0.2], [ford_len - 20.0, -0.2], [ford_len - 12.0, 0.4], [ford_len, 0.4]]), 4.0,
-		{"water": [[13.0, ford_len - 13.0]]})
+		{"water": [[13.0, ford_len - 13.0]], "stretch": "ford"})
 	# Wooden deck: slick in the rain (the ford doesn't care).
-	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true, "rain_slick": 1.6})
+	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true, "rain_slick": 1.6, "stretch": "covered_bridge"})
 	# Past the mill and out of the village to the south, onto the alp: each stretch tests one
 	# ability (a sign at its start says which).
 	p = _draw_ops(_end("pond_water"), _heading("pond_water"), [["S", 14.0]], [[0.0, 0.4]])
-	_add("mill", "pond", "", "", p, 4.0, {})
+	_add("mill", "pond", "", "", p, 4.0, {"stretch": "farm"})
 	# Farm track (grip): a muddy S through the fields, climbing gently.
 	p = _draw_ops(_end("mill"), _heading("mill"), [["S", 4.0], ["A", 16.0, 30.0], ["A", 16.0, -60.0], ["A", 16.0, 30.0], ["S", 4.0]],
 		[[0.0, 0.4], [44.0, 2.2]])
-	_add("farm", "crossing", "", "", p, 3.5, {"exposure": 0.3, "grip": 0.85})
+	_add("farm", "crossing", "", "", p, 3.5, {"exposure": 0.3, "grip": 0.85, "stretch": "farm"})
 	# Cobbled lane (bounce): straight on over cobbles and humps, still climbing.
 	p = _draw_ops(_end("farm"), _heading("farm"), [["S", 28.0]], [[0.0, 2.2], [28.0, 4.0]])
-	_add("cobbles", "crossing", "", "", p, 3.5, {"exposure": 0.3, "bumps": [5.0, 11.0, 17.0, 23.0]})
+	_add("cobbles", "crossing", "", "", p, 3.5, {"exposure": 0.3, "bumps": [5.0, 11.0, 17.0, 23.0], "stretch": "cobbles"})
 	# Ridge (stability): a wide hairpin round the alp top and back down, open to the wind.
 	var ridge_l := deg_to_rad(180.0) * RIDGE_R + 16.0
 	p = _draw_ops(_end("cobbles"), _heading("cobbles"), [["A", RIDGE_R, 180.0], ["S", 16.0]],
 		[[0.0, 4.0], [ridge_l * 0.45, 6.5], [ridge_l, 3.4]])
 	# Mandatory for everyone, so open but not as wild as the optional causeway.
-	_add("ridge", "crossing", "", "", p, 3.8, {"exposure": 0.7})
+	_add("ridge", "crossing", "", "", p, 3.8, {"exposure": 0.7, "stretch": "ridge"})
 	# Alpbach (water): down through a stream, then left back into the village.
 	var turn_in := LEG_SOUTH - LEG_BROOK - 180.0
 	p = _draw_ops(_end("ridge"), _heading("ridge"), [["S", 30.0], ["A", 16.0, turn_in], ["S", 14.0]],
 		[[0.0, 3.4], [11.0, 2.3], [13.5, 2.0], [20.0, 2.0], [26.0, 1.6], [30.0 + deg_to_rad(absf(turn_in)) * 16.0, 0.4]])
-	_add("alpbach", "crossing", "", "", p, 3.5, {"exposure": 0.4, "water": [[12.5, 19.5]]})
+	_add("alpbach", "crossing", "", "", p, 3.5, {"exposure": 0.4, "water": [[12.5, 19.5]], "stretch": "alpbach"})
 	# Crossing fork. Sheltered: the arcade lane loops right in among the houses. Exposed: a low
 	# causeway straight over the open meadow, facing the mountains.
 	var j4 := _end("alpbach")
@@ -151,15 +154,15 @@ func _build(hill: float, north: float) -> void:
 	var xl := _along(shelter_pts, h4)
 	_add("cross_exposed", "crossing", "crossing", "exposed", _draw_ops(j4, h4, [["S", xl]],
 		[[0.0, 0.4], [18.0, 0.4], [28.0, 1.4], [xl - 28.0, 1.4], [xl - 18.0, 0.4], [xl, 0.4]]), 2.6,
-		{"exposure": 1.0, "low_rails": true})
-	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0})
+		{"exposure": 1.0, "low_rails": true, "stretch": "causeway"})
+	_add("cross_sheltered", "crossing", "crossing", "sheltered", shelter_pts, 3.5, {"exposure": 0.0, "stretch": "arcades"})
 	# Square: a chicane past the bakery, then the roundabout round the fountain turns the
 	# course north to the line.
 	var lane := (360.0 - LEG_SOUTH + ROUNDABOUT_TURN) * 0.5
 	var chicane := [["S", 4.0], ["A", 12.0, -25.0], ["A", 12.0, 50.0], ["A", 12.0, -25.0], ["S", 12.0]]
 	ops = chicane + [["A", ROUNDABOUT_LANE_R, lane], ["A", ROUNDABOUT_R, -ROUNDABOUT_TURN], ["A", ROUNDABOUT_LANE_R, lane], ["S", north]]
 	p = _draw_ops(_end("cross_exposed"), _heading("cross_exposed"), ops, [[0.0, 0.4], [25.0, 0.0]])
-	_add("bends", "bends", "", "", p, 3.5, {})
+	_add("bends", "bends", "", "", p, 3.5, {"stretch": "square"})
 	var b: Dictionary = segments["bends"]
 	var blen: float = (b["route"] as Route).length
 	var rs0 := 16.0 + deg_to_rad(100.0) * 12.0 + deg_to_rad(lane) * ROUNDABOUT_LANE_R
@@ -178,6 +181,7 @@ func _build(hill: float, north: float) -> void:
 		"id": "roundabout_loop", "section": "bends", "fork": "", "choice": "", "route": lr,
 		"half_width": 3.5, "edge": Tuning.OFF_TRACK_MARGIN, "rails": false, "exposure": 0.4,
 		"water": [], "boosts": [], "bumps": [], "ramp": {}, "end_heading": br.heading_at(at),
+		"stretch": "square",
 	}
 	b["miss"] = {"at": at, "seg": "roundabout_loop", "chance": MISS_EXIT_CHANCE}
 	b["boosts"] = [[blen - clampf(north, 4.0, 12.0), blen - 1.0]]

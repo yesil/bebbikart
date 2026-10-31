@@ -104,6 +104,10 @@ var detour_travel := 0.0       # metres driven in detours this lap (keeps the st
 var miss_chance := -1.0        # chance of the last missed-exit roll (tools/sweep.gd prices the risk)
 var course_ref                 # the course, for detour segments
 var laps_max := 0
+# Stretches (contracts §2d): this lap's, in driving order, [{id, ticks, lost_ms}]. Every tick
+# counts to the stretch the racer is on when it starts, so they add up to the lap exactly.
+var stretch_log: Array = []
+var best_stretches: Array = [] # the best lap's (payload form)
 
 
 ## `course` is sim/course.gd or sim/village_course.gd (same segment interface; a loop track has `loop`).
@@ -126,6 +130,7 @@ func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, c
 		offsets[i] = total_len
 		total_len += (sg["route"] as Route).length
 	seg = segs[0]
+	_enter_stretch()
 	course_ref = course
 	looping = course.get("loop") == true
 	if looping:
@@ -255,6 +260,7 @@ func _replan_lane(sim) -> void:
 func step(sim) -> void:
 	var dt := Tuning.DT
 	ticks += 1
+	stretch_log.back()["ticks"] += 1
 	var weather = sim.weather
 	var rain: float = weather.rain_intensity()
 	if rain > 0.05:
@@ -429,6 +435,7 @@ func step(sim) -> void:
 			seg_idx = 0
 			seg = segs[0]
 			seg_id = seg["id"]
+			_enter_stretch()
 			section = seg["section"]
 			stuck_best = 0.0
 			detour_travel = 0.0
@@ -438,6 +445,7 @@ func step(sim) -> void:
 		seg_idx += 1
 		seg = segs[seg_idx]
 		seg_id = seg["id"]
+		_enter_stretch()
 		var new_section: String = seg["section"]
 		if new_section != section:
 			_close_split(sim)
@@ -624,8 +632,8 @@ func _account(sim, dt: float, k: float, rain: float, exposure: float) -> void:
 		episode["idle"] = 0.0
 	elif cause != "":
 		_close_episode()
-		episode = {"kind": cause, "section": section, "atMs": elapsed_ms(), "loss": loss * dt, "idle": 0.0,
-			"other": bumped_by if cause == "bumped" else ""}
+		episode = {"kind": cause, "section": section, "stretch": seg["stretch"], "atMs": elapsed_ms(),
+			"loss": loss * dt, "idle": 0.0, "other": bumped_by if cause == "bumped" else ""}
 	elif not episode.is_empty():
 		episode["idle"] = float(episode["idle"]) + dt
 		if float(episode["idle"]) >= Tuning.EVENT_IDLE_CLOSE_S:
@@ -636,8 +644,8 @@ func _episode_force(kind: String) -> void:
 	if not episode.is_empty() and episode["kind"] == kind:
 		return
 	_close_episode()
-	episode = {"kind": kind, "section": section, "atMs": elapsed_ms(), "loss": 0.0, "idle": 0.0,
-		"other": bumped_by if kind == "bumped" else ""}
+	episode = {"kind": kind, "section": section, "stretch": seg["stretch"], "atMs": elapsed_ms(),
+		"loss": 0.0, "idle": 0.0, "other": bumped_by if kind == "bumped" else ""}
 
 
 func _close_episode() -> void:
@@ -645,16 +653,47 @@ func _close_episode() -> void:
 		return
 	var ms := int(round(float(episode["loss"]) * 1000.0))
 	if ms >= Tuning.EVENT_MIN_LOSS_MS or episode["kind"] == "bumped" or episode["kind"] == "bad_landing":
-		var e := {"kind": episode["kind"], "section": episode["section"], "atMs": episode["atMs"], "timeLostMs": ms}
+		var e := {"kind": episode["kind"], "section": episode["section"], "stretch": episode["stretch"],
+			"atMs": episode["atMs"], "timeLostMs": ms}
 		if String(episode["other"]) != "":
 			e["otherPlayerId"] = episode["other"]
 		_add_event(e)
+		_stretch_lost(episode["stretch"], ms)
 	episode = {}
 
 
+## Every event names the stretch it happened on (episodes: where they began).
 func _add_event(e: Dictionary) -> void:
+	if not e.has("stretch"):
+		e["stretch"] = seg["stretch"]
 	if events.size() < Tuning.MAX_EVENTS:
 		events.append(e)
+
+
+# ---------------------------------------------------------------- stretches
+
+## The racer is on a new segment: start its stretch unless it is the same one (mill into farm,
+## round the roundabout again).
+func _enter_stretch() -> void:
+	var id: String = seg["stretch"]
+	if stretch_log.is_empty() or stretch_log.back()["id"] != id:
+		stretch_log.append({"id": id, "ticks": 0, "lost_ms": 0})
+
+
+## A loss event's time goes to its stretch on this lap (one that began on the last lap is dropped).
+func _stretch_lost(id: String, ms: int) -> void:
+	for i in range(stretch_log.size() - 1, -1, -1):
+		if stretch_log[i]["id"] == id:
+			stretch_log[i]["lost_ms"] += ms
+			return
+
+
+## Payload form: [{id, ms, lostMs}].
+func _stretch_times(log: Array) -> Array:
+	var out: Array = []
+	for s in log:
+		out.append({"id": s["id"], "ms": int(round(s["ticks"] * 1000.0 / Tuning.HZ)), "lostMs": s["lost_ms"]})
+	return out
 
 
 # ---------------------------------------------------------------- splits / end
@@ -681,6 +720,7 @@ func _end_detour(sim) -> void:
 	detour_travel += loop_len
 	var lost := int(round((ticks - int(detour["start_tick"])) * 1000.0 / Tuning.HZ))
 	_add_event({"kind": "missed_exit", "section": section, "atMs": elapsed_ms(), "timeLostMs": lost})
+	_stretch_lost(seg["stretch"], lost)
 	seg = detour["seg"]
 	seg_id = seg["id"]
 	ls += float(detour["at"])
@@ -723,18 +763,21 @@ func _lap_done(sim) -> bool:
 	laps.append(ms)
 	lap += 1
 	var is_best := best_lap < 0 or ms < laps[best_lap]
+	var stretches := _stretch_times(stretch_log)
 	if is_best:
 		best_lap = laps.size() - 1
 		best_splits = splits.duplicate()
 		best_trace = trace.duplicate()
+		best_stretches = stretches
 	sim.emit("game.run.lap", {"runId": run_id, "lap": lap, "lapMs": ms, "elapsedMs": elapsed_ms(),
-		"splits": splits.duplicate(), "isBest": is_best})
+		"splits": splits.duplicate(), "stretches": stretches, "isBest": is_best})
 	if pit_requested or (laps_max > 0 and lap >= laps_max):
 		return true
 	lap_start_tick = ticks
 	section_start_tick = ticks
 	splits = {}
 	trace = []
+	stretch_log = []
 	return false
 
 
@@ -746,6 +789,7 @@ func _finish(sim) -> void:
 	state = "finished"
 	var p := _summary()
 	p.erase("section")
+	p["stretches"] = best_stretches if looping else _stretch_times(stretch_log)
 	# On a loop the ghost is the best lap.
 	p["trace"] = {"runId": run_id, "hz": 10, "samples": best_trace if looping else trace}
 	sim.emit("game.run.finished", p)
@@ -757,6 +801,9 @@ func _fail(sim, reason: String) -> void:
 	fail_reason = reason
 	var p := _summary()
 	p["reason"] = reason
+	# The stretches done on this lap; the one it failed on is unfinished.
+	p["stretches"] = _stretch_times(stretch_log.slice(0, stretch_log.size() - 1))
+	p["stretch"] = seg["stretch"]
 	sim.emit("game.run.failed", p)
 
 

@@ -30,6 +30,9 @@ var grid_slot := {}             # runId -> front-row start lane it waits in, vis
 
 func _init(p_course, p_config: Dictionary, seed_: int) -> void:
 	course = p_course
+	# A broken course (e.g. a segment without a stretch) is never raced: add_run refuses.
+	for e in course.errors:
+		push_error("sim: course %s: %s" % [course.NAME, e])
 	config = p_config
 	rng.seed = seed_
 	weather = Weather.new(config.get("weather", {}), seed_ * 7 + 1)
@@ -42,6 +45,9 @@ func emit(type: String, payload: Dictionary) -> void:
 
 
 func add_run(run_id: String, player_id: String, build: Dictionary) -> Racer:
+	if not course.errors.is_empty():
+		push_error("sim: refusing run %s, course %s is broken: %s" % [run_id, course.NAME, "; ".join(course.errors)])
+		return null
 	var r := Racer.new()
 	r.setup(run_id, player_id, build, course, config, rng.randi())
 	by_run[run_id] = r

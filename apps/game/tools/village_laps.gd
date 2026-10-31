@@ -3,10 +3,12 @@ extends SceneTree
 ##   godot --headless --path apps/game --script res://tools/village_laps.gd [-- --laps=3 --builds=40]
 ## Prints lap times per route and weather, random-build fail rates and a crowd run, and exits 1
 ## when the loop is broken: a default build fails in calm weather, a run's laps or payloads are
-## inconsistent, or the crowd run jams.
+## inconsistent (stretch times that don't add up to the lap within a tick, contracts §2d), or the
+## crowd run jams. Countryside runs get the same stretch checks (_countryside).
 
 const VillageCourse = preload("res://sim/village_course.gd")
 const Course = preload("res://sim/course.gd")
+const Tuning = preload("res://sim/tuning.gd")
 const Sim = preload("res://sim/sim.gd")
 const Racer = preload("res://sim/racer.gd")
 const Builds = preload("res://sim/builds.gd")
@@ -35,6 +37,7 @@ func _init() -> void:
 	_routes()
 	_random(int(args.get("builds", "40")))
 	_crowd()
+	_countryside()
 	if fails.is_empty():
 		print("LAP CHECKS PASSED")
 		quit(0)
@@ -70,6 +73,7 @@ func run_group(builds: Array, weather: String, seed_: int, collisions: bool, lau
 		sim.step()
 		for m in sim.outbox:
 			var p: Dictionary = m["payload"]
+			_check_stretches("village", m["type"], p)
 			match m["type"]:
 				"game.run.lap":
 					lap_msgs[p["runId"]] = int(lap_msgs.get(p["runId"], 0)) + 1
@@ -158,3 +162,63 @@ func _crowd() -> void:
 		else:
 			reasons[r["reason"]] = int(reasons.get(r["reason"], 0)) + 1
 	print("finished %d/20, fails %s" % [done, JSON.stringify(reasons)])
+
+
+## Stretch payloads (contracts §2d): known ids of the track, the times of a lap (or a finished
+## point-to-point run) add up to it within a tick, a fail names its stretch, every event has one.
+func _check_stretches(track: String, type: String, p: Dictionary) -> void:
+	if type not in ["game.run.lap", "game.run.finished", "game.run.failed"]:
+		return
+	var known := {}
+	for st in Protocol.TRACK_STRETCHES[track]:
+		known[st["id"]] = true
+	var tag := "%s %s %s" % [track, type, p["runId"]]
+	if not p.has("stretches"):
+		fails.append("%s: no stretches" % tag)
+		return
+	var sum := 0
+	for st in p["stretches"]:
+		if not known.has(st["id"]):
+			fails.append("%s: unknown stretch %s" % [tag, st["id"]])
+		sum += int(st["ms"])
+	var whole := -1
+	if type == "game.run.lap":
+		whole = int(p["lapMs"])
+	elif type == "game.run.finished":
+		whole = int(p["bestLapMs"]) if p.has("bestLapMs") else int(p["elapsedMs"])
+	if whole >= 0 and absi(sum - whole) > int(ceil(1000.0 / Tuning.HZ)):
+		fails.append("%s: stretches add up to %d ms, the lap is %d ms" % [tag, sum, whole])
+	if type == "game.run.failed" and not known.has(p.get("stretch", "")):
+		fails.append("%s: fail without a known stretch (%s)" % [tag, p.get("stretch", "none")])
+	if type != "game.run.lap":
+		for e in p["events"]:
+			if not known.has(e.get("stretch", "")):
+				fails.append("%s: event %s without a known stretch" % [tag, e["kind"]])
+
+
+## The countryside (point to point) reports stretches the same way: random builds, all weathers.
+func _countryside() -> void:
+	var c := Course.new()
+	if not c.errors.is_empty():
+		fails.append("countryside course: %s" % "; ".join(c.errors))
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var n := 0
+	for i in 12:
+		var b := Builds.random_build(rng)
+		for wname in WEATHERS:
+			var w: Array = WEATHERS[wname]
+			var sim := Sim.new(c, cfg, 300 + i)
+			sim.weather.force(w[0], w[1], 45.0)
+			sim.add_run("c%d" % i, "p0", b)
+			for t in 60 * 120:
+				sim.step()
+				for m in sim.outbox:
+					_check_stretches("countryside", m["type"], m["payload"])
+					if m["type"] in ["game.run.finished", "game.run.failed"]:
+						n += 1
+				sim.outbox.clear()
+				if sim.active_count() == 0:
+					break
+	print("== Countryside stretches: %d runs checked ==" % n)
