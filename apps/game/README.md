@@ -28,19 +28,23 @@ Game flags (after `--`):
 | `--duration=SEC` | Quit after SEC wall seconds and print a summary |
 | `--log=none\|summary\|full` | What outgoing messages to print |
 | `--screenshot=PATH [--shot-at=SEC] [--cam=follow\|wide\|forks]` | Save a screenshot (windowed only) |
+| `--cam-cycle=SEC` | Switch the followed racer every SEC seconds, 0 = never (default: the options menu's pick, else 8) |
+| `--inset=face\|side\|off` | Second camera, picture in picture (default: the options menu's pick, else face) |
 
 Keys:
 
 | Key | Action |
 |---|---|
 | C | Camera mode (follow / wide / forks) |
-| Tab | Next racer |
+| Tab / Shift+Tab | Follow the next / previous racer (the automatic switching carries on from there) |
+| A | Automatic racer switching off (stay on this racer) / on |
+| V | Second camera: face / side / off |
 | F | Fork shot |
 | B | Boost the followed racer |
 | R / W | Advance the rain / wind phase |
 | K | Toggle forced calm |
 | H | Hide the overlay |
-| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, sound, language, track, quit |
+| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, camera, sound, language, track, quit |
 | Ctrl+Cmd+F, or F11 | Toggle fullscreen (on a Mac keyboard F11 may need fn) |
 | Cmd+Q, or closing the window | Quit (prints the run summary) |
 
@@ -56,6 +60,8 @@ join and quit). It does not pause the race.
   language, checked by `bun test`). Server mode sends `game.config.set {language}`, also after
   every `welcome` when the server says otherwise, and every phone follows via `config.updated`.
   A missing key shows as `⚠ de:key` on screen and in the log, never as English.
+- **Camera** (saved in `user://settings.cfg`): **Switch racer every** Never / 5 / 8 / 10 / 15 s
+  (default 8) and **Second camera** Face / Side / Off. See **Camera director** below.
 - **Graphics** (`--quality=low|medium|high`, saved in `user://settings.cfg`, default Medium):
   caps the 3D resolution (Low 720p, Medium 1080p, High native; MetalFX upscaling on Metal, FSR
   elsewhere) and scales shadows, SSAO, glow and vegetation range. On a 5K Retina screen in
@@ -95,7 +101,10 @@ Sweep flags:
   - `landscape.gd`, `terrain_shape.gd`, `viewpoints.gd`, `mesh_batch.gd`: data and helpers the bake uses.
   - `racer_view.gd`: placeholder racers (mock mode).
   - `weather_fx.gd`: rain, wind and storm visuals, plus the global shader parameters `road_wetness`, `wind_strength` and `wind_dir`.
-  - `camera_rig.gd`: simple follow, wide and fork cameras. Fork shots come from `viewpoints.gd`.
+  - `camera_rig.gd`: follow, wide and fork cameras. Fork shots come from `viewpoints.gd`.
+  - `camera_director.gd`: which racer the camera follows, and when it switches (see below).
+- `ui/camera_hud.gd`: the on-camera name, the name pop after a cut, and the picture-in-picture second camera.
+- `tools/camera_check.gd`: headless test of the camera director, exit 1 on failure: `godot --headless --path . --script res://tools/camera_check.gd`.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
@@ -178,9 +187,30 @@ Route lengths: jump 67.8 m / around 75.6 m, water 100.0 m / bridge 130.0 m, expo
 - **Pond:** water loses at water 0–1 (+0.6–1.4 s calm), is about even at 2 and wins from 3 upward (−1.7 to −2.8 s calm). It wins at every level in rain and storm.
 - **Crossing:** the exposed route is about 1.4–2.3 s faster in calm. In wind, sheltered wins at stability 0 (+1.0 s) and it is roughly even at 1–3.
 
+## Camera director
+
+With two or more racers on the course the follow camera takes turns: every 8 s (options menu,
+`--cam-cycle`) it cuts to the racer who has been off camera the longest, and a new racer counts
+from its start, so everyone gets a moment. It never cuts mid-jump (it waits up to 2 s for the
+landing), never cuts to a racer about to finish, and cuts at once when the followed racer leaves
+the course. A cut to a racer more than 35 m away jumps there; a closer one swoops.
+
+- **By hand:** Tab / Shift+Tab cut to the next / previous racer in start order. A stops the
+  switching (the name tag says STAYING) and starts it again.
+- **From the phone:** during a run, **Show me on the big screen** sends `phone.watch`; the game
+  gets `run.watch` and queues that racer. Queued racers get the next cuts in order, each once the
+  shot before it is 3 s old, so many phones tapping at once can't make the camera flicker. On
+  every cut the game sends `game.camera`, and the racer's phone lights up with "You're on the big
+  screen!" (`camera.updated`). The overlay logs each request as SHOW.
+- **On screen:** bottom left the racer on camera with a bar that runs down to the next switch;
+  their name big at the top for 2 s after each cut ("wants to be on the big screen!" when their
+  phone asked); bottom right the second camera, looking back at the racer's face or at its side.
+  The inset is a second view of the same world (about the cost of a 576×340 render), off when set
+  to Off. Racer name tags are on render layer 20, which the inset leaves out.
+
 ## Known issues and deviations
 
-- Racers are placeholder shapes. The racer kit (3d) and the HUD and camera director (3c) are separate sub-streams.
+- Racers are placeholder shapes in mock mode. The HUD (session clock, leaderboard, paddock, mini-map) is still to come; the camera HUD's inset sits where game.md puts the mini-map, so they will need to share that corner.
 - `splitMs` is the time spent in each section.
 - Wind direction is `(cos dirDeg, 0, sin dirDeg)` in world XZ.
 - Crowded storms fail often: about 30% in the sweep. In mock mode the fail rate is about 13% in calm and about 25% in rain, mostly `off_track` in bends from collisions and daring slips.

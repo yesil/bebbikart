@@ -30,7 +30,7 @@ Plain JavaScript. UI with [Preact](https://preactjs.com) + [htm](https://github.
    - **Style.** Three-way toggle: 🐢 Careful · 🙂 Balanced · 🔥 Daring.
    - Weather strip: current weather plus "Rain coming in 5…" warnings, and a **track traffic** indicator ("3 racers on the track") so kids can choose to wait for a quiet moment.
    - A huge **Go!** button. Disabled with a reason when not allowed (cooldown countdown, "Your racer is still on the track").
-4. **Run.** Big **Boost!** button with 3 charges (dims when used up), haptic tap on Android. Live timer, a progress bar with four section ticks, and "+0.8 / −1.2 vs best" after each section line. A "Watch the big screen!" hint.
+4. **Run.** Big **Boost!** button with 3 charges (dims when used up), haptic tap on Android. Live timer, a progress bar with four section ticks, and "+0.8 / −1.2 vs best" after each section line. A **"📺 Show me on the big screen"** button (`phone.watch`): the big screen's camera cuts to this racer soon, the button says "Coming up on the big screen…" until then, and glows green with "You're on the big screen!" (and a short buzz) while the camera is on them (`camera.updated`).
 5. **Result.** The avatar reacts: `avatar_excited` for a new best, `avatar_happy` for a finish, `avatar_sad` for a fail. Time, or "Oops!" plus the reason. 🎉 if it's a new personal best. Rank. **Section table**: four rows with time vs best, coloured green or red. **Coach tip** card that highlights the suggested change (e.g. pulses the Grip row). Buttons: "Change & try again" (back to Garage), "Go again" (same build).
 6. **Leaderboard** (tab): top 20 with avatars, your row highlighted. **History** (tab): last 10 runs with splits.
 
