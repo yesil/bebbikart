@@ -51,6 +51,8 @@ var rig_squash := 1.0
 var _ride: Node3D
 var _sway: Node3D = null
 var _sway_p := Vector3.ZERO       # pivot (Ride space): axle height, middle of the ride
+var _axle_front := 0.0            # z of the front / rear axles (Ride space): a wheelie turns on the
+var _axle_back := 0.0             # rear one, a dive on the front one
 var _head: Node3D = null          # RideHead of animals and birds
 var _head_rest := Transform3D.IDENTITY
 var _jelly: Node3D = null
@@ -189,9 +191,16 @@ func _setup_sway(body: Node3D) -> void:
 		_sway.add_child(c)
 		c.transform = xf
 	var axle := 0.18
+	_axle_front = INF
+	_axle_back = -INF
 	for w in r._anim["wheel_spin"]:
-		axle = (w as Node3D).get_parent().position.y
-		break
+		var at: Vector3 = (w as Node3D).get_parent().position
+		axle = at.y
+		_axle_front = minf(_axle_front, at.z)
+		_axle_back = maxf(_axle_back, at.z)
+	if _axle_front == INF:
+		_axle_front = -0.4  # legs instead of wheels: the spec drew it so
+		_axle_back = 0.4
 	_sway_p = Vector3(0, axle, body.position.z)
 
 
@@ -394,7 +403,7 @@ func update(dt: float) -> void:
 	var roll_t := clampf(_turn_s * r.speed * gain, -0.32, 0.32)
 	_roll_v += (90.0 * (roll_t - _roll_s) - 2.0 * 0.3 * 9.5 * _roll_v) * sdt
 	_roll_s += _roll_v * sdt
-	var pitch_t := clampf(_a_long * 0.006, -0.07, 0.08) - 0.06 * _crouch_s + 0.16 * go
+	var pitch_t := clampf(_a_long * 0.006, -0.07, 0.08) - 0.06 * _crouch_s + 0.12 * go
 	_pitch_v += (70.0 * (pitch_t - _pitch_s) - 2.0 * 0.35 * 8.4 * _pitch_v) * sdt
 	_pitch_s += _pitch_v * sdt
 
@@ -402,7 +411,8 @@ func update(dt: float) -> void:
 		var rev := sin(_t * 38.0) * 0.012 * _fidget_t / FIDGET_S
 		var s := _sq + rev
 		var b := Basis.from_euler(Vector3(_pitch_s, 0.0, _roll_s)).scaled(Vector3(1.0 - 0.5 * s, 1.0 + s, 1.0 - 0.5 * s))
-		var sway := Transform3D(b, _sway_p - b * _sway_p)
+		var piv := Vector3(_sway_p.x, _sway_p.y, _axle_back if _pitch_s > 0.0 else _axle_front)
+		var sway := Transform3D(b, piv - b * piv)
 		_sway.transform = sway
 		var rx := _ride.transform
 		carry = rx * sway * rx.affine_inverse()
@@ -466,6 +476,7 @@ func _boat(rear: float, moving: float) -> void:
 	if r.in_water:
 		rock *= 1.4
 	roll = sin(_t * 1.6) * rock + sin(_t * 2.7 + 1.3) * rock * 0.4 + _roll_s
+	roll += 0.09 * rear * sin((REAR_S - _rear_t) * 6.0)  # a happy rock side to side at the finish
 	pitch = sin(_t * 1.2 + 0.7) * 0.03 + 0.05 * moving - 0.12 * _rock_k * sin(_rock_k * PI) + _pitch_s * 0.5
 	lift = (0.5 + 0.5 * sin(_t * 2.2)) * (0.03 + 0.05 * rear)
 

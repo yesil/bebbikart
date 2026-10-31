@@ -195,22 +195,29 @@ func wave() -> void:
 	gestures.play(Gestures.G.WAVE)
 
 
-## Crossed the line: the personality's finish gesture, then a wave at the camera; the ride rears
-## up, flaps or bounces.
+## Crossed the line: the personality's signature gesture (a cheer, a proud salute, a silly spin,
+## a sneaky peek ... RacerGestures.STYLE), then a wave at the camera; the ride rears up, flaps or
+## bounces.
 func finish() -> void:
 	ride.finish()
-	match gestures.win_pose:
-		Gestures.G.CHEER:
-			celebrate(2)
-		_:
-			gestures.play(gestures.win_pose, 0, 1.0)
-			gestures.pant(3.5)
-	gestures.play(Gestures.G.WAVE, 1, 1.2, 0.9)
+	var sig := gestures.sig_pose
+	if sig == Gestures.G.CHEER:
+		celebrate(2)
+	else:
+		gestures.play(sig, 0, 1.25)
+		gestures.pant(3.5)
+	gestures.play(Gestures.G.WAVE, 1, 1.0, 1.25)
 	gestures.look_at_camera(2.2)
 
 
+## The signature gesture on its own (start grid, viewer).
+func signature() -> void:
+	gestures.play(gestures.sig_pose)
+
+
 ## A gesture by name (RacerGestures.NAMES): wave, cheer, fist_pump, glance_back, slump, dizzy,
-## brace, wheee, tuck, flail, surprised, head_shake, rain, hat_hold. side: -1 left, 1 right arm.
+## brace, wheee, tuck, flail, surprised, head_shake, rain, hat_hold, ready, tap, scratch, stretch,
+## salute, clap, bow, spin, peek, twirl, jive, taunt, whoop, flinch. side: -1 left, 1 right arm.
 func gesture(gesture_name: String, side := 0) -> void:
 	gestures.play_named(gesture_name, side)
 
@@ -412,6 +419,9 @@ func _auto_mood() -> String:
 		return "cheering"
 	if _sad_t > 0.0:
 		return "sad"
+	var mem := gestures.base_mood()  # grumpy after being passed again and again, cocky after passing
+	if mem != "":
+		return mem
 	if boost or airborne:
 		return "excited"
 	if speed > 12.0:

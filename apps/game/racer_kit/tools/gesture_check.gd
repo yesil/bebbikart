@@ -9,6 +9,7 @@ extends SceneTree
 ##     not back at rest once it is over
 ##   - hands not back at rest (on the handle, or hanging) once the gesture is over
 ##   - the head turned past RacerGestures' limits
+##   - an elbow or forearm deep inside the head or body (ARM_FAIL; ARM_BURY counts the shallow ones)
 ##   - any part of the racer below the ground
 ##   - snap_pose() not giving back the exact built pose
 ##   - both layers together costing more than MAX_US per racer per frame (busiest state, mean)
@@ -25,10 +26,19 @@ const GROUND_TOL := 0.02
 const MAX_US := 50.0
 const EVENTS := ["wave", "cheer", "fist_pump", "glance_back", "slump", "dizzy", "brace", "surprised",
 	"head_shake", "flail", "wheee", "tuck", "rain", "hat_hold",
+	"ready", "tap", "scratch", "stretch", "salute", "clap", "bow", "spin", "peek", "twirl", "jive",
+	"taunt", "whoop", "flinch",
 	"state:rain", "state:wind", "state:air", "state:slip", "state:water", "state:boost",
-	"bump", "land", "fail", "celebrate", "finish", "look", "drive"]
+	"bump", "land", "fail", "celebrate", "finish", "look", "drive", "grid", "signature"]
+## Arm points (elbow, mid upper arm, forearm) deeper than this inside the head or body (0 at the
+## surface, 1 at the centre) count as an arm through them.
+const ARM_BURY := 0.12
+const ARM_FAIL := 0.3        # this deep fails the check
 
 var failures := 0
+var arm_events := 0
+var arm_buried := 0
+var verbose_arms := "--arms" in OS.get_cmdline_user_args()
 var total_us := 0.0
 var total_frames := 0
 var worst_us := 0.0
@@ -55,6 +65,7 @@ func _run() -> void:
 	print("%d racers x %d events, %d failures, gesture + ride layers %.1f us/racer/frame (worst %s %.1f us), %.1f s" % [
 		files.size(), EVENTS.size(), failures, total_us / maxi(1, total_frames), worst_name, worst_us,
 		(Time.get_ticks_msec() - t0) / 1000.0])
+	print("arms through the head or body (deeper than %.2f): %d of %d racer events" % [ARM_BURY, arm_buried, arm_events])
 	quit(1 if failures > 0 else 0)
 
 
@@ -107,6 +118,7 @@ func _check(path: String) -> void:
 				_fire(r, ev, false)  # held states end
 			r._process(DT)
 			_ride_extremes(r, ext)
+			_arm_bury(r, ext)
 			var why := _frame_problem(r, i % 15 == 0)
 			if why != "":
 				_fail(who, ev, "t=%.2f s: %s" % [i * DT, why])
@@ -134,7 +146,7 @@ func _check(path: String) -> void:
 
 
 func _fire(r: ToyRacer, ev: String, on: bool) -> void:
-	if ev.begins_with("state:") or ev == "drive":
+	if ev.begins_with("state:") or ev == "drive" or ev == "grid":
 		match ev:
 			"state:rain": r.rain = 1.0 if on else 0.0
 			"state:wind": r.wind = Vector3(0.7, 0.0, -0.5) if on else Vector3.ZERO
@@ -147,6 +159,13 @@ func _fire(r: ToyRacer, ev: String, on: bool) -> void:
 			"state:boost":
 				r.boost = on
 				r.speed = 18.0 if on else 0.0
+			"grid":
+				# Waiting on the grid: crouch as the lights count down, then green.
+				r.gestures.hold(Gestures.G.READY, on)
+				r.ride.crouch(1.0 if on else 0.0)
+				if not on:
+					r.gestures.play(Gestures.G.WHOOP)
+					r.ride.go()
 			"drive":
 				r.speed = 15.0 if on else 0.0
 				r.turn = 0.9 if on else 0.0
@@ -161,6 +180,7 @@ func _fire(r: ToyRacer, ev: String, on: bool) -> void:
 		"fail": r.fail()
 		"celebrate": r.celebrate(3)
 		"finish": r.finish()
+		"signature": r.signature()
 		"look": r.look_at_point(r.global_position + Vector3(-3.0, 1.5, 2.0), 2.0)
 		_: r.gesture(ev)
 
@@ -172,6 +192,7 @@ func _nodes(r: ToyRacer) -> Array:
 	out.append_array(g._elbow)
 	out.append_array(g._hand)
 	out.append_array(g._sw_node)
+	out.append_array(g._palm)
 	out.append_array(r.ride.nodes())
 	return out
 
@@ -282,7 +303,35 @@ func _ride_expect(r: ToyRacer, ev: String) -> Array:
 	return out
 
 
+## Deepest an elbow, upper arm or forearm went into the head (padded as the layer pads it, less
+## the arm's own thickness) or an elbow / forearm into the body, while a gesture moved the arm.
+func _arm_bury(r: ToyRacer, e: Dictionary) -> void:
+	var g: Gestures = r.gestures
+	if g.is_idle():
+		return
+	var ci := r.character.global_transform.affine_inverse()
+	var hr: Vector3 = g._head_r - Vector3.ONE * 0.04
+	for i in 2:
+		var s: Vector3 = g._shoulder[i]
+		var el: Vector3 = ci * g._elbow[i].global_position
+		var ha: Vector3 = ci * g._hand[i].global_position
+		var d := 0.0
+		for p in [s.lerp(el, 0.6), el, el.lerp(ha, 0.5), el.lerp(ha, 0.75)]:
+			d = maxf(d, Gestures._buried(p, g._head_c_now, hr))
+		for p in [el, el.lerp(ha, 0.4)]:
+			d = maxf(d, Gestures._buried(p, g._body_c, g._body_r - Vector3.ONE * 0.04))
+		_mx(e, "arm_bury", d)
+
+
 func _ride_problem(r: ToyRacer, ev: String, ext: Dictionary) -> String:
+	arm_events += 1
+	var bury := float(ext.get("arm_bury", 0.0))
+	if bury > ARM_BURY:
+		arm_buried += 1
+		if verbose_arms:
+			print("arm   %-44s %-12s %.2f" % [r.spec.get("title", "?"), ev, bury])
+	if bury > ARM_FAIL:
+		return "arm through the head or body: %.2f deep (limit %.2f)" % [bury, ARM_FAIL]
 	for x in _ride_expect(r, ev):
 		var got := float(ext.get(x[0], -INF))
 		if got < float(x[1]):

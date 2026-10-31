@@ -14,29 +14,48 @@ extends RefCounted
 ## head extras and the hat swing in head space, a cape in Character space. update() does not
 ## allocate.
 
-## Gestures in arm priority order: a later one overrides an earlier one's arm pose.
-enum G { RAIN, HAT, TUCK, WHEEE, BRACE, WAVE, FIST_PUMP, CHEER, SURPRISED, FLAIL, DIZZY, SLUMP, GLANCE_BACK, HEAD_SHAKE }
-const COUNT := 14
+## Gestures in arm priority order: a later one overrides an earlier one's arm pose. After the
+## driving reactions: the start grid (READY lean on 3-2-1, fidgets), one signature per motion style
+## (SALUTE … JIVE, see STYLE), the social ones (TAUNT a rival, WHOOP on green, FLINCH at a crash).
+enum G { RAIN, HAT, TUCK, WHEEE, BRACE, WAVE, FIST_PUMP, CHEER, SURPRISED, FLAIL, DIZZY, SLUMP, GLANCE_BACK, HEAD_SHAKE,
+	READY, TAP, SCRATCH, STRETCH, SALUTE, CLAP, BOW, SPIN, PEEK, TWIRL, JIVE, TAUNT, WHOOP, FLINCH }
+const COUNT := 28
 const NAMES := {
 	"rain": G.RAIN, "hat_hold": G.HAT, "tuck": G.TUCK, "wheee": G.WHEEE, "brace": G.BRACE,
 	"wave": G.WAVE, "fist_pump": G.FIST_PUMP, "cheer": G.CHEER, "surprised": G.SURPRISED,
 	"flail": G.FLAIL, "dizzy": G.DIZZY, "slump": G.SLUMP, "glance_back": G.GLANCE_BACK,
-	"head_shake": G.HEAD_SHAKE,
+	"head_shake": G.HEAD_SHAKE, "ready": G.READY, "tap": G.TAP, "scratch": G.SCRATCH, "stretch": G.STRETCH,
+	"salute": G.SALUTE, "clap": G.CLAP, "bow": G.BOW, "spin": G.SPIN, "peek": G.PEEK, "twirl": G.TWIRL,
+	"jive": G.JIVE, "taunt": G.TAUNT, "whoop": G.WHOOP, "flinch": G.FLINCH,
 }
 # Per gesture (index = G): arms used (0 none, 3 both, 4 one: the side passed to play()), the
 # default side (-1 left, 1 right), blend in / out (s), one-shot length (s), longest reach as a
-# multiple of the arm (rubber arms for the head), and the face mood while it plays.
-const ARMS := [4, 4, 3, 3, 3, 4, 4, 3, 3, 3, 3, 3, 0, 0]
-const SIDE := [-1, -1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0]
-const BLEND_IN := [0.45, 0.4, 0.18, 0.16, 0.06, 0.2, 0.1, 0.15, 0.07, 0.1, 0.1, 0.3, 0.15, 0.06]
-const BLEND_OUT := [0.55, 0.5, 0.3, 0.35, 0.25, 0.4, 0.3, 0.4, 0.45, 0.35, 0.5, 0.6, 0.35, 0.2]
-const LENGTH := [3.0, 3.0, 1.2, 1.2, 0.35, 1.6, 0.9, 1.4, 0.9, 1.0, 1.1, 1.6, 0.9, 0.75]
-const REACH := [1.35, 1.35, 1.0, 1.05, 1.0, 1.0, 1.05, 1.05, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# multiple of the arm (rubber arms for the head), the face mood while it plays, and the hand
+# (0 as built, 1 an open flat palm, 2 a round fist).
+const ARMS := [4, 4, 3, 3, 3, 4, 4, 3, 3, 3, 3, 3, 0, 0,
+	0, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 4, 3, 3]
+const SIDE := [-1, -1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0,
+	0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0]
+const BLEND_IN := [0.45, 0.4, 0.18, 0.16, 0.06, 0.2, 0.1, 0.15, 0.07, 0.1, 0.1, 0.3, 0.15, 0.06,
+	0.35, 0.2, 0.3, 0.5, 0.12, 0.15, 0.25, 0.08, 0.2, 0.35, 0.1, 0.15, 0.1, 0.05]
+const BLEND_OUT := [0.55, 0.5, 0.3, 0.35, 0.25, 0.4, 0.3, 0.4, 0.45, 0.35, 0.5, 0.6, 0.35, 0.2,
+	0.2, 0.3, 0.35, 0.5, 0.3, 0.35, 0.4, 0.25, 0.35, 0.45, 0.3, 0.35, 0.45, 0.45]
+const LENGTH := [3.0, 3.0, 1.2, 1.2, 0.35, 1.6, 0.9, 1.4, 0.9, 1.0, 1.1, 1.6, 0.9, 0.75,
+	3.0, 1.2, 1.4, 1.6, 1.3, 1.3, 1.4, 1.0, 1.6, 1.8, 1.2, 1.2, 1.0, 0.8]
+const REACH := [1.35, 1.35, 1.0, 1.05, 1.0, 1.0, 1.05, 1.05, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+	1.0, 1.0, 1.35, 1.05, 1.35, 1.2, 1.1, 1.0, 1.35, 1.05, 1.05, 1.35, 1.05, 1.25]
 const MOOD := ["determined", "determined", "determined", "excited", "determined", "happy", "excited",
-	"cheering", "excited", "dizzy", "dizzy", "sad", "", ""]
+	"cheering", "excited", "dizzy", "dizzy", "sad", "", "",
+	"determined", "", "", "happy", "happy", "cheering", "happy", "excited", "determined", "happy", "excited",
+	"excited", "cheering", "excited"]
+const HAND := [1, 1, 0, 1, 0, 1, 2, 1, 1, 1, 0, 0, 0, 0,
+	0, 0, 0, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1]
 ## How much each gesture is a reaction worth watching (reaction_weight(); the big-screen camera
-## holds on it): 0 for weather holds, jump poses and the brace.
-const REACT := [0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.8, 1.0, 0.6, 0.5, 0.8, 1.0, 0.5, 0.4]
+## holds on it): 0 for weather holds, jump poses, the brace and the lean before the start.
+const REACT := [0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.8, 1.0, 0.6, 0.5, 0.8, 1.0, 0.5, 0.4,
+	0.0, 0.1, 0.3, 0.3, 0.9, 0.9, 0.8, 1.0, 0.8, 0.8, 0.9, 0.8, 0.9, 0.7]
+const OPEN_HAND := Vector3(1.15, 1.4, 0.5)   # palm scale: long along the forearm, thin across
+const FIST := Vector3(1.2, 1.12, 1.2)
 
 ## Head limits (rad), also checked by tools/gesture_check.gd.
 const YAW_MAX := 1.35
@@ -45,17 +64,18 @@ const PITCH_MAX := 0.5
 const ROLL_MAX := 0.45
 
 ## Personality from motion.style: look speed (rad/s spring), hold between glances (s), lean
-## damping (low = more overshoot), pose on ramp jumps, at the finish and when passing someone.
+## damping (low = more overshoot), pose on ramp jumps, when passing someone, and the signature
+## gesture at the finish and on the start grid (proud salute, silly spin, sneaky peek ...).
 ## "" = spec without motion (the pose on jumps then follows bounciness).
 const STYLE := {
-	"": {"look": 14.0, "hold": [0.7, 2.0], "zeta": 0.45, "air": -1, "win": G.CHEER, "pass": G.FIST_PUMP},
-	"bouncy": {"look": 18.0, "hold": [0.5, 1.4], "zeta": 0.32, "air": G.WHEEE, "win": G.CHEER, "pass": G.FIST_PUMP},
-	"smooth": {"look": 8.0, "hold": [1.4, 3.0], "zeta": 0.75, "air": G.TUCK, "win": G.WAVE, "pass": G.WAVE},
-	"wobbly": {"look": 12.0, "hold": [0.6, 1.6], "zeta": 0.22, "air": G.WHEEE, "win": G.CHEER, "pass": G.WAVE},
-	"jittery": {"look": 26.0, "hold": [0.25, 0.8], "zeta": 0.4, "air": G.WHEEE, "win": G.CHEER, "pass": G.FIST_PUMP},
-	"floaty": {"look": 9.0, "hold": [1.0, 2.4], "zeta": 0.4, "air": G.WHEEE, "win": G.WAVE, "pass": G.WAVE},
-	"proud": {"look": 10.0, "hold": [1.2, 2.6], "zeta": 0.6, "air": G.TUCK, "win": G.WAVE, "pass": G.FIST_PUMP},
-	"sneaky": {"look": 20.0, "hold": [0.4, 1.0], "zeta": 0.5, "air": G.TUCK, "win": G.FIST_PUMP, "pass": G.GLANCE_BACK},
+	"": {"look": 14.0, "hold": [0.7, 2.0], "zeta": 0.45, "air": -1, "pass": G.FIST_PUMP, "sig": G.CHEER},
+	"bouncy": {"look": 18.0, "hold": [0.5, 1.4], "zeta": 0.32, "air": G.WHEEE, "pass": G.FIST_PUMP, "sig": G.CLAP},
+	"smooth": {"look": 8.0, "hold": [1.4, 3.0], "zeta": 0.75, "air": G.TUCK, "pass": G.WAVE, "sig": G.BOW},
+	"wobbly": {"look": 12.0, "hold": [0.6, 1.6], "zeta": 0.22, "air": G.WHEEE, "pass": G.WAVE, "sig": G.SPIN},
+	"jittery": {"look": 26.0, "hold": [0.25, 0.8], "zeta": 0.4, "air": G.WHEEE, "pass": G.FIST_PUMP, "sig": G.JIVE},
+	"floaty": {"look": 9.0, "hold": [1.0, 2.4], "zeta": 0.4, "air": G.WHEEE, "pass": G.WAVE, "sig": G.TWIRL},
+	"proud": {"look": 10.0, "hold": [1.2, 2.6], "zeta": 0.6, "air": G.TUCK, "pass": G.FIST_PUMP, "sig": G.SALUTE},
+	"sneaky": {"look": 20.0, "hold": [0.4, 1.0], "zeta": 0.5, "air": G.TUCK, "pass": G.GLANCE_BACK, "sig": G.PEEK},
 }
 ## How far a hat wobbles on the head (spring gain, max rad); helmets sit tight.
 const HAT_WOBBLE := {"wizard": [0.55, 0.14], "party": [0.4, 0.1], "tophat": [0.3, 0.08], "crown": [0.25, 0.06],
@@ -66,6 +86,8 @@ const POLE_GRIP := Vector3(1.0, -0.6, 0.5)
 const POLE_UP := Vector3(1.0, -0.5, 0.35)
 const POLE_LAP := Vector3(0.8, -0.1, 0.7)
 const POLE_HEAD := Vector3(1.0, -0.1, 0.1)
+## Turns (rad) of the elbow round the shoulder -> hand line tried to keep the arm out of the head.
+const ELBOW_TRIES := [0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.1, -2.1, PI]
 
 const GRAVITY := Vector3(0.0, -9.8, 0.0)
 const WIND_ACC := 9.0      # m/s² of push per unit of sim wind strength
@@ -98,8 +120,11 @@ var hold_min := 0.7
 var hold_max := 2.0
 var lean_zeta := 0.45
 var air_pose: int = G.WHEEE
-var win_pose: int = G.CHEER
 var pass_pose: int = G.FIST_PUMP
+var sig_pose: int = G.CHEER     # signature gesture (STYLE.sig): finish line and start grid
+## -1 grumpy (passed again and again) … +1 cocky (a streak of passes), fading back over ~20 s
+## (remember()). Biases the resting face and which gesture a pass or a rival gets.
+var mood_mem := 0.0
 
 # Gesture state, index = G
 var _w := PackedFloat32Array()      # weight 0..1
@@ -141,6 +166,16 @@ var _p_rain := PackedVector3Array()
 var _p_hat := PackedVector3Array()
 var _p_brace := PackedVector3Array()
 var _p_tuck := PackedVector3Array()
+var _p_scratch := PackedVector3Array()   # top side of the head
+var _p_salute := PackedVector3Array()    # the brow
+var _p_nose := PackedVector3Array()      # thumb on the nose (taunt)
+var _p_eyes := PackedVector3Array()      # binoculars (peek)
+var _p_flinch := PackedVector3Array()    # in front of the chin
+var _p_clap := PackedVector3Array()      # hands together in front of the chest
+var _p_chest := PackedVector3Array()     # hand on the heart (bow)
+var _palm: Array[MeshInstance3D] = []    # the hand ball: flattened into a palm, rounded into a fist
+var _palm_rest: Array[Transform3D] = []
+var _palm_shaped := PackedByteArray()
 var _head_c_hp := Vector3.ZERO   # head centre, HeadPivot space
 var _head_r := Vector3.ONE       # head radii + hair + hand
 var _head_c_now := Vector3.ZERO  # head centre this frame, Character space
@@ -235,8 +270,8 @@ func setup(racer: ToyRacer) -> bool:
 	hold_max = sty.hold[1]
 	lean_zeta = sty.zeta
 	air_pose = sty.air if sty.air >= 0 else (G.WHEEE if r.bounciness > 1.05 else G.TUCK)
-	win_pose = sty.win
 	pass_pose = sty.pass
+	sig_pose = sty.sig
 	amp = clampf(r.bounciness, 0.6, 1.6)
 	_w.resize(COUNT)
 	_left.resize(COUNT)
@@ -318,6 +353,16 @@ func _setup_arms(title: String) -> bool:
 		_elbow.append(elbow)
 		_upper_mi.append(cap)
 		_lower_mi.append(low)
+		var ball: MeshInstance3D = null
+		for c in hand.get_children():
+			if c is MeshInstance3D:
+				ball = c
+				break
+		if ball == null:
+			return _fail("%s: %s/Hand has no mesh" % [title, arm.name])
+		_palm.append(ball)
+		_palm_rest.append(ball.transform)
+		_palm_shaped.append(0)
 	# Hands far in front of the shoulders hold a handle (the builder puts free hands just below
 	# and beside the shoulder).
 	grip = (_hand_rest[0] - _shoulder[0]).z < -0.12 and (_hand_rest[1] - _shoulder[1]).z < -0.12
@@ -356,12 +401,12 @@ func _setup_poses(body_box: AABB) -> void:
 		_p_out.append(_reach(i, S + Vector3(s * 1.0, 0.5, -0.4).normalized() * L * 0.95, 1.0, true))
 		# Rain: a hand shields the forehead (kid-drawing arms rarely reach over a big head).
 		var brow := hc + Vector3(s * _head_r.x * 0.3, _head_r.y * 0.45, -_head_r.z)
-		_p_rain.append(_reach(i, _push_out(brow, hc, _head_r), 1.35, false))
+		_p_rain.append(_touch(i, brow, 1.35))
 		if hat:
 			# Wind: the hand holds the hat down by the front of its brim.
 			var brim := Vector3(hat_box.get_center().x + s * hat_box.size.x * 0.25, hat_box.position.y + 0.02,
 				hat_box.get_center().z - hat_box.size.z * 0.45)
-			_p_hat.append(_reach(i, _push_out(brim, hc, _head_r), 1.35, false))
+			_p_hat.append(_touch(i, brim, 1.35))
 		else:
 			_p_hat.append(_p_rain[i])
 		if grip:
@@ -370,6 +415,15 @@ func _setup_poses(body_box: AABB) -> void:
 			_p_lap.append(_reach(i, S + Vector3(s * 0.04, -L, 0.03), 1.0, false))
 		_p_brace.append(_reach(i, S + Vector3(s * 0.2, -0.1, -0.85).normalized() * L * 0.9, 1.0, false))
 		_p_tuck.append(_reach(i, S + Vector3(s * 0.05, -0.7, -0.6).normalized() * L * 0.75, 1.0, false))
+		var hr := _head_r
+		_p_scratch.append(_touch(i, hc + Vector3(s * hr.x * 0.55, hr.y * 0.7, 0.0), 1.35))
+		_p_salute.append(_touch(i, hc + Vector3(s * hr.x * 0.5, hr.y * 0.35, -hr.z * 0.9), 1.35))
+		_p_nose.append(_touch(i, hc + Vector3(s * 0.02, -hr.y * 0.1, -hr.z * 1.1), 1.35))
+		_p_eyes.append(_touch(i, hc + Vector3(s * hr.x * 0.3, hr.y * 0.08, -hr.z * 1.05), 1.35))
+		_p_flinch.append(_touch(i, hc + Vector3(s * hr.x * 0.45, -hr.y * 0.55, -hr.z * 1.15), 1.25))
+		_p_clap.append(_touch(i, hc + Vector3(s * 0.03, -hr.y * 0.8, -hr.z * 1.25), 1.2))
+		# Hand on the heart, held a little off the chest so the forearm stays out of the body.
+		_p_chest.append(_reach(i, _push_out(_body_c + Vector3(-s * 0.02, _body_r.y * 0.35, -_body_r.z * 1.35), _body_c, _body_r * 1.2), 1.1, false))
 	var hat_type := str(r.spec.get("character", {}).get("hat", {}).get("type", ""))
 	_hat_ok = hat != null and hat_type != "helmet"
 
@@ -398,6 +452,43 @@ func _reach(i: int, want: Vector3, kmax: float, clear: bool) -> Vector3:
 				break
 			dir = (dir + Vector3(s * 0.12, 0.02, 0.0)).normalized()
 	return S + dir * dist
+
+
+## A spot on the (padded) head for a hand: `want` if the arm reaches it with the straight line
+## from the shoulder clear of the head, else the nearest such spot (kid-drawing arms are short
+## next to big heads: a hand on the top of the head would pull the arm through the face). With
+## no clear spot at all, the old reach toward `want`.
+func _touch(i: int, want: Vector3, kmax: float) -> Vector3:
+	var S := _shoulder[i]
+	var L := _len[i] * kmax
+	var hc := _head_rest * _head_c_hp
+	var w := _push_out(want, hc, _head_r)
+	if _touch_ok(S, w, L, hc):
+		return w
+	var s := -1.0 if i == 0 else 1.0
+	var best := Vector3.ZERO
+	var best_d := INF
+	for a in 11:
+		var yaw := a * 0.3          # from the face round the shoulder's side to the back
+		for b in 7:
+			var pit := -0.9 + b * 0.35
+			var p := hc + Vector3(s * sin(yaw) * cos(pit), sin(pit), -cos(yaw) * cos(pit)) * _head_r
+			var d := p.distance_squared_to(w)
+			if d < best_d and _touch_ok(S, p, L, hc):
+				best_d = d
+				best = p
+	if best_d == INF:
+		return _reach(i, w, kmax, false)
+	return best
+
+
+func _touch_ok(S: Vector3, p: Vector3, L: float, hc: Vector3) -> bool:
+	if S.distance_to(p) > L:
+		return false
+	for t in [0.45, 0.65, 0.85]:
+		if _inside(S.lerp(p, t), hc, _head_r * 0.98):
+			return false
+	return true
 
 
 static func _inside(p: Vector3, c: Vector3, rad: Vector3) -> bool:
@@ -594,6 +685,61 @@ func play(g: int, side := 0, length := 0.0, delay := 0.0) -> void:
 	_active = maxi(_active, 1)
 
 
+## Ends a gesture now (it blends out): a one-shot, a hold or one still waiting for its delay.
+func stop(g: int) -> void:
+	_left[g] = 0.0
+	_held[g] = 0
+	if _delay[g] > 0.0:
+		_delay[g] = 0.0
+
+
+## Moves the mood memory: + after passing someone, - after being passed (clamped to -1..1).
+func remember(delta_mood: float) -> void:
+	mood_mem = clampf(mood_mem + delta_mood, -1.0, 1.0)
+
+
+## Resting face from the mood memory: "determined" (a grumpy frown), "excited" (cocky), or "".
+func base_mood() -> String:
+	if mood_mem < -0.45:
+		return "determined"
+	if mood_mem > 0.45:
+		return "excited"
+	return ""
+
+
+## Gesture for passing someone: the style's pass pose, a taunt the cockier the racer is.
+func pass_gesture() -> int:
+	if mood_mem > 0.3 and _rng.randf() < 0.2 + 0.6 * mood_mem:
+		return G.TAUNT
+	return pass_pose
+
+
+## Gesture for a rival driving alongside: a friendly wave, or a cheeky taunt (cocky, sneaky or
+## jittery racers more often); a grumpy racer only stares (-1).
+func rival_gesture() -> int:
+	if mood_mem < -0.45:
+		return -1
+	var cheeky := 0.2 + 0.5 * maxf(0.0, mood_mem) + (0.25 if r.motion_style in ["sneaky", "jittery"] else 0.0)
+	return G.TAUNT if _rng.randf() < cheeky else G.WAVE
+
+
+## Gesture for being passed: a grumpy racer shakes its head; others only watch them go (-1).
+func passed_gesture() -> int:
+	return G.HEAD_SHAKE if mood_mem < -0.3 else -1
+
+
+## A little thing to do while waiting on the start grid (a scratch, a tap on the handle, a
+## stretch, the signature gesture, a wave to the crowd).
+func fidget_gesture() -> int:
+	var pick := _rng.randi_range(0, 5)
+	match pick:
+		0: return G.SCRATCH
+		1: return G.TAP
+		2: return G.STRETCH
+		3, 4: return sig_pose
+	return G.WAVE
+
+
 func hold(g: int, on: bool) -> void:
 	if not ok:
 		return
@@ -726,6 +872,8 @@ func reset() -> void:
 		_arm[i].quaternion = _rest_q[i]
 		_elbow[i].quaternion = Quaternion.IDENTITY
 		_set_stretch(i, 1.0)
+		_palm[i].transform = _palm_rest[i]
+		_palm_shaped[i] = 0
 	for n in _sw_node:
 		n.rotation = Vector3.ZERO
 
@@ -737,6 +885,7 @@ func update(dt: float) -> void:
 		return
 	_t += dt
 	var sdt := minf(dt, 1.0 / 30.0)  # springs: slow frames play in slow motion instead of blowing up
+	mood_mem = move_toward(mood_mem, 0.0, dt * 0.05)
 	_states()
 	if _active > 0 or _held.count(1) > 0:
 		_tick(dt)
@@ -817,6 +966,59 @@ func update(dt: float) -> void:
 				G.HEAD_SHAKE:
 					hy += sin(tt * 21.0) * 0.38 * ws * amp
 					hr += sin(tt * 21.0 + 0.6) * 0.08 * ws * amp
+				G.READY:
+					gp -= 0.2 * ws
+					gl -= 0.015 * ws
+					hp += 0.12 * ws  # eyes on the road while leaning in
+				G.TAP:
+					hp -= 0.08 * ws
+				G.SCRATCH:
+					hr -= 0.12 * float(_side[g]) * ws
+					hp += 0.05 * ws
+				G.STRETCH:
+					gp += 0.1 * ws * sin(clampf(tt / float(LENGTH[g]), 0.0, 1.0) * PI)
+					hp += 0.25 * ws
+				G.SALUTE:
+					gp += 0.07 * ws
+					hp += 0.1 * ws
+				G.CLAP:
+					gl += 0.025 * ws * absf(sin(tt * 8.0)) * amp
+					hp += 0.12 * ws
+				G.BOW:
+					var bw := sin(clampf((tt - 0.15) / 1.0, 0.0, 1.0) * PI)
+					gp -= 0.38 * ws * bw
+					hp -= 0.25 * ws * bw
+				G.SPIN:
+					if tt < 0.85:
+						var u := tt / 0.85
+						gt += TAU * u * u * (3.0 - 2.0 * u)  # once round on the seat, whole turns only
+					hp += 0.1 * ws
+				G.PEEK:
+					gp -= 0.12 * ws
+					gl -= 0.02 * ws
+					hy += sin(tt * 3.2) * 0.55 * ws
+				G.TWIRL:
+					gt += sin(tt * 2.4) * 0.45 * ws
+					gr += sin(tt * 2.4 + 1.2) * 0.1 * ws
+					gl += 0.025 * ws * (0.5 + 0.5 * sin(tt * 4.8))
+					hr += sin(tt * 2.4 + 0.5) * 0.12 * ws
+				G.JIVE:
+					hp += sin(tt * 16.0) * 0.1 * ws * amp
+					gr += sin(tt * 8.0) * 0.07 * ws * amp
+					gl += 0.015 * ws * absf(sin(tt * 8.0))
+				G.TAUNT:
+					hr += sin(tt * 9.0) * 0.2 * ws
+					gp -= 0.05 * ws
+				G.WHOOP:
+					gp += 0.14 * ws
+					hp += 0.4 * ws
+					gl += 0.02 * ws
+				G.FLINCH:
+					gp += 0.12 * ws
+					gl -= 0.035 * ws
+					hp -= 0.12 * ws
+					hdrop -= 0.02 * ws
+					gr += sin(tt * 45.0) * 0.015 * ws
 
 	# Lean with lag and overshoot (spring), into the turn and the side slide.
 	var lk := 49.0
@@ -978,6 +1180,8 @@ func _arms() -> void:
 		var pole := Vector3(s * POLE_GRIP.x, POLE_GRIP.y, POLE_GRIP.z)
 		var kmax := 1.15 if grip else 1.0
 		var posed := 0.0
+		var open := 0.0
+		var fist := 0.0
 		if _active > 0:
 			for g in COUNT:
 				var w := _w[g]
@@ -995,10 +1199,21 @@ func _arms() -> void:
 				pole = pole.lerp(_pole(g, s), ws)
 				kmax = lerpf(kmax, float(REACH[g]), ws)
 				posed = maxf(posed, ws)
+				match int(HAND[g]):
+					1:
+						open = lerpf(open, 1.0, ws)
+						fist *= 1.0 - ws
+					2:
+						fist = lerpf(fist, 1.0, ws)
+						open *= 1.0 - ws
+					_:
+						open *= 1.0 - ws
+						fist *= 1.0 - ws
 		if posed > 0.0:
 			t = _push_out(t, _head_c_now, _head_r)
 			t = _push_out(t, _body_c, _body_r)
-		_solve(i, t, pole, kmax)
+		_solve(i, t, pole, kmax, posed > 0.0)
+		_shape_hand(i, open, fist)
 
 
 func _pose(g: int, i: int, s: float) -> Vector3:
@@ -1027,15 +1242,43 @@ func _pose(g: int, i: int, s: float) -> Vector3:
 			return _shoulder[i] + Vector3(s * 0.18, 0.12 + sin(ph) * 0.5 * _len[i], -0.05 - cos(ph) * 0.5 * _len[i])
 		G.DIZZY, G.SLUMP:
 			return _p_lap[i] + Vector3(0.0, 0.0, 0.015 * sin(tt * 3.0 + i))
+		G.TAP:
+			var at := _char_inv * (carry * _grip_model[i]) if grip else _p_lap[i]
+			return at + Vector3(0.0, 0.035 * (0.5 + 0.5 * sin(tt * 14.0)), 0.0)
+		G.SCRATCH:
+			return _p_scratch[i] + Vector3(s * 0.02 * sin(tt * 15.0), 0.02 * cos(tt * 15.0), 0.0)
+		G.STRETCH:
+			var k := sin(clampf(tt / float(LENGTH[g]), 0.0, 1.0) * PI)
+			return _p_out[i].lerp(_p_up[i], 0.6) + Vector3(s * 0.05 * k, 0.04 * k, 0.0)
+		G.SALUTE:
+			return _p_salute[i]
+		G.CLAP:
+			return _p_clap[i] + Vector3(s * 0.11 * (0.5 + 0.5 * sin(tt * 16.0)), 0.0, 0.0)
+		G.BOW:
+			return _p_chest[i] if i == 1 else _p_out[i] + Vector3(0.0, -0.05, 0.08)
+		G.SPIN:
+			return _p_out[i] + Vector3(0.0, 0.05, 0.0)
+		G.PEEK:
+			return _p_eyes[i]
+		G.TWIRL:
+			return _p_out[i].lerp(_p_up[i], 0.35 + 0.35 * sin(tt * 4.8 + i * PI))
+		G.JIVE:
+			return _p_pump_lo[i].lerp(_p_pump_hi[i], 0.5 + 0.5 * sin(tt * 16.0 + i * PI))
+		G.TAUNT:
+			return _p_nose[i] + Vector3(s * 0.025 * sin(tt * 22.0), 0.0, 0.0)
+		G.WHOOP:
+			return _p_up[i] + Vector3(s * 0.04, 0.05 * sin(tt * 14.0 + i), 0.0) * amp
+		G.FLINCH:
+			return _p_flinch[i] + Vector3(0.0, 0.01 * sin(tt * 45.0), 0.0)
 	return _hand_rest[i]
 
 
 func _pole(g: int, s: float) -> Vector3:
 	var p := POLE_UP
 	match g:
-		G.RAIN, G.HAT:
+		G.RAIN, G.HAT, G.SCRATCH, G.SALUTE, G.TAUNT, G.PEEK, G.FLINCH, G.CLAP:
 			p = POLE_HEAD
-		G.TUCK, G.BRACE:
+		G.TUCK, G.BRACE, G.TAP:
 			p = POLE_GRIP
 		G.DIZZY, G.SLUMP:
 			p = POLE_LAP
@@ -1045,7 +1288,7 @@ func _pole(g: int, s: float) -> Vector3:
 ## Two equal bones from the shoulder to target t (Character space), elbow pulled toward pole.
 ## Within 8 % shorter .. kmax longer the arm squashes / stretches instead of bending, so it is
 ## exactly straight (the built pose) at rest.
-func _solve(i: int, t: Vector3, pole: Vector3, kmax: float) -> void:
+func _solve(i: int, t: Vector3, pole: Vector3, kmax: float, clear: bool) -> void:
 	var S := _shoulder[i]
 	var L := _len[i]
 	var to := t - S
@@ -1068,11 +1311,59 @@ func _solve(i: int, t: Vector3, pole: Vector3, kmax: float) -> void:
 		var pl := pn.length()
 		if pl > 1e-4:
 			pn /= pl
+			if clear:
+				pn = _clear_elbow(S, dir, ca, sa, span, pn, t)
 			upper = dir * ca + pn * sa
 			lower = dir * ca - pn * sa
 	var qu := Quaternion(_rest_dir[i], upper) * _rest_q[i]
 	_arm[i].quaternion = qu
 	_elbow[i].quaternion = qu.inverse() * Quaternion(upper, lower) * qu
+
+
+## The elbow direction (unit, across the shoulder -> hand line) nearest `pn` that keeps the elbow,
+## the upper arm and the forearm out of the head and the elbow and forearm out of the body: big
+## heads and short arms would otherwise poke the arm through the face. Tries `pn` first, then
+## turns it round the shoulder -> hand line; keeps the least-buried one if none is clear.
+func _clear_elbow(S: Vector3, dir: Vector3, ca: float, sa: float, span: float, pn: Vector3, t: Vector3) -> Vector3:
+	var best := pn
+	var best_d := INF
+	for k in ELBOW_TRIES.size():
+		var a: float = ELBOW_TRIES[k]
+		var c := pn * cos(a) + dir.cross(pn) * sin(a) if a != 0.0 else pn
+		var e := S + (dir * ca + c * sa) * (span * 0.5)
+		var d := _buried(S.lerp(e, 0.6), _head_c_now, _head_r) + _buried(e, _head_c_now, _head_r) \
+			+ _buried(e.lerp(t, 0.5), _head_c_now, _head_r) + _buried(e.lerp(t, 0.75), _head_c_now, _head_r) \
+			+ _buried(e, _body_c, _body_r) + _buried(e.lerp(t, 0.4), _body_c, _body_r)
+		if d <= 0.0:
+			return c
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+
+## How deep p is inside an ellipsoid (0 outside, 1 at its centre).
+static func _buried(p: Vector3, c: Vector3, rad: Vector3) -> float:
+	return maxf(0.0, 1.0 - ((p - c) / rad).length())
+
+
+## Open palm (flat, facing forward, long along the forearm) or round fist, by weight.
+func _shape_hand(i: int, open: float, fist: float) -> void:
+	if open < 0.002 and fist < 0.002:
+		if _palm_shaped[i] == 1:
+			_palm[i].transform = _palm_rest[i]
+			_palm_shaped[i] = 0
+		return
+	_palm_shaped[i] = 1
+	var sc := Vector3.ONE.lerp(OPEN_HAND, open).lerp(FIST, fist)
+	var hb := _arm[i].basis * _elbow[i].basis  # the hand node itself is not turned
+	var y := hb.y.normalized()                  # back up the forearm
+	var n := Vector3.FORWARD - y * y.dot(Vector3.FORWARD)
+	if n.length_squared() < 1e-4:
+		n = Vector3.UP - y * y.y
+	n = n.normalized()
+	var want := Basis(y.cross(n), y, n)
+	_palm[i].basis = (hb.inverse() * want).orthonormalized() * Basis.from_scale(sc)
 
 
 func _set_stretch(i: int, k: float) -> void:
