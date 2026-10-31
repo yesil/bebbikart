@@ -65,6 +65,7 @@ export const RUN_EVENT_KINDS = /** @type {const} */ ([
   "bounce_wobble",
   "bumped",
   "bumped_other",
+  "missed_exit", // loop tracks: went round the roundabout again
 ]);
 export const ROLES = /** @type {const} */ (["phone", "game", "admin"]);
 export const MOODS = /** @type {const} */ ([

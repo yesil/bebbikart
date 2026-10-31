@@ -133,7 +133,8 @@ const RUN_EVENT_KINDS = [
 	"boost_weak",
 	"bounce_wobble",
 	"bumped",
-	"bumped_other"
+	"bumped_other",
+	"missed_exit"
 ]
 const RUN_OUTCOMES = [
 	"finished",

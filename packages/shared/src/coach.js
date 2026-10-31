@@ -37,6 +37,7 @@ export const COACH_COPY = {
   loss_bounce_wobble: { text: "Lost {s} s wobbling on {where}. Try -1 bounce.", ability: "bounce" },
   loss_boost_weak: { text: "Lost {s} s at {where}. Boost on the glowing zones!" },
   loss_bumped: { text: "Lost {s} s in bumps. Wait for a quieter track!", ability: "stability" },
+  loss_missed_exit: { text: "Lost {s} s going round the roundabout again! Try Careful style." },
   loss_none: { text: "Lost {s} s at {where}. Try +1 speed!", ability: "speed" },
   // Rule 3: first finish or new best, plus one experiment.
   best_try_water: { text: "New best! Brave enough to try the water shortcut?" },
@@ -63,6 +64,7 @@ const LOSS_EVENT_KEYS = [
   "bounce_wobble",
   "boost_weak",
   "bumped",
+  "missed_exit",
 ];
 
 /**

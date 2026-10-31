@@ -93,7 +93,8 @@ type RunEventKind =
   | "boost_weak"
   | "bounce_wobble"
   | "bumped"
-  | "bumped_other"; // collisions with other racers
+  | "bumped_other" // collisions with other racers
+  | "missed_exit"; // village: missed the roundabout exit and went round again (timeLostMs)
 ```
 
 ## 4. Data model
