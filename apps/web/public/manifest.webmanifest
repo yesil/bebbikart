@@ -1,0 +1,9 @@
+{
+  "name": "BebbiKart",
+  "short_name": "BebbiKart",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff8ec",
+  "theme_color": "#ff6b35",
+  "start_url": "/"
+}
