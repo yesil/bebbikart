@@ -34,6 +34,8 @@ var heights := PackedFloat32Array()
 var natural := PackedFloat32Array()
 var road_edge := PackedFloat32Array()   # signed distance to nearest road edge (<0 = on the road)
 var road_y := PackedFloat32Array()      # road surface height of the nearest road
+var course_dist := PackedFloat32Array() # metres to the nearest road edge, whole map (chamfer)
+var course_y := PackedFloat32Array()    # road height at that nearest road
 var structure := PackedByteArray()      # 1 where the nearest road is a bridge/causeway deck
 var base_id := PackedByteArray()
 var overlay_id := PackedByteArray()
@@ -47,8 +49,8 @@ func _init(p_course: Course, p_land: Landscape, p_rect := Landscape.MAP_RECT, p_
 	land = p_land
 	rect = p_rect
 	spacing = p_spacing
-	w = int(rect.size.x / spacing) + 1
-	h = int(rect.size.y / spacing) + 1
+	w = int(rect.size.x / spacing)
+	h = int(rect.size.y / spacing)
 	noise.seed = 11
 	noise.frequency = 0.018
 	noise.fractal_octaves = 3
@@ -70,16 +72,60 @@ func build() -> void:
 	road_edge.fill(INF)
 	structure.fill(0)
 	_stamp_roads()
+	_course_distance()
 	for j in h:
 		for i in w:
 			var k := j * w + i
 			var p := cell_pos(i, j)
-			var nat := _natural(p)
+			var nat := _natural(p, course_dist[k], course_y[k])
 			natural[k] = nat
 			heights[k] = _with_road(k, nat)
 	for j in h:
 		for i in w:
 			_paint(i, j)
+
+
+## Two-pass chamfer distance transform seeded with every road cell, carrying the road height
+## along, so every cell knows how far the course is and how high the road is there.
+func _course_distance() -> void:
+	var n := w * h
+	course_dist.resize(n)
+	course_y.resize(n)
+	for k in n:
+		if road_edge[k] <= 0.0:
+			course_dist[k] = 0.0
+			course_y[k] = road_y[k]
+		else:
+			course_dist[k] = INF
+			course_y[k] = 0.0
+	var d1 := spacing
+	var d2 := spacing * 1.4142
+	for j in h:
+		for i in w:
+			var k := j * w + i
+			for o in [[-1, 0, d1], [0, -1, d1], [-1, -1, d2], [1, -1, d2]]:
+				var ii: int = i + o[0]
+				var jj: int = j + o[1]
+				if ii < 0 or jj < 0 or ii >= w:
+					continue
+				var kk := jj * w + ii
+				var cand: float = course_dist[kk] + o[2]
+				if cand < course_dist[k]:
+					course_dist[k] = cand
+					course_y[k] = course_y[kk]
+	for j in range(h - 1, -1, -1):
+		for i in range(w - 1, -1, -1):
+			var k := j * w + i
+			for o in [[1, 0, d1], [0, 1, d1], [1, 1, d2], [-1, 1, d2]]:
+				var ii: int = i + o[0]
+				var jj: int = j + o[1]
+				if ii < 0 or jj >= h or ii >= w:
+					continue
+				var kk := jj * w + ii
+				var cand: float = course_dist[kk] + o[2]
+				if cand < course_dist[k]:
+					course_dist[k] = cand
+					course_y[k] = course_y[kk]
 
 
 func cell_pos(i: int, j: int) -> Vector2:
@@ -97,6 +143,17 @@ func height_at(x: float, z: float) -> float:
 	var a := lerpf(heights[j * w + i], heights[j * w + i + 1], tx)
 	var b := lerpf(heights[(j + 1) * w + i], heights[(j + 1) * w + i + 1], tx)
 	return lerpf(a, b, tz)
+
+
+## Bilinear natural (pre-road) ground height at world (x, z).
+func natural_at(x: float, z: float) -> float:
+	var fx := clampf((x - rect.position.x) / spacing, 0.0, w - 1.001)
+	var fz := clampf((z - rect.position.y) / spacing, 0.0, h - 1.001)
+	var i := int(fx)
+	var j := int(fz)
+	var a := lerpf(natural[j * w + i], natural[j * w + i + 1], fx - i)
+	var b := lerpf(natural[(j + 1) * w + i], natural[(j + 1) * w + i + 1], fx - i)
+	return lerpf(a, b, fz - j)
 
 
 ## Signed distance from (x, z) to the nearest road edge (nearest cell).
@@ -179,18 +236,28 @@ func _with_road(k: int, nat: float) -> float:
 
 # ---------------------------------------------------------------- natural ground
 
-func _natural(p: Vector2) -> float:
-	var y := 0.0
+## Meadow near the course, rounded hills only far away: within NEAR metres of any road the
+## ground stays within NEAR_RANGE of the road height with gentle swells; the hill list and the
+## edge rise fade in only beyond FAR_START metres.
+const NEAR := 60.0
+const NEAR_RANGE := 3.0
+const FAR_START := 90.0
+
+
+func _natural(p: Vector2, dist: float, ry: float) -> float:
+	var swell := noise.get_noise_2d(p.x, p.y) * 2.2 + noise.get_noise_2d(p.x * 0.4 + 300.0, p.y * 0.4) * 1.5
+	var far := smoothstep(FAR_START, FAR_START + 80.0, dist)
+	var hills := 0.0
 	for hl in Landscape.HILLS:
 		var d := p.distance_to(Vector2(hl.x, hl.y)) / hl.z
 		if d < 1.0:
-			y += hl.w * (0.5 + 0.5 * cos(PI * d))
-	y += noise.get_noise_2d(p.x, p.y) * 1.6
-	# Rise towards the map edges so the bowl reads as distant hills.
-	var ex := maxf(0.0, absf(p.x) - 80.0)
-	y += ex * ex * 0.0016 + maxf(0.0, ex - 60.0) * 0.12
-	var dz := maxf(0.0, maxf(rect.position.y + 60.0 - p.y, p.y - (rect.end.y - 60.0)))
-	y += dz * dz * 0.003
+			hills += hl.w * (0.5 + 0.5 * cos(PI * d))
+	var rise := maxf(0.0, dist - FAR_START) * 0.06
+	var y := ry + swell + far * (hills + rise)
+	# Keep the meadow near the course within +-NEAR_RANGE of the road, softly.
+	var near := 1.0 - smoothstep(NEAR * 0.6, NEAR + 30.0, dist)
+	var lim := lerpf(40.0, NEAR_RANGE, near)
+	y = ry + lim * tanh((y - ry) / lim)
 	# Knoll between the ramp branches.
 	var kd := p.distance_to(land.knoll_center) / land.knoll_radius
 	if kd < 1.0:
@@ -264,9 +331,6 @@ func _paint(i: int, j: int) -> void:
 	elif e < 3.0:
 		o = Layer.GRASS_DIRT
 		bl = maxf(bl, 1.0 - smoothstep(0.6, 3.0, e))
-	if slope > 0.75:
-		o = Layer.ROCK
-		bl = maxf(bl, smoothstep(0.75, 1.2, slope) * 0.8)
 	var pp := Vector2(p.x, p.y)
 	var shore := land.pond_shore_dist(pp)
 	if land.in_pond(pp):

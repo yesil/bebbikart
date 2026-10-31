@@ -40,12 +40,12 @@ const VALLEY_HEAD_HW := 3.5
 const VALLEY_HEAD_FLOOR := -0.6
 const VALLEY_HEAD_CLEAR := 3.0    # metres between the valley head rim and the hedged lane edge
 
-## Rolling hills: x, z, radius, height (added on top of gentle noise away from the road).
+## Rounded backdrop hills (x, z, radius, height). terrain_shape.gd only lets them in more than
+## ~90 m from any road, so near the course the ground stays an open meadow.
 const HILLS: Array[Vector4] = [
-	Vector4(-38, 25, 26, 7), Vector4(38, 20, 30, 9), Vector4(-42, 92, 22, 6), Vector4(48, 108, 30, 10),
-	Vector4(-72, 145, 30, 10), Vector4(45, 182, 26, 9), Vector4(-72, 228, 24, 9), Vector4(50, 265, 24, 8),
-	Vector4(-48, 330, 30, 9), Vector4(48, 330, 30, 10), Vector4(-42, 425, 40, 12), Vector4(44, 425, 34, 10),
-	Vector4(0, 490, 50, 16), Vector4(0, -60, 45, 12),
+	Vector4(-150, 20, 70, 16), Vector4(150, 0, 75, 18), Vector4(-170, 140, 80, 22), Vector4(160, 120, 70, 15),
+	Vector4(-160, 290, 75, 20), Vector4(165, 260, 80, 22), Vector4(-140, 420, 70, 16), Vector4(150, 420, 75, 19),
+	Vector4(0, 560, 110, 24), Vector4(0, -150, 90, 18), Vector4(-90, 520, 60, 14), Vector4(90, -90, 60, 12),
 ]
 
 ## Flat plazas: start grid (absolute) and finish area (relative to the finish line).
@@ -53,7 +53,7 @@ const FLAT_START := Rect2(-14, -14, 28, 34)
 const FLAT_FINISH_LOCAL := Rect2(-26, -32, 52, 46)
 
 ## Terrain extents for the playable map (the far-hills ring sits outside it).
-const MAP_RECT := Rect2(-200, -120, 400, 640)
+const MAP_RECT := Rect2(-256, -256, 512, 1024)   # exactly 2 x 4 Terrain3D regions of 256 m
 
 var pond: PackedVector2Array
 var stream: Array[Vector2] = []
@@ -107,7 +107,7 @@ func _init(course: Course) -> void:
 	var land := float(rp["land_s"])
 	var mid := jr.pos_at((lip + land) * 0.5)
 	dip_radii = Vector2(9.0, (land - lip) * 0.5 - 0.7)
-	dip_center = Vector2(mid.x - 4.0, mid.z)
+	dip_center = Vector2(mid.x - 1.0, mid.z)
 	dip_floor = mid.y - float(rp["pit_depth"])
 	# Knoll between the jump road and the apex of the around road.
 	var ar: Route = course.segments["ramp_around"]["route"]
