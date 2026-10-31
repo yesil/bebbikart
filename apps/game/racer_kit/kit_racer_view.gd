@@ -130,6 +130,11 @@ func sync() -> void:
 	_was_bumped = bumped
 
 
+## How strongly the driver is mid-reaction (ToyRacer.reaction_weight); 0 without a built toy.
+func reaction_weight() -> float:
+	return toy.reaction_weight() if toy != null else 0.0
+
+
 ## Forward on the road (world, unit).
 func forward() -> Vector3:
 	return _body.global_basis.z

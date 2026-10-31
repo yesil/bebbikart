@@ -206,6 +206,23 @@ func gesture(gesture_name: String, side := 0) -> void:
 	gestures.play_named(gesture_name, side)
 
 
+## How strongly the racer is mid-reaction (0..1): its driver's gestures (RacerGestures.REACT),
+## 1 while it spins out or hops for joy. The big-screen camera holds on it (CameraDirector).
+func reaction_weight() -> float:
+	if _fail_t > 0.0 or _celebrate_t > 0.0:
+		return 1.0
+	return gestures.reaction_weight()
+
+
+## What reaction_weight() comes from: "spin_out", "hops" or a gesture name; "" when none.
+func reaction_name() -> String:
+	if _fail_t > 0.0:
+		return "spin_out"
+	if _celebrate_t > 0.0:
+		return "hops"
+	return gestures.reaction_name()
+
+
 ## The head follows a node (e.g. a rival's head) or a world point for a while.
 func look_at_node(n: Node3D, secs := 1.2) -> void:
 	gestures.look_at(Vector3.ZERO, n, secs)

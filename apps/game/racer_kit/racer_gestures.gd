@@ -34,6 +34,9 @@ const LENGTH := [3.0, 3.0, 1.2, 1.2, 0.35, 1.6, 0.9, 1.4, 0.9, 1.0, 1.1, 1.6, 0.
 const REACH := [1.35, 1.35, 1.0, 1.05, 1.0, 1.0, 1.05, 1.05, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 const MOOD := ["determined", "determined", "determined", "excited", "determined", "happy", "excited",
 	"cheering", "excited", "dizzy", "dizzy", "sad", "", ""]
+## How much each gesture is a reaction worth watching (reaction_weight(); the big-screen camera
+## holds on it): 0 for weather holds, jump poses and the brace.
+const REACT := [0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.8, 1.0, 0.6, 0.5, 0.8, 1.0, 0.5, 0.4]
 
 ## Head limits (rad), also checked by tools/gesture_check.gd.
 const YAW_MAX := 1.35
@@ -619,6 +622,30 @@ func weight(g: int) -> float:
 
 func is_idle() -> bool:
 	return _active == 0
+
+
+## How strongly the driver is mid-reaction (0..1): weight x REACT of the strongest gesture playing.
+func reaction_weight() -> float:
+	if _active == 0:
+		return 0.0
+	var best := 0.0
+	for g in COUNT:
+		best = maxf(best, _w[g] * float(REACT[g]))
+	return best
+
+
+## Name (NAMES) of the gesture behind reaction_weight(), or "".
+func reaction_name() -> String:
+	if _active == 0:
+		return ""
+	var best := 0.0
+	var out := ""
+	for g in COUNT:
+		var w := _w[g] * float(REACT[g])
+		if w > best:
+			best = w
+			out = NAMES.find_key(g)
+	return out
 
 
 ## Face mood of the strongest playing gesture, or "".
