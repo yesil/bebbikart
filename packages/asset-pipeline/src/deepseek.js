@@ -3,16 +3,19 @@
 
 export const DEEPSEEK_DEFAULTS = {
   baseUrl: "https://api.deepseek.com",
-  // Model named in asset-pipeline.md. Override with DEEPSEEK_MODEL if the vision model has another id.
-  model: "deepseek-v4-flash-vision-exp",
-  timeoutMs: 90_000,
+  // Looks at the photos (look + critique passes): the vision model, thinking at max effort.
+  visionModel: "deepseek-flash",
+  // Writes the spec (design + refine passes): the strongest text model.
+  designModel: "deepseek-v4-pro",
+  timeoutMs: 150_000,
 };
 
 export class DeepSeekError extends Error {}
 
 /**
- * @param {{ apiKey?: string, baseUrl?: string, model?: string, timeoutMs?: number, fetch?: typeof fetch }} [opts]
- * @returns {{ name: string, complete: (messages: object[], opts?: { temperature?: number }) => Promise<string> }}
+ * @param {{ apiKey?: string, baseUrl?: string, visionModel?: string, designModel?: string, timeoutMs?: number, fetch?: typeof fetch }} [opts]
+ * @returns {{ name: string, complete: (messages: object[], opts?: CompleteOpts) => Promise<string> }}
+ * @typedef {{ vision?: boolean, temperature?: number, effort?: "low"|"high"|"max", maxTokens?: number }} CompleteOpts
  */
 export function createDeepSeekClient(opts = {}) {
   const env = process.env;
@@ -22,23 +25,30 @@ export function createDeepSeekClient(opts = {}) {
     /\/$/,
     "",
   );
-  const model = opts.model ?? env.DEEPSEEK_MODEL ?? DEEPSEEK_DEFAULTS.model;
-  const timeoutMs = opts.timeoutMs ?? DEEPSEEK_DEFAULTS.timeoutMs;
+  const visionModel =
+    opts.visionModel ?? env.DEEPSEEK_VISION_MODEL ?? DEEPSEEK_DEFAULTS.visionModel;
+  const designModel =
+    opts.designModel ?? env.DEEPSEEK_DESIGN_MODEL ?? DEEPSEEK_DEFAULTS.designModel;
+  const timeoutMs =
+    opts.timeoutMs ?? Number(env.DEEPSEEK_TIMEOUT_MS ?? DEEPSEEK_DEFAULTS.timeoutMs);
   const doFetch = opts.fetch ?? fetch;
-  // Thinking mode is slow; off by default. DEEPSEEK_THINKING=enabled turns it on, "omit" leaves the field out.
-  const thinking = env.DEEPSEEK_THINKING ?? "disabled";
 
   return {
-    name: `deepseek:${model}`,
-    async complete(messages, { temperature = 0.8 } = {}) {
+    name: `deepseek:${visionModel}+${designModel}`,
+    async complete(
+      messages,
+      { vision = false, temperature = 0.8, effort = "high", maxTokens = 32_000 } = {},
+    ) {
+      const model = vision ? visionModel : designModel;
       const body = {
         model,
         messages,
         response_format: { type: "json_object" },
         temperature,
-        max_tokens: 4000,
+        max_tokens: maxTokens,
         stream: false,
-        ...(thinking === "omit" ? {} : { thinking: { type: thinking } }),
+        thinking: { type: "enabled" },
+        reasoning_effort: effort,
       };
       let res;
       try {
@@ -49,18 +59,19 @@ export function createDeepSeekClient(opts = {}) {
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (err) {
-        throw new DeepSeekError(`request failed: ${err.message}`);
+        throw new DeepSeekError(`${model} request failed: ${err.message}`);
       }
       if (!res.ok) {
         const text = (await res.text().catch(() => "")).slice(0, 500);
-        throw new DeepSeekError(`HTTP ${res.status}: ${text}`);
+        throw new DeepSeekError(`${model} HTTP ${res.status}: ${text}`);
       }
       const json = await res.json();
       const choice = json.choices?.[0];
       if (choice?.finish_reason === "length")
-        throw new DeepSeekError("reply was cut off (max_tokens)");
+        throw new DeepSeekError(`${model} reply was cut off (max_tokens ${maxTokens})`);
       const content = choice?.message?.content;
-      if (typeof content !== "string") throw new DeepSeekError("reply has no message content");
+      if (typeof content !== "string")
+        throw new DeepSeekError(`${model} reply has no message content`);
       return content;
     },
   };

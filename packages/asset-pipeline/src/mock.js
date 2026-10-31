@@ -416,9 +416,58 @@ export function mockDesignId(characterPath, vehiclePath) {
   return VEHICLE_DESIGNS[stem(vehiclePath)] ?? null;
 }
 
+/** Mock-only personality, sound and tagline per design (the hand-written specs predate them). */
+const MOCK_LOOK_EXTRAS = {
+  pair01: {
+    tagline: "Naps in sunbeams, races at noon",
+    motion: { style: "bouncy", energy: 1.2 },
+    sound: { engine: "putter", pitch: 1.3, horn: "meow" },
+  },
+  pair02: {
+    tagline: "Beep boop, zoom zoom",
+    motion: { style: "jittery", energy: 1.1 },
+    sound: { engine: "rocket", pitch: 1.1, horn: "beep" },
+  },
+  pair03: {
+    tagline: "Rings the bell at every flower",
+    motion: { style: "wobbly", energy: 1.0 },
+    sound: { engine: "putter", pitch: 0.9, horn: "bell" },
+  },
+  pair04: {
+    tagline: "Rules the track with rainbow flair",
+    motion: { style: "proud", energy: 0.9 },
+    sound: { engine: "hooves", pitch: 1.0, horn: "neigh" },
+  },
+  pair05: {
+    tagline: "Came from space for the snacks",
+    motion: { style: "floaty", energy: 1.2 },
+    sound: { engine: "flap", pitch: 0.8, horn: "roar" },
+  },
+  pair06: {
+    tagline: "Loves waves, hates baths",
+    motion: { style: "wobbly", energy: 1.3 },
+    sound: { engine: "splash", pitch: 1.2, horn: "toot" },
+  },
+  board: {
+    tagline: "Never puts a foot down",
+    motion: { style: "smooth", energy: 1.0 },
+    sound: { engine: "vroom", pitch: 1.2, horn: "boing" },
+  },
+  pd: {
+    tagline: "Gallops in from 1842",
+    motion: { style: "proud", energy: 0.8 },
+    sound: { engine: "hooves", pitch: 0.9, horn: "neigh" },
+  },
+  scribble: {
+    tagline: "A scribble that learned to race",
+    motion: { style: "jittery", energy: 1.5 },
+    sound: { engine: "squelch", pitch: 1.4, horn: "boing" },
+  },
+};
+
 /**
- * Mock DesignClient. Unknown drawings get `spec: null`, so the job falls back to the default
- * racer in the drawing's colours, the same as a broken real reply would.
+ * Mock DesignClient: answers each pass (ctx.stage: look, design, critique, refine) with hand-written
+ * replies. Unknown drawings get `spec: null`, so the job fails the same way a broken real reply would.
  */
 export function createMockClient() {
   return {
@@ -426,19 +475,48 @@ export function createMockClient() {
     async complete(_messages, _opts, ctx) {
       const id = mockDesignId(ctx.characterPath, ctx.vehiclePath);
       const design = id ? MOCK_DESIGNS[id] : null;
-      const check = {};
-      for (const [kind, path, i] of [
-        ["character", ctx.characterPath, 0],
-        ["vehicle", ctx.vehiclePath, 1],
-      ]) {
-        check[kind] =
-          MOCK_CHECKS[stem(path)] ?? ok(design?.seen[i] ?? "a drawing (mock: no description)");
+      if (ctx.stage === "look") {
+        const reply = { check: {} };
+        for (const [kind, path, i] of [
+          ["character", ctx.characterPath, 0],
+          ["vehicle", ctx.vehiclePath, 1],
+        ]) {
+          const seen = design?.seen[i] ?? "a drawing (mock: no description)";
+          reply.check[kind] = MOCK_CHECKS[stem(path)] ?? ok(seen);
+          reply[kind] = {
+            what: seen,
+            meant: seen,
+            features: [
+              {
+                name: seen,
+                where: "whole drawing",
+                color: "#888888",
+                size: "big",
+                count: 1,
+                importance: 3,
+              },
+            ],
+            colors: [],
+            colouringStyle: "crayon",
+            proportions: "",
+            mood: "happy",
+            story: "",
+            unmistakable: [seen],
+          };
+        }
+        return JSON.stringify(reply);
       }
-      const failed = Object.values(check).some((c) => !c.ok);
-      let spec = failed || !design ? null : structuredClone(design.spec);
+      if (ctx.stage === "critique") {
+        return JSON.stringify({
+          scores: { likeness: 8, colour: 8, personality: 8, readability: 8, fun: 8 },
+          issues: [],
+          verdict: "mock critique: looks fine",
+        });
+      }
+      let spec = design ? { ...structuredClone(design.spec), ...MOCK_LOOK_EXTRAS[id] } : null;
       if (spec && ctx.reroll) spec = rerollVariant(spec);
       return JSON.stringify({
-        check,
+        featureMap: [],
         spec,
         notes: design?.notes ?? "mock has no hand-written design for these files",
       });

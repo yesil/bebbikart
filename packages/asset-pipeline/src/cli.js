@@ -21,8 +21,10 @@ Options:
   --reroll        "try another look": ask for a different design
   --skip-check    facilitator approved the photos: never reject
   --quiet         don't print the spec JSON
+  --jobs <n>      design n racers at the same time (default 1)
 
-Env: DEEPSEEK_API_KEY (required without --mock), DEEPSEEK_MODEL, DEEPSEEK_BASE_URL, DEEPSEEK_THINKING`;
+Env: DEEPSEEK_API_KEY (required without --mock), DEEPSEEK_VISION_MODEL, DEEPSEEK_DESIGN_MODEL,
+     DEEPSEEK_BASE_URL, DEEPSEEK_TIMEOUT_MS`;
 
 async function main(argv) {
   const [command, ...rest] = argv;
@@ -38,6 +40,7 @@ async function main(argv) {
       "skip-check": { type: "boolean", default: false },
       samples: { type: "boolean", default: false },
       quiet: { type: "boolean", default: false },
+      jobs: { type: "string", default: "1" },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -72,7 +75,7 @@ async function main(argv) {
   const client = values.mock ? createMockClient() : undefined;
   const summary = { ready: 0, rejected: 0, other: 0 };
 
-  for (const r of runs) {
+  const one = async (r) => {
     const started = Date.now();
     const result = await runDesignJob(
       {
@@ -86,14 +89,20 @@ async function main(argv) {
         skipCheck: values["skip-check"],
       },
       undefined,
-      { client, log: (m) => console.error(`  … ${m}`) },
+      { client, log: (m) => console.error(`  … ${r.name} ${m}`) },
     );
-    const secs = ((Date.now() - started) / 1000).toFixed(1);
+    report(r, result, ((Date.now() - started) / 1000).toFixed(1));
+  };
+  const report = (r, result, secs) => {
     if (result.status === "ready") {
       summary.ready++;
-      console.log(
-        `✔ ${r.name}: "${result.spec.title}" → ${result.file} (${secs}s)${result.fallback ? " [fallback default racer]" : ""}`,
-      );
+      console.log(`✔ ${r.name}: "${result.spec.title}" → ${result.file} (${secs}s)`);
+      if (result.critique?.scores)
+        console.log(
+          `  critique: ${Object.entries(result.critique.scores)
+            .map(([k, v]) => `${k} ${v}`)
+            .join(", ")}; ${result.critique.issues.length} issue(s) for the refine pass`,
+        );
       if (result.fixes.length) console.log(`  repaired: ${result.fixes.join("; ")}`);
       if (!values.quiet && runs.length === 1) console.log(JSON.stringify(result.spec, null, 2));
     } else if (result.status === "rejected") {
@@ -105,7 +114,12 @@ async function main(argv) {
       summary.other++;
       console.log(`! ${r.name}: ${result.status} — ${result.error ?? result.notes}`);
     }
-  }
+  };
+  const queue = [...runs];
+  const workers = Array.from({ length: Math.max(1, Number(values.jobs) || 1) }, async () => {
+    while (queue.length) await one(queue.shift());
+  });
+  await Promise.all(workers);
   if (runs.length > 1)
     console.log(
       `\n${summary.ready} ready, ${summary.rejected} rejected, ${summary.other} failed → ${outDir}`,

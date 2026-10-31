@@ -2,3 +2,6 @@ out/
 specs/
 .env
 node_modules/
+out-before/
+out-after/
+*.log

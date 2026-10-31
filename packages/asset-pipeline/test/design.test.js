@@ -5,42 +5,66 @@ import { join } from "node:path";
 import { clampRacerSpec, RacerSpecSchema } from "@bebbikart/shared";
 import { parseReply, runDesignJob } from "../src/design.js";
 import { createMockClient, MOCK_DESIGNS, SAMPLE_RUNS } from "../src/mock.js";
-import { buildMessages, EXAMPLES, SYSTEM_PROMPT } from "../src/prompt.js";
+import {
+  buildDesignMessages,
+  buildLookMessages,
+  designSystemPrompt,
+  EXAMPLES,
+  LOOK_PROMPT,
+} from "../src/prompt.js";
 
 const SAMPLES = join(import.meta.dir, "..", "samples");
 
 describe("prompt", () => {
   test("worked examples are valid RacerSpecs", () => {
-    expect(EXAMPLES.length).toBeGreaterThanOrEqual(3);
+    expect(EXAMPLES.length).toBeGreaterThanOrEqual(1);
     for (const { reply } of EXAMPLES) {
-      if (reply.spec) expect(RacerSpecSchema.safeParse(reply.spec).success).toBe(true);
+      const r = RacerSpecSchema.safeParse(reply.spec);
+      if (!r.success) console.error(r.error.issues);
+      expect(r.success).toBe(true);
+      expect(reply.spec.sound).toBeDefined();
     }
   });
 
-  test("system prompt lists the kit and the reply shape", () => {
+  test("prompts list the kit, the checks and the reply shapes", () => {
+    const design = designSystemPrompt();
     for (const word of [
       "animal4",
-      "rocket",
       "googly",
       "head_top",
       "ride_bottom",
-      "not_a_drawing",
       "drawingSticker",
+      "crayon",
+      "hooves",
+      "meow",
+      "featureMap",
     ]) {
-      expect(SYSTEM_PROMPT).toContain(word);
+      expect(design).toContain(word);
+    }
+    for (const word of ["not_a_drawing", "real_person", "importance", "unmistakable"]) {
+      expect(LOOK_PROMPT).toContain(word);
     }
   });
 
   test("messages carry both images and retry errors", () => {
-    const msgs = buildMessages({
-      characterDataUrl: "data:a",
-      vehicleDataUrl: "data:b",
-      previousErrors: ["bad eyes"],
-    });
-    const text = JSON.stringify(msgs);
-    expect(text).toContain("data:a");
-    expect(text).toContain("data:b");
-    expect(text).toContain("bad eyes");
+    const look = JSON.stringify(
+      buildLookMessages({
+        characterDataUrl: "data:a",
+        vehicleDataUrl: "data:b",
+        previousErrors: ["no features"],
+      }),
+    );
+    expect(look).toContain("data:a");
+    expect(look).toContain("data:b");
+    expect(look).toContain("no features");
+    const design = JSON.stringify(
+      buildDesignMessages({
+        observations: { character: { what: "cat" } },
+        previousErrors: ["bad eyes"],
+      }),
+    );
+    expect(design).toContain("cat");
+    expect(design).toContain("bad eyes");
   });
 });
 
@@ -93,7 +117,7 @@ describe("runDesignJob (mock)", () => {
         if (r.status === "ready") {
           const onDisk = JSON.parse(await readFile(r.file, "utf8"));
           expect(RacerSpecSchema.safeParse(onDisk).success).toBe(true);
-          expect(statuses).toEqual(["designing", "ready"]);
+          expect(statuses).toEqual(["looking", "designing", "critiquing", "refining", "ready"]);
         }
       }
       const files = (await readdir(out)).filter((f) => f.endsWith(".spec.json"));
@@ -130,12 +154,13 @@ describe("runDesignJob (mock)", () => {
   test("a broken first reply is retried with the errors", async () => {
     const out = await mkdtemp(join(tmpdir(), "bk-specs-"));
     const seen = [];
-    const good = JSON.stringify({ check: {}, spec: MOCK_DESIGNS.pair01.spec, notes: "" });
+    const mock = createMockClient();
     const client = {
       name: "fake",
-      async complete(messages) {
+      async complete(messages, opts, ctx) {
+        if (ctx.stage !== "design") return mock.complete(messages, opts, ctx);
         seen.push(JSON.stringify(messages));
-        return seen.length === 1 ? "" : good;
+        return seen.length === 1 ? "" : mock.complete(messages, opts, ctx);
       },
     };
     try {
@@ -177,5 +202,40 @@ describe("runDesignJob (mock)", () => {
     );
     expect(r.status).toBe("failed");
     expect(r.error).toContain("HTTP 503");
+  });
+
+  test("a design without sound, motion or tagline is sent back", async () => {
+    const out = await mkdtemp(join(tmpdir(), "bk-specs-"));
+    const mock = createMockClient();
+    let designs = 0;
+    const client = {
+      name: "fake",
+      async complete(messages, opts, ctx) {
+        if (ctx.stage !== "design") return mock.complete(messages, opts, ctx);
+        designs++;
+        const reply = JSON.parse(await mock.complete(messages, opts, ctx));
+        if (designs === 1) delete reply.spec.sound;
+        else expect(JSON.stringify(messages)).toContain("spec.sound is missing");
+        return JSON.stringify(reply);
+      },
+    };
+    try {
+      const r = await runDesignJob(
+        {
+          jobId: "s",
+          playerId: "t",
+          characterPath: join(SAMPLES, "pair01-character-cat.jpg"),
+          vehiclePath: join(SAMPLES, "pair01-vehicle-kart.jpg"),
+          outDir: out,
+        },
+        undefined,
+        { client },
+      );
+      expect(r.status).toBe("ready");
+      expect(r.spec.sound.horn).toBe("meow");
+      expect(designs).toBe(2);
+    } finally {
+      await rm(out, { recursive: true, force: true });
+    }
   });
 });

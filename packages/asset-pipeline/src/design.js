@@ -1,18 +1,34 @@
-// runDesignJob: photos → one DeepSeek check + design call → validated RacerSpec file (asset-pipeline.md §1, §5).
+// runDesignJob: photos → four DeepSeek passes → validated RacerSpec file (asset-pipeline.md §1, §5).
+//   look (vision: check + describe) → design (spec) → critique (vision: compare with the drawings) → refine (final spec)
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { clampRacerSpec } from "@bebbikart/shared";
+import { clampRacerSpec, JOB_STAGES } from "@bebbikart/shared";
 import { createDeepSeekClient } from "./deepseek.js";
 import { normaliseDrawing, UnsupportedFileError } from "./normalise.js";
-import { buildMessages, PROMPT_VERSION, REJECT_MESSAGES } from "./prompt.js";
+import {
+  buildCritiqueMessages,
+  buildDesignMessages,
+  buildLookMessages,
+  buildRefineMessages,
+  PROMPT_VERSION,
+  REJECT_MESSAGES,
+} from "./prompt.js";
 
 const IMAGES = /** @type {const} */ (["character", "vehicle"]);
+
+/** Progress stages reported through onStatus (JOB_STAGES in shared), then "ready" / "rejected". */
+export const STAGES = JOB_STAGES;
+
+/** Fields the designer must always write for new racers (optional in the stored schema for old ones). */
+const REQUIRED_NEW = ["tagline", "motion", "sound"];
+
+class StageFailed extends Error {}
 
 /**
  * @typedef {{ complete: (messages: object[], opts?: object, ctx?: object) => Promise<string>, name: string }} DesignClient
  * @param {{ jobId: string, playerId: string, characterPath: string, vehiclePath: string, outDir: string,
  *           skipCheck?: boolean, reroll?: boolean, name?: string }} input
- * @param {(s: string) => void} [onStatus]
+ * @param {(s: string) => void} [onStatus] called with each of STAGES, then "ready" or "rejected"
  * @param {{ client?: DesignClient, log?: (msg: string) => void }} [deps] client defaults to DeepSeek from env
  */
 export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
@@ -41,90 +57,132 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
     }
   }
 
-  // 2 · Check + design (one call, plus one retry if the reply doesn't validate)
-  onStatus("designing");
   const ctx = {
     characterPath: input.characterPath,
     vehiclePath: input.vehiclePath,
     reroll: !!input.reroll,
   };
-  let errors = null;
-  let notes = "";
-  let result = null;
-  for (let attempt = 1; attempt <= 2 && !result; attempt++) {
-    const messages = buildMessages({
-      characterDataUrl: imgs.character.dataUrl,
-      vehicleDataUrl: imgs.vehicle.dataUrl,
-      reroll: input.reroll,
-      previousErrors: errors,
-    });
-    let content;
-    try {
-      content = await client.complete(
-        messages,
-        { temperature: input.reroll ? 1.1 : 0.8 },
-        { ...ctx, attempt },
-      );
-    } catch (err) {
-      // No fallbacks: a failed call fails the job, loudly, with the reason.
-      return { status: "failed", error: `DeepSeek call failed: ${err.message}` };
-    }
+  const timings = {};
 
-    const reply = parseReply(content);
-    if (!reply.ok) {
-      errors = [reply.error];
-      log(`attempt ${attempt}: ${reply.error}`);
-      continue;
-    }
-    notes = typeof reply.value.notes === "string" ? reply.value.notes : "";
-
-    // Rejections only count on the first attempt and when the facilitator hasn't approved the photos.
-    if (!input.skipCheck) {
-      for (const kind of IMAGES) {
-        const c = reply.value.check?.[kind];
-        if (c && c.ok === false && c.reason && c.reason in REJECT_MESSAGES)
-          return reject(c.reason, kind, c.seen);
+  /**
+   * One pass: call, parse, validate; one retry with the validation errors. Throws StageFailed.
+   * @param {string} stage
+   * @param {(errors: string[] | null) => object[]} messages
+   * @param {object} opts
+   * @param {(value: any) => { ok: true, value: any } | { ok: false, errors: string[] }} validate
+   */
+  async function pass(stage, messages, opts, validate) {
+    const started = Date.now();
+    let errors = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      let content;
+      try {
+        content = await client.complete(messages(errors), opts, { ...ctx, stage, attempt });
+      } catch (err) {
+        // No fallbacks: a failed call fails the job, loudly, with the reason.
+        throw new StageFailed(`DeepSeek ${stage} call failed: ${err.message}`);
       }
+      const reply = parseReply(content);
+      const v = reply.ok ? validate(reply.value) : { ok: false, errors: [reply.error] };
+      if (v.ok) {
+        timings[stage] = Date.now() - started;
+        log(`${stage}: ok in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+        return v.value;
+      }
+      errors = v.errors;
+      log(`${stage} attempt ${attempt}: ${errors.slice(0, 3).join("; ")}`);
     }
-
-    const clamped = clampRacerSpec(reply.value.spec);
-    if (clamped.ok) {
-      result = { spec: clamped.spec, fixes: clamped.fixes, attempts: attempt };
-    } else {
-      errors =
-        reply.value.spec == null ? ['"spec" is missing: design the racer anyway'] : clamped.errors;
-      log(
-        `attempt ${attempt}: ${errors.length} validation error(s): ${errors.slice(0, 3).join("; ")}`,
-      );
-    }
+    throw new StageFailed(
+      `DeepSeek ${stage} reply was invalid twice: ${(errors ?? []).slice(0, 3).join("; ")}`,
+    );
   }
 
-  // 3 · Still broken → fail. No default racer: the drawing must drive the racer or we say so.
-  if (!result) {
+  try {
+    // 2 · Look: check both photos and describe them.
+    onStatus("looking");
+    const look = await pass(
+      "look",
+      (errors) =>
+        buildLookMessages({
+          characterDataUrl: imgs.character.dataUrl,
+          vehicleDataUrl: imgs.vehicle.dataUrl,
+          approved: !!input.skipCheck,
+          previousErrors: errors,
+        }),
+      { vision: true, effort: "max", temperature: 0.3 },
+      (v) => validateLook(v, !!input.skipCheck),
+    );
+    if (look.rejected) return reject(look.rejected.reason, look.rejected.image, look.rejected.seen);
+    const observations = { character: look.value.character, vehicle: look.value.vehicle };
+
+    // 3 · Design the racer from the description.
+    onStatus("designing");
+    const design = await pass(
+      "design",
+      (errors) =>
+        buildDesignMessages({ observations, reroll: input.reroll, previousErrors: errors }),
+      { effort: "high", temperature: input.reroll ? 1.1 : 0.9 },
+      validateDesign,
+    );
+
+    // 4 · Critique the design against the real drawings.
+    onStatus("critiquing");
+    const critique = await pass(
+      "critique",
+      () =>
+        buildCritiqueMessages({
+          characterDataUrl: imgs.character.dataUrl,
+          vehicleDataUrl: imgs.vehicle.dataUrl,
+          observations,
+          design: { featureMap: design.featureMap, spec: design.spec, notes: design.notes },
+        }),
+      { vision: true, effort: "high", temperature: 0.4 },
+      validateCritique,
+    );
+
+    // 5 · Refine: apply the critique.
+    onStatus("refining");
+    const final = await pass(
+      "refine",
+      (errors) =>
+        buildRefineMessages({
+          observations,
+          design: { featureMap: design.featureMap, spec: design.spec, notes: design.notes },
+          critique,
+          previousErrors: errors,
+        }),
+      { effort: "high", temperature: 0.7 },
+      validateDesign,
+    );
+
+    const file = await writeSpec(input.outDir, name, final.spec, {
+      jobId: input.jobId,
+      playerId: input.playerId,
+      model: client.name,
+      promptVersion: PROMPT_VERSION,
+      reroll: !!input.reroll,
+      notes: final.notes,
+      fixes: final.fixes,
+      timingsMs: timings,
+      observations,
+      featureMap: final.featureMap,
+      firstDesign: design.spec,
+      critique,
+    });
+    onStatus("ready");
     return {
-      status: "failed",
-      error: `DeepSeek reply was invalid twice: ${(errors ?? []).slice(0, 3).join("; ")}`,
+      status: "ready",
+      spec: final.spec,
+      fixes: final.fixes,
+      notes: final.notes,
+      critique,
+      timingsMs: timings,
+      file,
     };
+  } catch (err) {
+    if (err instanceof StageFailed) return { status: "failed", error: err.message };
+    throw err;
   }
-
-  const file = await writeSpec(input.outDir, name, result.spec, {
-    jobId: input.jobId,
-    playerId: input.playerId,
-    model: client.name,
-    promptVersion: PROMPT_VERSION,
-    reroll: !!input.reroll,
-    notes,
-    ...result,
-    spec: undefined,
-  });
-  onStatus("ready");
-  return {
-    status: "ready",
-    spec: result.spec,
-    fixes: result.fixes,
-    notes,
-    file,
-  };
 
   function reject(reason, image, seen) {
     onStatus("rejected");
@@ -136,6 +194,60 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       ...(seen ? { seen } : {}),
     };
   }
+}
+
+/** Look reply → { ok, value: { rejected } | { value: { character, vehicle } } }. */
+function validateLook(v, approved) {
+  const errors = [];
+  if (!approved) {
+    for (const kind of IMAGES) {
+      const c = v.check?.[kind];
+      if (!c || typeof c.ok !== "boolean") errors.push(`check.${kind}.ok is missing`);
+      else if (c.ok === false) {
+        if (!(c.reason in REJECT_MESSAGES))
+          errors.push(
+            `check.${kind}.reason must be one of ${Object.keys(REJECT_MESSAGES).join(", ")}`,
+          );
+        else
+          return { ok: true, value: { rejected: { reason: c.reason, image: kind, seen: c.seen } } };
+      }
+    }
+  }
+  for (const kind of IMAGES) {
+    const d = v[kind];
+    if (!d || typeof d !== "object")
+      errors.push(`"${kind}" description is missing: describe the drawing`);
+    else if (!Array.isArray(d.features) || d.features.length === 0)
+      errors.push(`${kind}.features is empty: list every visible feature`);
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, value: { value: v } };
+}
+
+/** Design/refine reply → clamped spec with the fields new racers need. */
+function validateDesign(v) {
+  if (v.spec == null) return { ok: false, errors: ['"spec" is missing: design the racer'] };
+  const clamped = clampRacerSpec(v.spec);
+  if (!clamped.ok) return { ok: false, errors: clamped.errors };
+  const missing = REQUIRED_NEW.filter((k) => clamped.spec[k] == null);
+  if (missing.length)
+    return { ok: false, errors: missing.map((k) => `spec.${k} is missing: new racers need it`) };
+  return {
+    ok: true,
+    value: {
+      spec: clamped.spec,
+      fixes: clamped.fixes,
+      featureMap: Array.isArray(v.featureMap) ? v.featureMap : [],
+      notes: typeof v.notes === "string" ? v.notes : "",
+    },
+  };
+}
+
+function validateCritique(v) {
+  if (!Array.isArray(v.issues)) return { ok: false, errors: ['"issues" must be a list'] };
+  return {
+    ok: true,
+    value: { scores: v.scores ?? {}, issues: v.issues, verdict: v.verdict ?? "" },
+  };
 }
 
 /** Parses the model's JSON reply (tolerates code fences and surrounding text). */
