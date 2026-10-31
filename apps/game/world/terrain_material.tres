@@ -1,0 +1,5 @@
+[gd_resource type="Terrain3DMaterial" format=3]
+
+[resource]
+world_background = 2
+macro_variation_enabled = true

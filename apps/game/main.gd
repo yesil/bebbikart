@@ -20,7 +20,8 @@ const MockNet = preload("res://net/mock_net.gd")
 const ServerNet = preload("res://net/server_net.gd")
 const RosterAssets = preload("res://net/roster_assets.gd")
 const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
-const WorldBuilder = preload("res://world/world_builder.gd")
+const WORLD_SCENE := "res://world/course_world.tscn"
+const DECOR_SCENE := "res://world/decor.tscn"
 const RacerView = preload("res://world/racer_view.gd")
 const WeatherFx = preload("res://world/weather_fx.gd")
 const CameraRig = preload("res://world/camera_rig.gd")
@@ -104,10 +105,17 @@ func _build_scene() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 150.0
 	add_child(sun)
-	WorldBuilder.new().build(course, self)
+	# Baked from course.gd by tools/bake_world.gd; hand-placed landmarks live in decor.tscn.
+	var world: Node3D = (load(WORLD_SCENE) as PackedScene).instantiate()
+	add_child(world)
+	if ResourceLoader.exists(DECOR_SCENE):
+		add_child((load(DECOR_SCENE) as PackedScene).instantiate())
 	camera = CameraRig.new()
 	add_child(camera)
 	camera.make_current()
+	var terrain := world.get_node_or_null("Terrain")
+	if terrain != null:
+		terrain.call("set_camera", camera)
 	camera.mode = {"follow": CameraRig.Mode.FOLLOW, "wide": CameraRig.Mode.WIDE, "forks": CameraRig.Mode.FORKS}.get(args.get("cam", "follow"), CameraRig.Mode.FOLLOW)
 	camera.fork_shots = [
 		[Vector3(18, 9, 60), Vector3(3, 0, 78)],      # ramp: jump vs around

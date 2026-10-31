@@ -1,0 +1,22 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://world/materials/road.gdshader" id="1_6268e"]
+[ext_resource type="Texture2D" path="res://assets/textures/Planks037A/Planks037A_1K-JPG_Color.jpg" id="2_x6xup"]
+[ext_resource type="Texture2D" path="res://assets/textures/Planks037A/Planks037A_1K-JPG_NormalGL.jpg" id="3_r4pjj"]
+[ext_resource type="Texture2D" path="res://assets/textures/Planks037A/Planks037A_1K-JPG_Roughness.jpg" id="4_xe4ee"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_6268e")
+shader_parameter/albedo_tex = ExtResource("2_x6xup")
+shader_parameter/normal_tex = ExtResource("3_r4pjj")
+shader_parameter/rough_tex = ExtResource("4_xe4ee")
+shader_parameter/tint = Color(1, 0.95, 0.88, 1)
+shader_parameter/tile_m = 2.2
+shader_parameter/roughness_bias = 0.0
+shader_parameter/edge_lines = false
+shader_parameter/line_color = null
+shader_parameter/line_inset = null
+shader_parameter/line_width = null
+shader_parameter/shoulder_color = null
+shader_parameter/depth_pull = 0.0

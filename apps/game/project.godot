@@ -16,3 +16,18 @@ window/size/viewport_height=1080
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/terrain_3d/plugin.cfg", "res://addons/road-generator/plugin.cfg", "res://addons/proton_scatter/plugin.cfg")
+
+[shader_globals]
+
+road_wetness={
+"type": "float",
+"value": 0.0
+}
+wind_strength={
+"type": "float",
+"value": 0.0
+}
+wind_dir={
+"type": "vec2",
+"value": Vector2(1, 0)
+}

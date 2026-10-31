@@ -7,3 +7,6 @@ out/
 .DS_Store
 apps/game/.godot/
 *.import
+
+# Godot import settings for game assets (compression, mipmaps, normal maps) must travel with the repo.
+!apps/game/assets/**/*.import

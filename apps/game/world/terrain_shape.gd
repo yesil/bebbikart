@@ -53,7 +53,8 @@ func _init(p_course: Course, p_land: Landscape, p_rect := Landscape.MAP_RECT, p_
 	noise.frequency = 0.018
 	noise.fractal_octaves = 3
 	patch.seed = 23
-	patch.frequency = 0.06
+	patch.frequency = 0.025
+	patch.fractal_octaves = 2
 
 
 func build() -> void:
@@ -208,14 +209,12 @@ func _natural(p: Vector2) -> float:
 	var vhw: float = vi[1]
 	if vd < vhw * 1.25:
 		y = lerpf(float(vi[2]), y, smoothstep(0.2, 1.25, vd / vhw))
-	# Stream channel.
+	# Stream channel: a constant-depth cut that follows the ground down to the pond.
 	var sd := land.stream_dist(p)
 	var sw := Landscape.STREAM_HALF_WIDTH
 	if sd < sw + 5.0:
-		var bank := maxf(minf(y, 0.9), Landscape.STREAM_LEVEL + 0.25)
-		y = lerpf(Landscape.STREAM_BED, bank if sd < sw + 2.0 else y, smoothstep(sw * 0.6, sw + 2.0, sd))
-		if sd >= sw + 2.0:
-			y = lerpf(bank, y, smoothstep(sw + 2.0, sw + 5.0, sd))
+		var bed := stream_bed_at(p, y)
+		y = lerpf(bed, y, smoothstep(sw * 0.5, sw + 5.0, sd))
 	# Pond basin and banks.
 	var shore := land.pond_shore_dist(p)
 	if land.in_pond(p):
@@ -223,6 +222,12 @@ func _natural(p: Vector2) -> float:
 	elif shore < 7.0:
 		y = lerpf(Landscape.POND_LEVEL + 0.12, y, smoothstep(0.0, 7.0, shore))
 	return y
+
+
+## Stream bed height under p: ~1.1 m below the surrounding ground, never above the pond-side
+## bed level near the bridge so the water reads as one level there.
+func stream_bed_at(p: Vector2, ground: float) -> float:
+	return minf(ground - 1.1, Landscape.STREAM_BED + maxf(0.0, ground - 0.9) * 0.85)
 
 
 static func _rect_dist(r: Rect2, p: Vector2) -> float:
@@ -249,19 +254,19 @@ func _paint(i: int, j: int) -> void:
 	var b := Layer.GRASS
 	var o := Layer.GRASS_DIRT
 	# Natural patchiness of worn grass.
-	var bl := clampf(patch.get_noise_2d(p.x, p.y) * 0.9 - 0.05, 0.0, 0.55)
+	var bl := smoothstep(0.15, 0.7, patch.get_noise_2d(p.x, p.y)) * 0.45
 	var e := road_edge[k]
 	var slope := slope_at(i, j)
-	if e < SHOULDER + 0.4 and structure[k] == 0:
+	if e < 0.6 and structure[k] == 0:
 		b = Layer.GRAVEL
 		o = Layer.GRASS_DIRT
-		bl = smoothstep(SHOULDER - 0.2, SHOULDER + 0.4, e) * 0.6
-	elif e < SHOULDER + 3.5:
-		o = Layer.GRAVEL if e < SHOULDER + 1.5 else Layer.GRASS_DIRT
-		bl = maxf(bl, 1.0 - smoothstep(SHOULDER + 0.4, SHOULDER + 3.5, e))
-	if slope > 0.55:
+		bl = smoothstep(0.0, 0.6, e) * 0.7
+	elif e < 3.0:
+		o = Layer.GRASS_DIRT
+		bl = maxf(bl, 1.0 - smoothstep(0.6, 3.0, e))
+	if slope > 0.75:
 		o = Layer.ROCK
-		bl = maxf(bl, smoothstep(0.55, 0.9, slope))
+		bl = maxf(bl, smoothstep(0.75, 1.2, slope) * 0.8)
 	var pp := Vector2(p.x, p.y)
 	var shore := land.pond_shore_dist(pp)
 	if land.in_pond(pp):
