@@ -353,12 +353,14 @@ func _update_board(order: Array, sim) -> void:
 				var r = h["racer"]
 				if r.looping:
 					info = I18n.f("hud.lap", [mini(r.lap + 1, laps_per_run), laps_per_run])
+					if r.pit_requested:
+						info = I18n.f("hud.lap_pit", [r.lap + 1])  # finishes at the next line
 					time = "%.1f" % (r.lap_ms() / 1000.0)
 				else:
 					info = I18n.t("section." + String(r.section))
 					time = "%.1f" % (r.elapsed_ms() / 1000.0)
 			"finished":
-				info = I18n.t("hud.finished")
+				info = I18n.t("hud.best_lap") if h.has("racer") and h["racer"].looping else I18n.t("hud.finished")
 				time = "%.2f" % (int(h["result_ms"]) / 1000.0)
 			_:
 				info = I18n.t("hud.oops")
