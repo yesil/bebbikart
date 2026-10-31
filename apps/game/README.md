@@ -197,7 +197,9 @@ With two or more racers on the course the follow camera takes turns: every 8 s (
 `--cam-cycle`) it cuts to the racer who has been off camera the longest, and a new racer counts
 from its start, so everyone gets a moment. It never cuts mid-jump (it waits up to 2 s for the
 landing), never cuts to a racer about to finish, and cuts at once when the followed racer leaves
-the course. A cut to a racer more than 35 m away jumps there; a closer one swoops.
+the course. A cut to a racer more than 35 m away jumps there; a closer one swoops. Karts parked
+on the start grid during the countdown count as on the course, so the camera is behind the grid
+while the lights count down (the second row, out of sight, is left out).
 
 - **By hand:** Tab / Shift+Tab cut to the next / previous racer in start order. A stops the
   switching (the name tag says STAYING) and starts it again.

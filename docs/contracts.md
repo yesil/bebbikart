@@ -485,7 +485,7 @@ interface RunStart {
 
 The **game is the authority** for timing and outcomes. The server trusts these messages and records them.
 
-**Camera.** The big screen's camera director takes turns between the racers on the course (every 8 s by default, set in the game's options menu). A phone's `phone.watch` reaches the game as `run.watch` for the player's current run (ignored without one); the game queues that racer for one of the next cuts, at most one cut every 3 s, so taps from several phones can't make the camera flicker. On every cut the game sends `game.camera`, and the server tells every phone with `camera.updated` (`playerId` added from the run), so the racer on camera can show "You're on the big screen!".
+**Camera.** The big screen's camera director takes turns between the racers on the course (every 8 s by default, set in the game's options menu). A phone's `phone.watch` reaches the game as `run.watch` for the player's current run (ignored without one; a run parked on the start grid during the countdown counts); the game queues that racer for one of the next cuts, at most one cut every 3 s, so taps from several phones can't make the camera flicker. On every cut the game sends `game.camera`, and the server tells every phone with `camera.updated` (`playerId` added from the run), so the racer on camera can show "You're on the big screen!".
 
 ## 8. Coach tips (`packages/shared/src/coach.js`)
 

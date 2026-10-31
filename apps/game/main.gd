@@ -638,7 +638,7 @@ func _handle(msg: Dictionary) -> void:
 		Messages.RUN_WATCH:
 			# A phone's "Show me on the big screen": its racer gets one of the next cuts.
 			var wr: Racer = sim.by_run.get(pl["runId"])
-			if wr != null and wr.state == "racing" and director.request(pl["runId"]):
+			if wr != null and (wr.state == "racing" or sim.on_grid(wr.run_id)) and director.request(pl["runId"]):
 				_result(I18n.f("log.watch", [nicks.get(wr.player_id, "?")]))
 		Messages.ROSTER_UPDATED:
 			_on_roster(pl)
@@ -759,7 +759,7 @@ func _process(delta: float) -> void:
 	var racing: Array = sim.racers.duplicate()
 	# On a loop, laps first, then position in the lap.
 	racing.sort_custom(func(a, b): return a.lap + a.progress() > b.lap + b.progress())
-	director.update(delta, sim.racers)
+	director.update(delta, _camera_pool())
 	if director.run_id != follow_run:
 		follow_run = director.run_id
 		_camera_cut()
@@ -783,6 +783,17 @@ func _process(delta: float) -> void:
 		_screenshot("%s/t%05.1f_r%d.jpg" % [args["shots"], run_time, sim.racers.size()])
 	if dur > 0.0 and run_time >= dur:
 		_quit()
+
+
+## Who the camera can be on: the racers on the track, plus the karts parked on the start grid
+## during a countdown (they are visible but not in sim.racers until green). Karts waiting out of
+## sight in the second row are left out.
+func _camera_pool() -> Array:
+	var pool: Array = sim.racers.duplicate()
+	for r in sim.queue:
+		if sim.on_grid(r.run_id):
+			pool.append(r)
+	return pool
 
 
 ## The director cut to another racer (or to nobody): their name pops up, and the server hears
