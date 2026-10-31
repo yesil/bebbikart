@@ -327,13 +327,13 @@ func _process(delta: float) -> void:
 	var bounce := absf(sin(_t * (7.0 + speed * 0.5))) * 0.025 * bounciness * moving
 	if airborne:
 		bounce = 0.0
-	var idle := sin(_t * 2.2) * 0.008 * bounciness
+	var idle := (0.5 + 0.5 * sin(_t * 2.2)) * 0.012 * bounciness  # bobs up from the ground, never into it
 	var hop := 0.0
 	var pitch := 0.06 if boost else (0.1 if airborne else 0.0)
 	if _celebrate_t > 0.0:
 		_celebrate_t -= dt
 		var ph := fmod(_celebrate_t, HOP_TIME) / HOP_TIME
-		hop = sin(ph * PI) * 0.28 * bounciness
+		hop = maxf(0.0, sin(ph * PI)) * 0.28 * bounciness  # the last frame's phase is just below 0
 	var yaw := 0.0
 	if _fail_t > 0.0:
 		_fail_t -= dt
@@ -347,7 +347,7 @@ func _process(delta: float) -> void:
 		sq = Vector3(1.0 + s, 1.0 - s, 1.0 + s)
 	_motion(moving)
 	xf.basis = Basis.from_euler(Vector3(pitch, yaw, -_lean_s * 0.22 + _mo_roll)).scaled(sq)
-	xf.origin = Vector3(_mo_x, bounce + idle + hop + _mo_y + _ground_lift(xf.basis), 0)
+	xf.origin = Vector3(_mo_x, maxf(0.0, bounce + idle + hop + _mo_y) + _ground_lift(xf.basis), 0)
 	rig.transform = xf
 	gestures.update(dt)
 	if _sad_t > 0.0:
@@ -377,7 +377,7 @@ func _motion(moving: float) -> void:
 			_mo_y = absf(sin(_t * 4.5)) * 0.045 * k
 			_mo_head_roll = sin(_t * 4.5) * 0.06 * k
 		"smooth":
-			_mo_y = sin(_t * 1.2) * 0.01 * k
+			_mo_y = (0.5 + 0.5 * sin(_t * 1.2)) * 0.015 * k
 			_mo_head_yaw = sin(_t * 0.6) * 0.1 * k
 		"wobbly":
 			_mo_roll = sin(_t * 5.0) * 0.07 * k
@@ -394,7 +394,6 @@ func _motion(moving: float) -> void:
 			_mo_head_yaw = sin(_t * 0.5) * 0.12 * k
 		"sneaky":
 			_mo_char_pitch = 0.16 * k
-			_mo_y = -0.02 * k
 			_mo_head_yaw = sin(_t * 0.7) * sin(_t * 0.31) * 0.4 * k
 
 
