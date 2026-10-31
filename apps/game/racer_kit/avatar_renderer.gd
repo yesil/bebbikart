@@ -95,7 +95,8 @@ func render_all(spec: Dictionary, player_id: String, drawing: Texture2D = null) 
 
 
 ## Renders only the hero image of a spec to `png_path`. Returns the absolute path, or "" on failure.
-func render_hero(spec: Dictionary, png_path: String, drawing: Texture2D = null) -> String:
+## view "side" looks at the racer's left flank instead of the 3/4 front view.
+func render_hero(spec: Dictionary, png_path: String, drawing: Texture2D = null, view := "hero") -> String:
 	if not can_render():
 		push_error("AvatarRenderer: cannot render on a headless display")
 		return ""
@@ -108,7 +109,7 @@ func render_hero(spec: Dictionary, png_path: String, drawing: Texture2D = null) 
 	racer.set_process(false)
 	_vp.add_child(racer)
 	racer.snap_pose("happy")
-	_frame_hero(racer)
+	_frame_hero(racer, Vector3(-1.0, 0.12, 0.0) if view == "side" else HERO_DIR)
 	var img := await _shot(HERO_SIZE)
 	racer.queue_free()
 	if img == null:
@@ -119,12 +120,14 @@ func render_hero(spec: Dictionary, png_path: String, drawing: Texture2D = null) 
 	return path
 
 
-func _frame_hero(racer: ToyRacer) -> void:
+const HERO_DIR := Vector3(-0.62, 0.38, -0.69)  # 3/4 view from front-right-ish
+
+
+func _frame_hero(racer: ToyRacer, dir := HERO_DIR) -> void:
 	var box := RacerBuilder._aabb(racer, Transform3D.IDENTITY)
 	var c := box.get_center()
 	var radius := box.size.length() * 0.5
-	var dir3 := Vector3(-0.62, 0.38, -0.69).normalized()  # 3/4 view from front-right-ish
-	_cam.look_at_from_position(c + dir3 * radius / tan(deg_to_rad(_cam.fov * 0.5)) * 1.05, c)
+	_cam.look_at_from_position(c + dir.normalized() * radius / tan(deg_to_rad(_cam.fov * 0.5)) * 1.05, c)
 
 
 func _shot(size: int) -> Image:

@@ -13,6 +13,7 @@ import {
   PROMPT_VERSION,
   REJECT_MESSAGES,
 } from "./prompt.js";
+import { createGodotRenderer } from "./render.js";
 
 const IMAGES = /** @type {const} */ (["character", "vehicle"]);
 
@@ -58,7 +59,10 @@ class StageFailed extends Error {}
  * @param {{ jobId: string, playerId: string, characterPath: string, vehiclePath: string, outDir: string,
  *           skipCheck?: boolean, reroll?: boolean, name?: string }} input
  * @param {(s: string) => void} [onStatus] called with each of STAGES, then "ready" or "rejected"
- * @param {{ client?: DesignClient, log?: (msg: string) => void }} [deps] client defaults to DeepSeek from env
+ * @param {{ client?: DesignClient, log?: (msg: string) => void, renderer?: { name: string, render: Function } | null }} [deps]
+ *   client defaults to DeepSeek from env. renderer builds the first design in Godot so the critique
+ *   sees the real racer; it defaults to the Godot renderer, except with an injected client (tests,
+ *   --mock), where the default is none. A failing render fails the job.
  */
 export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
   const log = deps.log ?? (() => {});
@@ -85,6 +89,9 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       return { status: "failed", error: err.message };
     }
   }
+
+  const renderer =
+    deps.renderer !== undefined ? deps.renderer : deps.client ? null : createGodotRenderer();
 
   const ctx = {
     characterPath: input.characterPath,
@@ -154,8 +161,19 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       validateDesign,
     );
 
-    // 4 · Critique the design against the real drawings.
+    // 4 · Critique the design against the real drawings (and the racer it builds, when rendered).
     onStatus("critiquing");
+    let renders = null;
+    if (renderer) {
+      const started = Date.now();
+      try {
+        renders = await renderer.render(design.spec);
+      } catch (err) {
+        throw new StageFailed(`render for the critique failed: ${err.message}`);
+      }
+      timings.render = Date.now() - started;
+      log(`render: ok in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+    }
     const critique = await pass(
       "critique",
       () =>
@@ -164,6 +182,7 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
           vehicleDataUrl: imgs.vehicle.dataUrl,
           observations,
           design: { featureMap: design.featureMap, spec: design.spec, notes: design.notes },
+          renders,
         }),
       { vision: true, effort: DESIGN_EFFORT.critique, temperature: 0.4 },
       validateCritique,

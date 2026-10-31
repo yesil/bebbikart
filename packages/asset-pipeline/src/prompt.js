@@ -285,8 +285,10 @@ export function buildDesignMessages({ observations, reroll = false, previousErro
 
 export function critiqueSystemPrompt() {
   return `You are the art director of BebbiKart, a racing game for children aged 6–10. A designer turned a child's two
-drawings (image 1 = CHARACTER, image 2 = VEHICLE) into a 3D toy racer spec, built from a fixed toy kit. Compare the
-spec with the drawings and be demanding: would the child instantly recognise their own drawing? Is the racer colourful,
+drawings (image 1 = CHARACTER, image 2 = VEHICLE) into a 3D toy racer spec, built from a fixed toy kit. When images 3
+and 4 are given, they are renders of the racer that spec builds: compare what you SEE there with the drawings (parts
+that float, hide the driver, are too small to notice, wrong colours), then use the spec to name the fields to change.
+Be demanding: would the child instantly recognise their own drawing? Is the racer colourful,
 full of personality and different from every other racer?
 
 Check, one by one:
@@ -300,6 +302,8 @@ Check, one by one:
 - proportions and readability: exaggerations kept? Extras big enough to see, placed sensibly (ears on the head side,
   horns on top), not floating or buried?
 - fun: a little imaginative touch that fits the story?
+A side-view drawing shows one side only: two drawn wheels on a car mean four wheels, keep count 4.
+A pencil-only drawing must still give a colourful racer, never a grey one.
 Flag any extra that hides the driver (boxes or blocks over the seat, fake cabins): suggest ride.base "car" or
 removing it. Only suggest fixes the kit can do (catalog below). Be concrete: name the spec field and the new value.
 
@@ -317,7 +321,24 @@ ${catalogText()}
 ${schemaText()}`;
 }
 
-export function buildCritiqueMessages({ characterDataUrl, vehicleDataUrl, observations, design }) {
+export function buildCritiqueMessages({
+  characterDataUrl,
+  vehicleDataUrl,
+  observations,
+  design,
+  renders = null,
+}) {
+  const built = renders
+    ? [
+        {
+          type: "text",
+          text: "Image 3: the 3D toy racer this spec builds today, front 3/4 view. Judge THIS, not the numbers.",
+        },
+        { type: "image_url", image_url: { url: renders.front } },
+        { type: "text", text: "Image 4: the same racer from its left side." },
+        { type: "image_url", image_url: { url: renders.side } },
+      ]
+    : [];
   return [
     { role: "system", content: critiqueSystemPrompt() },
     {
@@ -327,6 +348,7 @@ export function buildCritiqueMessages({ characterDataUrl, vehicleDataUrl, observ
         { type: "image_url", image_url: { url: characterDataUrl } },
         { type: "text", text: "Image 2: VEHICLE drawing" },
         { type: "image_url", image_url: { url: vehicleDataUrl } },
+        ...built,
         {
           type: "text",
           text: [
@@ -352,7 +374,7 @@ export function buildRefineMessages({ observations, design, critique, previousEr
     JSON.stringify(design),
     "The art director looked at the real drawings and reviewed your design:",
     JSON.stringify(critique, null, 1),
-    'Improve the design: apply every "must" and "should" fix, and the "could" fixes that make the racer better. Keep what already works. Reply with the complete JSON again (featureMap, spec, notes).',
+    'Improve the design: apply every "must" and "should" fix, and the "could" fixes that make the racer better. Keep what already works. Never move a main colour away from the drawing: the ride's main colour stays the vehicle's main drawn colour (add stripes with patterns or extras instead), and the character keeps its own. Reply with the complete JSON again (featureMap, spec, notes).',
   ];
   if (previousErrors?.length) ask.push(retryText(previousErrors));
   return [
