@@ -1,14 +1,19 @@
 class_name ToyRacer
 extends Node3D
 ## A built toy racer (see RacerBuilder.build). Purely presentational: the sim/presentation
-## layer drives it each frame with set_state() and fires one-shots (bump, land, fail,
-## celebrate, wave). Moods follow the state automatically unless locked with set_mood().
+## layer drives it each frame with set_state() (or the fields directly) and fires one-shots
+## (bump, land, fail, celebrate, wave, gesture). Moods follow the state automatically unless
+## locked with set_mood(). The character's gestures, look, lean, breathing and swinging hair
+## are racer_gestures.gd (`gestures`).
 ##
 ## Hierarchy: ToyRacer > Rig (lean/bounce/squash) > Model (grounded) > Ride, Character.
 ## Animated nodes are found by metadata: wheel_spin, leg_swing, wing_flap, spin, flicker,
 ## tail_wag (see KitRideParts).
 
 signal mood_changed(mood: String)
+
+## By path, not class name: racer.gd must load even before Godot's class cache knows the script.
+const Gestures = preload("res://racer_kit/racer_gestures.gd")
 
 var spec: Dictionary = {}
 var bounciness := 1.0
@@ -21,6 +26,14 @@ var speed := 0.0
 var lean := 0.0
 var airborne := false
 var boost := false
+var turn := 0.0           # yaw rate, rad/s (+ = turning left)
+var ahead_turn := 0.0     # heading change over the road ahead, rad (+ = left): the head looks into it
+var vy := 0.0             # vertical speed, m/s
+var big_air := false      # airborne off a ramp (vs. a hop)
+var in_water := false
+var slipping := false
+var rain := 0.0           # 0..1
+var wind := Vector3.ZERO  # world-space wind (sim weather wind_vec(), strength 0..~1)
 
 var rig: Node3D
 var model: Node3D
@@ -30,9 +43,9 @@ var arm_l: Node3D
 var arm_r: Node3D
 var face: RacerFace
 var name_tag: Label3D
+var gestures := Gestures.new()
 
 var _anim := {}  # meta name -> Array[Node3D]
-var _arm_rest := {}
 var _t := 0.0
 var _lean_s := 0.0
 var _mood := "happy"
@@ -42,12 +55,19 @@ var _squash_k := 0.0
 var _fail_t := 0.0
 var _celebrate_t := 0.0
 var _celebrate_hops := 0
-var _wave_t := 0.0
 var _sad_t := 0.0
+var _foot := AABB()       # parts touching the ground, in Rig space (keeps a tilted rig on the ground)
+# Idle personality (motion.style) offsets, written every frame by _motion().
+var _mo_x := 0.0
+var _mo_y := 0.0
+var _mo_roll := 0.0
+var _mo_char_pitch := 0.0
+var _mo_head_roll := 0.0
+var _mo_head_yaw := 0.0
+var _mo_head_pitch := 0.0
 
 const FAIL_TIME := 1.1
 const HOP_TIME := 0.42
-const WAVE_TIME := 1.6
 
 
 ## Called by RacerBuilder once the node tree exists.
@@ -60,19 +80,54 @@ func setup(refs: Dictionary) -> void:
 	arm_r = refs.arm_r
 	face = refs.face
 	name_tag = refs.get("name_tag")
-	for a in [arm_l, arm_r]:
-		if a:
-			_arm_rest[a] = a.basis
 	_anim.clear()
 	_collect(model)
 	_t = randf() * 10.0
+	_foot = _footprint()
+	if not gestures.setup(self):
+		# A builder bug (a node it always makes is missing): say so on the racer too.
+		var l := Label3D.new()
+		l.name = "GestureError"
+		l.text = gestures.error
+		l.modulate = Color(1.0, 0.25, 0.2)
+		l.font_size = 32
+		l.pixel_size = 0.006
+		l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		l.no_depth_test = true
+		l.position = Vector3(0, 2.4, 0)
+		rig.add_child(l)
+
+
+## Bounds (Rig space) of the meshes that reach the ground: wheels, feet, hull bottoms.
+func _footprint() -> AABB:
+	var all := RacerBuilder._aabb(rig, Transform3D.IDENTITY)
+	var out := AABB()
+	var first := true
+	var stack: Array = [[rig, Transform3D.IDENTITY]]
+	while not stack.is_empty():
+		var it: Array = stack.pop_back()
+		for c in (it[0] as Node).get_children():
+			if not c is Node3D or c is Label3D:
+				continue
+			var xf: Transform3D = it[1] * c.transform
+			if c is MeshInstance3D and c.mesh:
+				var b: AABB = xf * c.mesh.get_aabb()
+				if b.position.y < all.position.y + 0.04:
+					out = b if first else out.merge(b)
+					first = false
+			stack.append([c, xf])
+	return out
+
+
+const ANIM_KEYS := ["wheel_spin", "leg_swing", "wing_flap", "spin", "flicker", "tail_wag", "jiggle"]
 
 
 func _collect(n: Node) -> void:
-	for key in ["wheel_spin", "leg_swing", "wing_flap", "spin", "flicker", "tail_wag", "jiggle"]:
+	if n == model:
+		for key in ANIM_KEYS:
+			_anim[key] = []  # every key present, so _process looks them up without allocating
+	for key in ANIM_KEYS:
 		if n.has_meta(key):
-			if not _anim.has(key):
-				_anim[key] = []
 			_anim[key].append(n)
 			n.set_meta("rest", n.transform)
 	for c in n.get_children():
@@ -82,54 +137,112 @@ func _collect(n: Node) -> void:
 # --- API ---
 
 ## state keys (all optional): speed (m/s), lean (-1 left … 1 right), airborne, boost.
+## Also: turn, ahead_turn, vy, big_air, in_water, slipping, rain (0..1), wind (Vector3).
 func set_state(state: Dictionary) -> void:
 	speed = float(state.get("speed", speed))
 	lean = clampf(float(state.get("lean", lean)), -1.0, 1.0)
 	airborne = bool(state.get("airborne", airborne))
 	boost = bool(state.get("boost", boost))
+	turn = float(state.get("turn", turn))
+	ahead_turn = float(state.get("ahead_turn", ahead_turn))
+	vy = float(state.get("vy", vy))
+	big_air = bool(state.get("big_air", big_air))
+	in_water = bool(state.get("in_water", in_water))
+	slipping = bool(state.get("slipping", slipping))
+	rain = float(state.get("rain", rain))
+	wind = state.get("wind", wind)
 
 
+## Hit by another racer: squash, a short brace and a dizzy head.
 func bump() -> void:
 	_squash = 0.35
 	_squash_k = 1.0
 	_sad_t = 0.8
+	gestures.play(Gestures.G.BRACE, 0, 0.2)
+	gestures.play(Gestures.G.DIZZY, 0, 1.4 if motion_style == "wobbly" else 0.0, 0.12)
+	gestures.kick(Vector3(randf_range(-2.0, 2.0), 1.5, randf_range(-1.0, 1.0)))
 
 
 func land() -> void:
 	_squash = 0.25
 	_squash_k = 0.7
+	gestures.kick(Vector3(0.0, -3.0, 0.0))
 
 
-## Spin-out (fall off track, hit hard).
+## Spin-out (fall off track, hit hard): dizzy, then slumps.
 func fail() -> void:
 	_fail_t = FAIL_TIME
 	_sad_t = 0.0
+	gestures.play(Gestures.G.DIZZY, 0, 0.6)
+	gestures.play(Gestures.G.SLUMP, 0, 1.5, 0.4)
 
 
 func celebrate(hops := 3) -> void:
 	_celebrate_hops = maxi(1, hops)
 	_celebrate_t = HOP_TIME * _celebrate_hops
+	gestures.play(Gestures.G.CHEER, 0, _celebrate_t + 0.2)
+	gestures.pant(3.5)
 
 
 func wave() -> void:
-	_wave_t = WAVE_TIME
+	gestures.play(Gestures.G.WAVE)
+
+
+## Crossed the line: the personality's finish gesture, then a wave at the camera.
+func finish() -> void:
+	match gestures.win_pose:
+		Gestures.G.CHEER:
+			celebrate(2)
+		_:
+			gestures.play(gestures.win_pose, 0, 1.0)
+			gestures.pant(3.5)
+	gestures.play(Gestures.G.WAVE, 1, 1.2, 0.9)
+	gestures.look_at_camera(2.2)
+
+
+## A gesture by name (RacerGestures.NAMES): wave, cheer, fist_pump, glance_back, slump, dizzy,
+## brace, wheee, tuck, flail, surprised, head_shake, rain, hat_hold. side: -1 left, 1 right arm.
+func gesture(gesture_name: String, side := 0) -> void:
+	gestures.play_named(gesture_name, side)
+
+
+## The head follows a node (e.g. a rival's head) or a world point for a while.
+func look_at_node(n: Node3D, secs := 1.2) -> void:
+	gestures.look_at(Vector3.ZERO, n, secs)
+
+
+func look_at_point(p: Vector3, secs := 1.2) -> void:
+	gestures.look_at(p, null, secs)
 
 
 func reset_anim() -> void:
 	_squash = 0.0
 	_fail_t = 0.0
 	_celebrate_t = 0.0
-	_wave_t = 0.0
 	_sad_t = 0.0
 	speed = 0.0
 	lean = 0.0
 	airborne = false
 	boost = false
+	turn = 0.0
+	ahead_turn = 0.0
+	vy = 0.0
+	big_air = false
+	in_water = false
+	slipping = false
+	rain = 0.0
+	wind = Vector3.ZERO
 	_lean_s = 0.0
+	_mo_x = 0.0
+	_mo_y = 0.0
+	_mo_roll = 0.0
+	_mo_char_pitch = 0.0
+	_mo_head_roll = 0.0
+	_mo_head_yaw = 0.0
+	_mo_head_pitch = 0.0
 	if rig:
 		rig.transform = Transform3D.IDENTITY
-	for a in _arm_rest:
-		a.basis = _arm_rest[a]
+	gestures.reset()
 	for key in _anim:
 		for n in _anim[key]:
 			n.transform = n.get_meta("rest")
@@ -182,29 +295,29 @@ func _process(delta: float) -> void:
 		face.tick(dt)
 	var moving := clampf(speed / 10.0, 0.0, 1.0)
 
-	for n in _anim.get("wheel_spin", []):
+	for n in _anim["wheel_spin"]:
 		if not airborne:
 			n.rotation.x -= speed / maxf(float(n.get_meta("wheel_spin")), 0.05) * dt
-	for n in _anim.get("leg_swing", []):
+	for n in _anim["leg_swing"]:
 		var amp := 0.12 + 0.6 * moving
 		var target := sin(_t * (5.0 + speed * 0.6) + float(n.get_meta("leg_swing"))) * amp
 		if airborne:
 			target = 0.7
 		n.rotation.x = lerpf(n.rotation.x, target, minf(1.0, dt * 20.0))
-	for n in _anim.get("wing_flap", []):
+	for n in _anim["wing_flap"]:
 		var fast := airborne or boost
 		var flap := sin(_t * (14.0 if fast else 4.0 + speed * 0.4)) * (0.7 if fast else 0.15 + 0.25 * moving)
 		n.rotation.z = float(n.get_meta("wing_flap")) * flap
-	for n in _anim.get("spin", []):
+	for n in _anim["spin"]:
 		n.rotation.y += float(n.get_meta("spin")) * dt
-	for n in _anim.get("flicker", []):
+	for n in _anim["flicker"]:
 		var base := 1.6 if boost else 0.6 + moving * 0.6
 		var f := base * (1.0 + 0.15 * sin(_t * 31.0) + 0.1 * sin(_t * 17.0))
 		n.scale = Vector3(1.0, 1.0, f) * (0.9 + 0.1 * f)
-	for n in _anim.get("tail_wag", []):
+	for n in _anim["tail_wag"]:
 		n.rotation.y = sin(_t * (5.0 + speed * 0.5)) * (0.25 + 0.2 * moving)
 
-	for n in _anim.get("jiggle", []):
+	for n in _anim["jiggle"]:
 		var j := sin(_t * (6.0 + speed * 0.4)) * (0.02 + 0.04 * moving) * bounciness
 		n.scale = Vector3(1.0 + j, 1.0 - j, 1.0 + j)
 
@@ -232,77 +345,65 @@ func _process(delta: float) -> void:
 		_squash -= dt
 		var s := sin(clampf(_squash / 0.35, 0.0, 1.0) * PI) * 0.22 * _squash_k * bounciness
 		sq = Vector3(1.0 + s, 1.0 - s, 1.0 + s)
-	var mo := _motion(moving)
-	xf.basis = Basis.from_euler(Vector3(pitch, yaw, -_lean_s * 0.22 + mo.roll)).scaled(sq)
-	xf.origin = Vector3(mo.x, bounce + idle + hop + mo.y, 0)
+	_motion(moving)
+	xf.basis = Basis.from_euler(Vector3(pitch, yaw, -_lean_s * 0.22 + _mo_roll)).scaled(sq)
+	xf.origin = Vector3(_mo_x, bounce + idle + hop + _mo_y + _ground_lift(xf.basis), 0)
 	rig.transform = xf
-	if character:
-		character.rotation.z = -_lean_s * 0.18
-		character.rotation.x = -0.12 * moving if not boost else -0.22
-	if character:
-		character.rotation.x += mo.char_pitch
-	if head_pivot:
-		head_pivot.rotation.z = _lean_s * 0.12 + sin(_t * 1.7) * 0.03 + mo.head_roll
-		head_pivot.rotation.y = sin(_t * 0.9) * 0.08 * (1.0 - moving) + mo.head_yaw
-		head_pivot.rotation.x = mo.head_pitch
-	_animate_arms(dt)
+	gestures.update(dt)
 	if _sad_t > 0.0:
 		_sad_t -= dt
 
 
+## How far a tilted (leaning, pitched) rig must rise so its ground parts stay above the ground.
+func _ground_lift(b: Basis) -> float:
+	var c := b * _foot.get_center()
+	var h := _foot.size * 0.5
+	var low := c.y - absf(b.x.y) * h.x - absf(b.y.y) * h.y - absf(b.z.y) * h.z
+	return maxf(0.0, _foot.position.y - low)
+
+
 ## Idle personality from motion.style, scaled by energy and faded a bit at speed.
-func _motion(moving: float) -> Dictionary:
-	var m := {"x": 0.0, "y": 0.0, "roll": 0.0, "char_pitch": 0.0, "head_roll": 0.0, "head_yaw": 0.0, "head_pitch": 0.0}
+func _motion(moving: float) -> void:
+	_mo_x = 0.0
+	_mo_y = 0.0
+	_mo_roll = 0.0
+	_mo_char_pitch = 0.0
+	_mo_head_roll = 0.0
+	_mo_head_yaw = 0.0
+	_mo_head_pitch = 0.0
 	var k := motion_energy * (1.0 - 0.5 * moving)
 	match motion_style:
 		"bouncy":
-			m.y = absf(sin(_t * 4.5)) * 0.045 * k
-			m.head_roll = sin(_t * 4.5) * 0.06 * k
+			_mo_y = absf(sin(_t * 4.5)) * 0.045 * k
+			_mo_head_roll = sin(_t * 4.5) * 0.06 * k
 		"smooth":
-			m.y = sin(_t * 1.2) * 0.01 * k
-			m.head_yaw = sin(_t * 0.6) * 0.1 * k
+			_mo_y = sin(_t * 1.2) * 0.01 * k
+			_mo_head_yaw = sin(_t * 0.6) * 0.1 * k
 		"wobbly":
-			m.roll = sin(_t * 5.0) * 0.07 * k
-			m.head_roll = sin(_t * 5.0 + 1.2) * 0.14 * k
+			_mo_roll = sin(_t * 5.0) * 0.07 * k
+			_mo_head_roll = sin(_t * 5.0 + 1.2) * 0.14 * k
 		"jittery":
-			m.x = (sin(_t * 37.0) * 0.5 + sin(_t * 23.0) * 0.5) * 0.008 * k
-			m.head_yaw = sin(_t * 11.0) * sin(_t * 2.3) * 0.25 * k
+			_mo_x = (sin(_t * 37.0) * 0.5 + sin(_t * 23.0) * 0.5) * 0.008 * k
+			_mo_head_yaw = sin(_t * 11.0) * sin(_t * 2.3) * 0.25 * k
 		"floaty":
-			m.y = (sin(_t * 1.6) * 0.5 + 0.5) * 0.08 * k
-			m.roll = sin(_t * 0.8) * 0.04 * k
+			_mo_y = (sin(_t * 1.6) * 0.5 + 0.5) * 0.08 * k
+			_mo_roll = sin(_t * 0.8) * 0.04 * k
 		"proud":
-			m.head_pitch = -0.16 * k
-			m.char_pitch = -0.06 * k
-			m.head_yaw = sin(_t * 0.5) * 0.12 * k
+			_mo_head_pitch = -0.16 * k
+			_mo_char_pitch = -0.06 * k
+			_mo_head_yaw = sin(_t * 0.5) * 0.12 * k
 		"sneaky":
-			m.char_pitch = 0.16 * k
-			m.y = -0.02 * k
-			m.head_yaw = sin(_t * 0.7) * sin(_t * 0.31) * 0.4 * k
-	return m
-
-
-func _animate_arms(dt: float) -> void:
-	if arm_l == null or arm_r == null:
-		return
-	if _celebrate_t > 0.0:
-		for a in [arm_l, arm_r]:
-			var side := -1.0 if a == arm_l else 1.0
-			var up := Basis.from_euler(Vector3(0, 0, side * (2.6 + sin(_t * 12.0) * 0.25)))
-			a.basis = a.basis.slerp(up, minf(1.0, dt * 14.0))
-		return
-	if _wave_t > 0.0:
-		_wave_t -= dt
-		var up2 := Basis.from_euler(Vector3(0, 0, 2.5 + sin(_t * 14.0) * 0.45))
-		arm_r.basis = arm_r.basis.slerp(up2, minf(1.0, dt * 14.0))
-		arm_l.basis = arm_l.basis.slerp(_arm_rest[arm_l], minf(1.0, dt * 10.0))
-		return
-	for a in [arm_l, arm_r]:
-		a.basis = a.basis.slerp(_arm_rest[a], minf(1.0, dt * 10.0)).orthonormalized()
+			_mo_char_pitch = 0.16 * k
+			_mo_y = -0.02 * k
+			_mo_head_yaw = sin(_t * 0.7) * sin(_t * 0.31) * 0.4 * k
 
 
 func _auto_mood() -> String:
 	if _fail_t > 0.0:
 		return "dizzy"
+	var g := gestures.mood_hint()
+	if g != "":
+		return g
 	if _celebrate_t > 0.0:
 		return "cheering"
 	if _sad_t > 0.0:
