@@ -141,7 +141,6 @@ export function Result({ ctx }) {
   const run = r.run;
   const ok = run.outcome === "finished";
   const mood = r.isPersonalBest ? "excited" : ok ? "happy" : "sad";
-  const best = r.prevBest;
   const loop = isLoop(run.track);
   const laps = run.laps ?? [];
   const gridLeft = useGridCall(s);
@@ -173,24 +172,8 @@ export function Result({ ctx }) {
       ${r.rank ? html`<p class="muted">${COPY.garage.rank} #${r.rank}</p>` : null}
     </div>
     ${s.heat ? html`<${HeatCard} s=${s} />` : null}
-    ${
-      run.splits && Object.keys(run.splits).length
-        ? html`<section class="card">
-            <table class="splits">
-              <tr><th>${COPY.result.section}</th><th>${COPY.result.time}</th><th>${COPY.result.vsBest}</th></tr>
-              ${SECTION_IDS.filter((id) => run.splits[id] !== undefined).map((id) => {
-                const b = best?.splits?.[id];
-                const d = b !== undefined ? run.splits[id] - b : null;
-                return html`<tr key=${id}>
-                  <td>${COPY.sections[id]}</td>
-                  <td>${secs(run.splits[id])}</td>
-                  <td class=${d === null ? "" : d <= 0 ? "good" : "bad"}>${d === null ? "–" : delta(d)}</td>
-                </tr>`;
-              })}
-            </table>
-          </section>`
-        : null
-    }
+    ${r.coach ? html`<section class="card coach">💡 ${r.coach.text}</section>` : null}
+    ${r.stretches?.length || run.failStretch ? html`<${Stretches} r=${r} meId=${s.me?.id} />` : null}
     ${
       loop && laps.length
         ? html`<section class="card">
@@ -201,12 +184,63 @@ export function Result({ ctx }) {
           </section>`
         : null
     }
-    ${r.coach ? html`<section class="card coach">💡 ${r.coach.text}</section>` : null}
     <div class="go-bar two">
       ${gridLeft ? html`<div class="span2"><${GridCall} s=${s} left=${gridLeft} /></div>` : null}
       <button class="ghost" onClick=${() => dispatch({ type: "clearResult", coach: r.coach })}>${COPY.result.change}</button>
       <button class="go small" onClick=${again}>${gridLeft ? COPY.grid.join : COPY.result.again}</button>
     </div>
+  `;
+}
+
+/** A gap to the session's fastest smaller than this isn't worth a note. */
+const FASTER_NOTE_MS = 200;
+
+/**
+ * "See why" (contracts §2d): each stretch of the run with its star, my time and the gap to my best
+ * there; the coach tip's stretch highlighted; a note on the one stretch where the session's
+ * fastest racer (someone else) gains most on me; a failed run's last stretch at the end.
+ */
+function Stretches({ r, meId }) {
+  const run = r.run;
+  const names = COPY.stretches[run.track];
+  let faster;
+  for (const st of r.stretches) {
+    if (!st.fastestNickname || st.fastestPlayerId === meId) continue;
+    const gap = st.ms - st.fastestMs;
+    if (gap >= FASTER_NOTE_MS && (!faster || gap > faster.gap))
+      faster = { id: st.id, gap, who: st.fastestNickname };
+  }
+  return html`
+    <section class="card">
+      <h2>${COPY.result.stretchesTitle}</h2>
+      <ol class="stretches">
+        ${r.stretches.map((st) => {
+          // Tenths, like delta() shows them: a hair either way is ±0.0, not red.
+          const d = st.bestMs !== undefined ? Math.round((st.ms - st.bestMs) / 100) * 100 : null;
+          return html`<li key=${st.id} class=${r.coach?.stretch === st.id ? "tip" : ""}>
+            <span class="ic">${st.ability ? COPY.abilities[st.ability][0] : COPY.result.safeRoute}</span>
+            <span class="nm">${names[st.id]}</span>
+            <span class="t">${secs(st.ms)}</span>
+            <span class=${`d ${d === null || d === 0 ? "" : d < 0 ? "good" : "bad"}`}>${d === null ? "–" : delta(d)}</span>
+            ${
+              faster?.id === st.id
+                ? html`<span class="note">${COPY.result.fasterHere(faster.who, (faster.gap / 1000).toFixed(1))}</span>`
+                : null
+            }
+          </li>`;
+        })}
+        ${
+          run.failStretch
+            ? html`<li class=${`ended ${r.coach?.stretch === run.failStretch ? "tip" : ""}`}>
+                <span class="ic">💥</span>
+                <span class="nm">${names[run.failStretch]}</span>
+                <span class="note">${COPY.result.endedHere}</span>
+              </li>`
+            : null
+        }
+      </ol>
+      <p class="hint">${COPY.result.vsYourBest}</p>
+    </section>
   `;
 }
 

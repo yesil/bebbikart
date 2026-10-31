@@ -63,3 +63,12 @@ test("no fallbacks: reading before the language is known, a missing key or an un
   setLanguage("en");
   expect(copy.COPY.reveal.go).toBe("Let's race!");
 });
+
+test("a result name for every stretch of every track (contracts §2d)", async () => {
+  const { TRACK_STRETCHES } = await import("@bebbikart/shared");
+  for (const lang of LANGUAGES)
+    for (const [track, list] of Object.entries(TRACK_STRETCHES))
+      expect(Object.keys(COPY_TABLES[lang].stretches[track]).sort(), `${lang} ${track}`).toEqual(
+        list.map((s) => s.id).sort(),
+      );
+});
