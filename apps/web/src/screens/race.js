@@ -1,9 +1,10 @@
 import { SECTION_IDS } from "@bebbikart/shared";
 import { html } from "htm/preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
 import { Avatar, delta, GridCall, isLoop, secs, useGridCall } from "./common.js";
+import { TrackMap } from "./track-map.js";
 
 export function Run({ ctx }) {
   const { s, send } = ctx;
@@ -150,6 +151,8 @@ export function Result({ ctx }) {
   const loop = isLoop(run.track);
   const laps = run.laps ?? [];
   const gridLeft = useGridCall(s);
+  const [sel, setSel] = useState(null); // the stretch tapped on the map (its row lights up)
+  const see = seeWhy(r, s.me?.id);
 
   async function again() {
     dispatch({ type: "clearResult" });
@@ -179,7 +182,18 @@ export function Result({ ctx }) {
     </div>
     ${s.heat ? html`<${HeatCard} s=${s} />` : null}
     ${r.coach ? html`<section class="card coach">💡 ${r.coach.text}</section>` : null}
-    ${r.stretches?.length || run.failStretch ? html`<${Stretches} r=${r} meId=${s.me?.id} />` : null}
+    ${
+      r.stretches?.length || run.failStretch
+        ? html`<section class="card map">
+              <${TrackMap} track=${run.track} routes=${r.build?.routes} tone=${see.tone}
+                pulse=${r.coach?.stretch} crash=${run.failStretch}
+                flag=${see.faster ? { stretch: see.faster.id, text: see.faster.who } : null}
+                selected=${sel} onPick=${setSel} />
+              <p class="hint center">${COPY.map.tapHint}</p>
+            </section>
+            <${Stretches} r=${r} see=${see} sel=${sel} />`
+        : null
+    }
     ${
       loop && laps.length
         ? html`<section class="card">
@@ -202,29 +216,53 @@ export function Result({ ctx }) {
 /** A gap to the session's fastest smaller than this isn't worth a note. */
 const FASTER_NOTE_MS = 200;
 
+/** Gap to my best on a stretch in tenths, like delta() shows it (null without a best). */
+const gapToBest = (st) =>
+  st.bestMs !== undefined ? Math.round((st.ms - st.bestMs) / 100) * 100 : null;
+
 /**
- * "See why" (contracts §2d): each stretch of the run with its star, my time and the gap to my best
- * there; the coach tip's stretch highlighted; a note on the one stretch where the session's
- * fastest racer (someone else) gains most on me; a failed run's last stretch at the end.
+ * What the map and the list show (contracts §2d): each stretch green or red against my best (a
+ * hair either way, or no best yet, stays neutral), and the one stretch where the session's fastest
+ * racer (someone else) gains most on me.
  */
-function Stretches({ r, meId }) {
-  const run = r.run;
-  const names = COPY.stretches[run.track];
+function seeWhy(r, meId) {
+  const tone = {};
   let faster;
-  for (const st of r.stretches) {
+  for (const st of r.stretches ?? []) {
+    const d = gapToBest(st);
+    if (d) tone[st.id] = d < 0 ? "good" : "bad";
     if (!st.fastestNickname || st.fastestPlayerId === meId) continue;
     const gap = st.ms - st.fastestMs;
     if (gap >= FASTER_NOTE_MS && (!faster || gap > faster.gap))
       faster = { id: st.id, gap, who: st.fastestNickname };
   }
+  return { tone, faster };
+}
+
+/**
+ * "See why": each stretch of the run with its star, my time and the gap to my best there; the
+ * coach tip's stretch highlighted, the one tapped on the map lit up; a note where the session's
+ * fastest gains most on me; a failed run's last stretch at the end.
+ */
+function Stretches({ r, see, sel }) {
+  const run = r.run;
+  const names = COPY.stretches[run.track];
+  const faster = see.faster;
+  const list = useRef(null);
+  useEffect(() => {
+    if (sel)
+      list.current
+        ?.querySelector(`[data-st="${sel}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [sel]);
   return html`
     <section class="card">
       <h2>${COPY.result.stretchesTitle}</h2>
-      <ol class="stretches">
+      <ol class="stretches" ref=${list}>
         ${r.stretches.map((st) => {
-          // Tenths, like delta() shows them: a hair either way is ±0.0, not red.
-          const d = st.bestMs !== undefined ? Math.round((st.ms - st.bestMs) / 100) * 100 : null;
-          return html`<li key=${st.id} class=${r.coach?.stretch === st.id ? "tip" : ""}>
+          const d = gapToBest(st);
+          return html`<li key=${st.id} data-st=${st.id}
+            class=${`${r.coach?.stretch === st.id ? "tip" : ""} ${sel === st.id ? "sel" : ""}`}>
             <span class="ic">${st.ability ? COPY.abilities[st.ability][0] : COPY.result.safeRoute}</span>
             <span class="nm">${names[st.id]}</span>
             <span class="t">${secs(st.ms)}</span>
@@ -238,7 +276,8 @@ function Stretches({ r, meId }) {
         })}
         ${
           run.failStretch
-            ? html`<li class=${`ended ${r.coach?.stretch === run.failStretch ? "tip" : ""}`}>
+            ? html`<li data-st=${run.failStretch}
+                class=${`ended ${r.coach?.stretch === run.failStretch ? "tip" : ""} ${sel === run.failStretch ? "sel" : ""}`}>
                 <span class="ic">💥</span>
                 <span class="nm">${names[run.failStretch]}</span>
                 <span class="note">${COPY.result.endedHere}</span>
