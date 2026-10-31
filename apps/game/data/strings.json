@@ -122,7 +122,8 @@
     "hud.status_rejected": "retake a photo",
     "hud.status_needs_review": "waiting for a grown-up",
     "hud.paddock": "Racers",
-    "hud.best_time": "%.2f s"
+    "hud.best_time": "%.2f s",
+    "hud.podium_title": "Time's up! The podium"
   },
   "de": {
     "lang.en": "English",
@@ -246,6 +247,7 @@
     "hud.status_rejected": "Foto nochmals machen",
     "hud.status_needs_review": "wartet auf Erwachsene",
     "hud.paddock": "Rennfahrer",
-    "hud.best_time": "%.2f s"
+    "hud.best_time": "%.2f s",
+    "hud.podium_title": "Zeit um! Das Podest"
   }
 }

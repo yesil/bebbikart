@@ -9,6 +9,7 @@ extends CanvasLayer
 ##    is doing while their racer is made.
 ##  - Banners (top centre): each finish and each oops as it happens.
 ##  - Problems (top centre, red): errors for the facilitator. No fallbacks: shown, never hidden.
+##  - Podium (centre): the session's top three when it ends, for PODIUM_S.
 ## The bottom of the screen belongs to the camera director (on-camera name tag bottom left,
 ## picture-in-picture bottom right, the name pop after a cut at 56 % down).
 ## main.gd feeds it (set_roster, set_leaderboard, run_result, run_gone, problem) and calls
@@ -31,6 +32,7 @@ const RESULT_HOLD_S := 25.0     # a finisher stays on the board this long at mos
 const EMPTY_HOLD_S := 10.0      # ...or this long after the last racer left the track
 const BANNER_S := 3.5
 const PROBLEM_S := 30.0
+const PODIUM_S := 30.0
 const TAG_NEAR := 14.0          # metres: tags shrink beyond this distance
 const FONT_NAMES := ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue", "Arial"]
 
@@ -62,6 +64,8 @@ var _paddock_dirty := true
 var _paddock_t := 0.0
 var _banners: VBoxContainer
 var _problems: VBoxContainer
+var _session := ""
+var _podium: Control = null
 
 
 func _ready() -> void:
@@ -141,6 +145,14 @@ func set_leaderboard(entries: Array) -> void:
 	_paddock_dirty = true
 
 
+## Server session status (idle | running | ended). Ending shows the podium; the server's next
+## session (autostart) clears the leaderboard right after, so the podium is taken now.
+func set_session(status: String) -> void:
+	if status == "ended" and _session != "ended":
+		_show_podium()
+	_session = status
+
+
 ## A run finished (ok) or failed: result_ms is the finish time, or the best lap on a loop.
 func run_result(run_id: String, pid: String, ok: bool, result_ms: int, reason: String) -> void:
 	var h: Dictionary = _heat.get(run_id, {"pid": pid})
@@ -215,6 +227,9 @@ func update(delta: float, sim, views: Dictionary) -> void:
 		_rebuild_paddock(sim)
 	_expire(_banners)
 	_expire(_problems)
+	if _podium != null and _t > float(_podium.get_meta("until")):
+		_podium.queue_free()
+		_podium = null
 
 
 func _heat_entry(r, state: String) -> void:
@@ -543,6 +558,63 @@ func _rebuild_paddock(sim) -> void:
 		_paddock.add_child(row)
 	if pids.size() > PADDOCK_MAX_ROWS:
 		_paddock.add_child(_label(I18n.f("hud.more", [pids.size() - PADDOCK_MAX_ROWS]), 18, Color(0.8, 0.84, 0.92)))
+
+
+# ---------------------------------------------------------------- podium
+
+func _show_podium() -> void:
+	if _podium != null:
+		_podium.queue_free()
+		_podium = null
+	var top: Array = _ranks.keys().filter(func(pid): return _roster.has(pid))
+	top.sort_custom(func(a, b): return int(_ranks[a]["rank"]) < int(_ranks[b]["rank"]))
+	top = top.slice(0, 3)
+	if top.is_empty():
+		return  # nobody finished this session: nothing to celebrate
+	var panel := _panel(Color(0.06, 0.07, 0.1, 0.86), 22, Color("#ffd23a"), 4)
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	panel.add_child(box)
+	var title := _label(I18n.t("hud.podium_title"), 52, Color("#ffd23a"))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var steps := HBoxContainer.new()
+	steps.alignment = BoxContainer.ALIGNMENT_CENTER
+	steps.add_theme_constant_override("separation", 28)
+	box.add_child(steps)
+	# Second, first, third: the winner in the middle on the highest step.
+	for place in [2, 1, 3]:
+		if place > top.size():
+			continue
+		var pid: String = top[place - 1]
+		var col := color_for(pid)
+		var step := VBoxContainer.new()
+		step.alignment = BoxContainer.ALIGNMENT_END
+		step.add_theme_constant_override("separation", 6)
+		step.custom_minimum_size = Vector2(250, 0)
+		var chip := _avatar_chip(150 if place == 1 else 110)
+		_fill_chip(chip, pid, col)
+		var holder := CenterContainer.new()
+		holder.add_child(chip["root"])
+		step.add_child(holder)
+		var name := _label(_nick(pid), 36 if place == 1 else 30, col.lightened(0.3))
+		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		step.add_child(name)
+		var block := _panel(_place_color(place).darkened(0.15), 10)
+		block.custom_minimum_size = Vector2(230, [0, 140, 100, 70][place])
+		var num := _label("%s   %.2f s" % [_ordinal(place), int(_ranks[pid]["bestTimeMs"]) / 1000.0], 30, Color(0.1, 0.08, 0.05))
+		num.remove_theme_constant_override("outline_size")
+		num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		block.add_child(num)
+		step.add_child(block)
+		steps.add_child(step)
+	panel.set_meta("until", _t + PODIUM_S)
+	add_child(panel)
+	_podium = panel
 
 
 # ---------------------------------------------------------------- helpers
