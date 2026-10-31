@@ -5,10 +5,13 @@ extends SceneTree
 ##          --boost=perfect|none, --quick (smaller run), --json=path (dump raw results)
 ##          --trace=jump:3,ramp:jump[,weather:rain]  run one build and print its splits + events
 ## Village loop balance (lap 2 of 2, solo, boosts on the zones), a few minutes:
-##   godot --headless --path apps/game --script res://tools/sweep.gd -- --track=village [--builds=300 --seeds=2]
-## Best build per weather (random screen + hill-climb: move stars, flip a route, change style), a
-## cross table of those builds in every weather, the best time per fork choice, each stretch's
-## 0-vs-10-star gain for the ability it tests, the fork-by-stars tables and fail rates.
+##   godot --headless --path apps/game --script res://tools/sweep.gd -- --track=village [--builds=300 --seeds=3]
+## Builds are ranked by their expected lap: the mean over the seeds of lap 2 as driven (missed exits
+## and slips included), a fail counting as a lap of runTimeCapMs. Best build per weather (random
+## screen + hill-climb: move stars, flip a route, change style), a cross table of those builds in
+## every weather, the best build held to each fork choice and to each style with its gap to the
+## best, each stretch's 0-vs-10-star gain for the ability it tests, the fork-by-stars tables, fail
+## rates and how much slower than calm each weather is.
 
 const Course = preload("res://sim/course.gd")
 const Sim = preload("res://sim/sim.gd")
@@ -49,7 +52,7 @@ func _init() -> void:
 	var t0 := Time.get_ticks_msec()
 	if args.get("track", "countryside") == "village":
 		n_builds = int(args.get("builds", "300"))
-		seeds = int(args.get("seeds", "2"))
+		seeds = int(args.get("seeds", "3"))
 		if not _village():
 			quit(1)
 			return
@@ -347,6 +350,7 @@ const MIN_GAIN_MS := 20.0          # hill-climb: smaller gains are noise
 var village
 var vcfg: Dictionary
 var vcache := {}                   # "weather|build" -> measurement
+var vbroken := false               # the sim failed to load: stop, print nothing more
 
 
 ## One solo run of two laps; times the second lap (and each segment in it).
@@ -360,7 +364,7 @@ func vrun(build: Dictionary, weather: String, k: int) -> Dictionary:
 	var r: Racer = sim.add_run("r0", "p0", build)
 	if r == null:
 		push_error("sweep: the sim did not create a racer (script error above?)")
-		quit(1)
+		vbroken = true
 		return {"ms": -1.0, "seg": {}, "reason": "no_racer", "missed": false}
 	var seg_ms := {}
 	var cur := ""
@@ -380,22 +384,25 @@ func vrun(build: Dictionary, weather: String, k: int) -> Dictionary:
 		for m in sim.outbox:
 			var p: Dictionary = m["payload"]
 			if m["type"] == "game.run.finished":
-				# A missed roundabout exit (random, ~8 s) is taken out: "clean" lap, counted apart.
+				# "clean": a missed roundabout exit's extra circle taken out.
 				var dms := detour_ticks * 1000.0 / Tuning.HZ
-				return {"ms": float(p["laps"][1]) - dms, "seg": seg_ms, "reason": "", "missed": detour_ticks > 0}
+				return {"ms": float(p["laps"][1]), "clean": float(p["laps"][1]) - dms, "seg": seg_ms, "reason": "", "missed": detour_ticks > 0}
 			if m["type"] == "game.run.failed":
 				return {"ms": -1.0, "seg": {}, "reason": "%s@%s" % [p["reason"], r.seg_id], "missed": false}
 		sim.outbox.clear()
 	return {"ms": -1.0, "seg": {}, "reason": "guard", "missed": false}
 
 
-## Mean lap-2 time over n seeds; any fail counts (a best build must be reliable).
+## Expected lap 2 over n seeds (a fail counts as a lap of runTimeCapMs), plus the clean mean.
 func vmeasure(build: Dictionary, weather: String, n: int = -1) -> Dictionary:
 	n = seeds if n < 0 else n
 	var key := "%s|%d|%s" % [weather, n, JSON.stringify(build)]
 	if vcache.has(key):
 		return vcache[key]
+	if vbroken:
+		return {"mean": -1.0, "clean": -1.0, "fails": n, "n": n, "reasons": {"broken": n}, "seg": {}, "missed": 0}
 	var sum := 0.0
+	var clean := 0.0
 	var ok := 0
 	var reasons := {}
 	var seg := {}
@@ -404,28 +411,30 @@ func vmeasure(build: Dictionary, weather: String, n: int = -1) -> Dictionary:
 		var res := vrun(build, weather, k)
 		if float(res["ms"]) > 0.0:
 			sum += float(res["ms"])
+			clean += float(res["clean"])
 			ok += 1
 			missed += 1 if res["missed"] else 0
 			for id in res["seg"]:
 				seg[id] = float(seg.get(id, 0.0)) + float(res["seg"][id])
 		else:
+			sum += float(vcfg["runTimeCapMs"])
 			reasons[res["reason"]] = int(reasons.get(res["reason"], 0)) + 1
 	for id in seg:
 		seg[id] = float(seg[id]) / ok
-	var m := {"mean": sum / ok if ok > 0 else -1.0, "fails": n - ok, "n": n, "reasons": reasons, "seg": seg, "missed": missed}
+	var m := {"mean": sum / n, "clean": clean / ok if ok > 0 else -1.0, "fails": n - ok, "n": n, "reasons": reasons, "seg": seg, "missed": missed}
 	vcache[key] = m
 	return m
 
 
-## Lap time for ranking: a run that fails is never "best".
+## Expected lap time for ranking (fails already priced in).
 func vscore(m: Dictionary) -> float:
-	return INF if int(m["fails"]) > 0 or float(m["mean"]) < 0.0 else float(m["mean"])
+	return INF if float(m["mean"]) < 0.0 else float(m["mean"])
 
 
 func vfmt(m: Dictionary) -> String:
 	if float(m["mean"]) < 0.0:
 		return "  fail"
-	return "%6.2f%s" % [float(m["mean"]) / 1000.0, "*" if int(m["fails"]) > 0 else " "]
+	return "%6.2f%s" % [float(m["mean"]) / 1000.0, "*" if int(m["fails"]) > 0 else ("~" if int(m["missed"]) > 0 else " ")]
 
 
 ## Short form of a build: stars s/j/g/w/st/b, style, routes.
@@ -437,7 +446,7 @@ func vdesc(b: Dictionary) -> String:
 
 
 ## Builds one move away: `step` stars from one ability to another, one route flipped, or another style.
-func neighbours(b: Dictionary, step: int, lock_fork: String = "") -> Array:
+func neighbours(b: Dictionary, step: int, lock_fork: String = "", lock_style := false) -> Array:
 	var out: Array = []
 	var mx := int(cfg["starsMaxPerAbility"])
 	for a in Protocol.ABILITIES:
@@ -456,23 +465,23 @@ func neighbours(b: Dictionary, step: int, lock_fork: String = "") -> Array:
 		nb["routes"][f] = ch[1] if nb["routes"][f] == ch[0] else ch[0]
 		out.append(nb)
 	for style in Protocol.DRIVING_STYLES:
-		if style != b["style"]:
+		if style != b["style"] and not lock_style:
 			var nb: Dictionary = b.duplicate(true)
 			nb["style"] = style
 			out.append(nb)
 	return out
 
 
-## Steepest-descent hill-climb on the lap time (no fails allowed), at most max_steps moves:
+## Steepest-descent hill-climb on the expected lap time, at most max_steps moves:
 ## 2-star moves first, 1-star moves once those stop paying.
-func climb(start: Dictionary, weather: String, max_steps: int, lock_fork: String = "") -> Dictionary:
+func climb(start: Dictionary, weather: String, max_steps: int, lock_fork: String = "", lock_style := false) -> Dictionary:
 	var best := start
 	var best_s := vscore(vmeasure(best, weather))
 	var step := 2
 	for i in max_steps:
 		var cand := {}
 		var cand_s := best_s - MIN_GAIN_MS
-		for nb in neighbours(best, step, lock_fork):
+		for nb in neighbours(best, step, lock_fork, lock_style):
 			var sc := vscore(vmeasure(nb, weather))
 			if sc < cand_s:
 				cand = nb
@@ -495,7 +504,7 @@ func _village() -> bool:
 	vcfg = Messages.default_config()
 	vcfg["lapsPerRun"] = 2
 	vcfg["startCountdownMs"] = 0
-	print("== Village loop: lap 2 of 2, solo, boosts on the zones, %d seeds (wind %.1f from spread directions) ==" % [seeds, WEATHERS["wind"][1]])
+	print("== Village loop: expected lap 2 of 2 (* = a fail in it, priced as a %.0f s lap; ~ = a missed exit), solo, boosts on the zones, %d seeds, wind %.1f from spread directions ==" % [float(vcfg["runTimeCapMs"]) / 1000.0, seeds, WEATHERS["wind"][1]])
 	var weathers: Array = WEATHERS.keys()
 	var line := ""
 	# Single-ability tables keep speed and grip at default and trade the other abilities first.
@@ -505,6 +514,9 @@ func _village() -> bool:
 	line = "  default (%s)  " % vdesc(Builds.default_build())
 	for w in weathers:
 		line += "%s %s  " % [w, vfmt(vmeasure(Builds.default_build(), w))]
+	if vbroken:
+		print("FAIL: the sim did not run (see the script errors above)")
+		return false
 	print(line)
 
 	# Random screen: one seed each.
@@ -567,18 +579,39 @@ func _village() -> bool:
 		line += "%+10.2f" % ((float(calm["mean"]) - float(own["mean"])) / 1000.0) if float(calm["mean"]) > 0 and float(own["mean"]) > 0 else "%10s" % "fail"
 	print(line)
 
-	# Forks: the best lap with each choice per weather. The other choice starts from the weather's
-	# best build with that route flipped and is re-climbed with the route locked.
-	print("\n== Forks: best lap with each choice per weather, Δ = first - second; the other choice's build ==")
+	# Forks: the best build held to each choice, per weather, and its gap to the weather's best. The
+	# choice the best build doesn't take starts from it with the route flipped and is re-climbed
+	# with the route locked.
+	print("\n== Forks: best build held to each choice, gap to the weather's best (s) ==")
 	for f in Protocol.FORK_IDS:
 		var ch: Array = Protocol.FORK_CHOICES[f]
-		print("  %s: %s vs %s" % [f, ch[0], ch[1]])
+		for c in ch:
+			line = "  %-9s %-9s" % [f, c]
+			var builds := ""
+			for w in weathers:
+				var held: Dictionary = best[w] if best[w]["routes"][f] == c else climb(_with_route(best[w], f, c), w, 6, f)
+				var gap := (vscore(vmeasure(held, w)) - vscore(vmeasure(best[w], w))) / 1000.0
+				line += "  %s %6.2f (%+.2f)" % [w, vscore(vmeasure(held, w)) / 1000.0, gap]
+				if gap > 0.0:
+					builds += "\n      %-6s %s" % [w, vdesc(held)]
+			print(line + builds)
+
+	# Styles: the best build held to each style (stars and routes re-climbed).
+	print("\n== Styles: best build held to each style, gap to the weather's best (s) ==")
+	for style in Protocol.DRIVING_STYLES:
+		line = "  %-9s" % style
+		var builds := ""
 		for w in weathers:
-			var other: String = ch[1] if best[w]["routes"][f] == ch[0] else ch[0]
-			var alt := climb(_with_route(best[w], f, other), w, 4, f)
-			var bt := {best[w]["routes"][f]: vscore(vmeasure(best[w], w)), other: vscore(vmeasure(alt, w))}
-			print("    %-6s %s %6.2f  %s %6.2f  (%+.2f)   %s" % [w, ch[0], bt[ch[0]] / 1000.0, ch[1], bt[ch[1]] / 1000.0,
-				(bt[ch[0]] - bt[ch[1]]) / 1000.0, vdesc(alt)])
+			var held: Dictionary = best[w]
+			if best[w]["style"] != style:
+				held = best[w].duplicate(true)
+				held["style"] = style
+				held = climb(held, w, 6, "", true)
+			var gap := (vscore(vmeasure(held, w)) - vscore(vmeasure(best[w], w))) / 1000.0
+			line += "  %s %6.2f (%+.2f)" % [w, vscore(vmeasure(held, w)) / 1000.0, gap]
+			if gap > 0.0:
+				builds += "\n      %-6s %s" % [w, vdesc(held)]
+		print(line + builds)
 
 	# Fork by stars: default-ish build with the fork's ability at 0..10, each choice.
 	print("\n== Fork by stars: default build with <ability> at x stars; lap Δ = first choice - second ==")
@@ -591,8 +624,7 @@ func _village() -> bool:
 				var b := _build_with(FORK_STAT[f], x, order)
 				var ma := vmeasure(_with_route(b, f, ch[0]), w)
 				var mb := vmeasure(_with_route(b, f, ch[1]), w)
-				var dl := "F%d/%d" % [ma["fails"], mb["fails"]] if vscore(ma) == INF or vscore(mb) == INF \
-					else "%+.2f" % ((float(ma["mean"]) - float(mb["mean"])) / 1000.0)
+				var dl := "%+.2f%s" % [(float(ma["mean"]) - float(mb["mean"])) / 1000.0, "*" if int(ma["fails"]) + int(mb["fails"]) > 0 else ""]
 				line += "  %2d:%-7s" % [x, dl]
 			print(line)
 
@@ -603,12 +635,31 @@ func _village() -> bool:
 		for w in weathers:
 			var m0 := vmeasure(_build_with(sp[1], 0, order), w)
 			var m10 := vmeasure(_build_with(sp[1], 10, order), w)
-			if vscore(m0) == INF or vscore(m10) == INF:
+			if int(m0["fails"]) == int(m0["n"]) or int(m10["fails"]) == int(m10["n"]):
 				line += "  %s fail %d/%d" % [w, m0["fails"], m10["fails"]]
 				continue
 			var t0 := float(m0["seg"].get(sp[0], 0.0))
 			var t10 := float(m10["seg"].get(sp[0], 0.0))
 			line += "  %s %.2f->%.2f (%+.2f)" % [w, t0 / 1000.0, t10 / 1000.0, (t0 - t10) / 1000.0]
+		print(line)
+
+	# How much slower each weather is than calm, per random build (both finished), by style.
+	print("\n== Weather / calm lap ratio over the random builds (median, p90, max), by style ==")
+	for w in weathers.slice(1):
+		line = "  %-6s" % w
+		for style in Protocol.DRIVING_STYLES:
+			var ratios: Array = []
+			for b in pool:
+				if b["style"] != style:
+					continue
+				var mc := vmeasure(b, "calm", 1)
+				var mw := vmeasure(b, w, 1)
+				if int(mc["fails"]) == 0 and int(mw["fails"]) == 0:
+					ratios.append(float(mw["mean"]) / float(mc["mean"]))
+			ratios.sort()
+			if ratios.is_empty():
+				continue
+			line += "  %s %.2f / %.2f / %.2f" % [style, ratios[ratios.size() / 2], ratios[int(ratios.size() * 0.9)], ratios[ratios.size() - 1]]
 		print(line)
 
 	# Fails of the best builds (cross-table seeds) and of random builds (screen).
