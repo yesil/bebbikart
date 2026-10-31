@@ -204,7 +204,7 @@ the course. A cut to a racer more than 35 m away jumps there; a closer one swoop
   every cut the game sends `game.camera`, and the racer's phone lights up with "You're on the big
   screen!" (`camera.updated`). The overlay logs each request as SHOW.
 - **On screen:** bottom left the racer on camera with a bar that runs down to the next switch;
-  their name big at the top for 2 s after each cut ("wants to be on the big screen!" when their
+  their name big in the lower middle for 2 s after each cut ("wants to be on the big screen!" when their
   phone asked); bottom right the second camera, looking back at the racer's face or at its side.
   The inset is a second view of the same world (about the cost of a 576×340 render), off when set
   to Off. Racer name tags are on render layer 20, which the inset leaves out.

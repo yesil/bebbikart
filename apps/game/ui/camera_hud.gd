@@ -2,7 +2,7 @@ extends CanvasLayer
 ## Big-screen camera HUD (game.md "Camera director"):
 ##  - bottom left: the racer on camera, in their colour, over a bar that runs down to the next
 ##    automatic switch (LOCKED when A turned automatic switching off);
-##  - top centre: their name, big, for a moment after every cut ("wants to be on the big screen!"
+##  - lower middle: their name, big, for a moment after every cut ("wants to be on the big screen!"
 ##    when their phone asked for it);
 ##  - bottom right: picture in picture, a second camera on the same racer that looks back at its
 ##    face, or at its side. V or the options menu cycles face → side → off.
@@ -229,10 +229,10 @@ func _build_pop(root: Control) -> void:
 	_pop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pop.anchor_left = 0.0
 	_pop.anchor_right = 1.0
-	_pop.anchor_top = 0.0
-	_pop.anchor_bottom = 0.0
-	_pop.offset_top = 110.0
-	_pop.offset_bottom = 110.0
+	_pop.anchor_top = 0.56
+	_pop.anchor_bottom = 0.56
+	_pop.offset_top = 0.0
+	_pop.offset_bottom = 0.0
 	root.add_child(_pop)
 	_pop_name = _label("", 88)
 	_pop_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
