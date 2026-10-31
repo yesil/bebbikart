@@ -19,6 +19,10 @@ export function Run({ ctx }) {
   const [flash, setFlash] = useState(false);
   const [pitting, setPitting] = useState(false);
   const [asked, setAsked] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const pushOn = useRef(false);
+  // Duel run (contracts §2i): its half of the big screen; no pit in, no "Show me".
+  const side = s.me.currentRun?.side;
   const loop = isLoop(s.me.currentRun?.track ?? s.config.track);
   // The laps this run races (set when it was queued); never the config's, which may have changed.
   const runLaps = s.me.currentRun?.lapsPerRun;
@@ -55,6 +59,27 @@ export function Run({ ctx }) {
     return () => clearTimeout(t);
   }, [asked]);
 
+  /**
+   * Push (contracts §2g): on while the thumb is down, off when it comes up, slides off or the
+   * page hides. Kept on the grid too: the push applies from the start.
+   */
+  function push(on, e) {
+    e?.preventDefault();
+    if (!live.runId || pushOn.current === on) return;
+    if (on) e?.currentTarget?.setPointerCapture?.(e.pointerId);
+    pushOn.current = on;
+    setPushing(on);
+    send("phone.push", { runId: live.runId, on });
+    if (on) navigator.vibrate?.(25);
+  }
+  useEffect(() => {
+    const letGo = () => {
+      if (pushOn.current && document.hidden) push(false);
+    };
+    document.addEventListener("visibilitychange", letGo);
+    return () => document.removeEventListener("visibilitychange", letGo);
+  }, [live.runId]);
+
   function boost(e) {
     e.preventDefault();
     if (!started || boostsLeft <= 0 || !live.runId) return;
@@ -78,6 +103,7 @@ export function Run({ ctx }) {
 
   return html`
     <div class="run">
+      ${side ? html`<div class=${`side-badge side-${side}`}>${COPY.duel.side[side]}</div>` : null}
       ${
         loop && started
           ? html`<div class="lap-head">
@@ -121,24 +147,43 @@ export function Run({ ctx }) {
             </div>`
           : html`<div class="delta"></div>`
       }
-      <button
-        class=${`boost ${flash ? "flash" : ""}`}
-        disabled=${!started || boostsLeft <= 0}
-        onPointerDown=${boost}
-      >
-        ${COPY.run.boost}
-        <span class="charges">${Array.from({ length: s.config.boostsPerRun }, (_, i) => html`<i class=${i < boostsLeft ? "on" : ""}>⚡</i>`)}</span>
-      </button>
+      <div class="controls">
+        <button
+          class=${`push ${pushing ? "on" : ""}`}
+          disabled=${!live.runId}
+          onPointerDown=${(e) => push(true, e)}
+          onPointerUp=${(e) => push(false, e)}
+          onPointerCancel=${(e) => push(false, e)}
+          onLostPointerCapture=${(e) => push(false, e)}
+          onContextMenu=${(e) => e.preventDefault()}
+        >
+          ${pushing ? COPY.run.pushing : COPY.run.push}
+        </button>
+        <button
+          class=${`boost ${flash ? "flash" : ""}`}
+          disabled=${!started || boostsLeft <= 0}
+          onPointerDown=${boost}
+          onContextMenu=${(e) => e.preventDefault()}
+        >
+          ${COPY.run.boost}
+          <span class="charges">${Array.from({ length: s.config.boostsPerRun }, (_, i) => html`<i class=${i < boostsLeft ? "on" : ""}>⚡</i>`)}</span>
+        </button>
+      </div>
+      <p class="hint center">${COPY.run.pushHint}</p>
       ${
-        loop && started
+        loop && started && !side
           ? html`<button class="ghost pit" disabled=${pitting} onClick=${pitIn}>
               ${pitting ? COPY.run.pitting : COPY.run.pitIn}
             </button>`
           : null
       }
-      <button class=${`ghost watch ${onCamera ? "on" : ""}`} disabled=${!started || onCamera || asked} onClick=${showMe}>
-        ${onCamera ? COPY.run.onScreen : asked ? COPY.run.showMeAsked : COPY.run.showMe}
-      </button>
+      ${
+        side
+          ? null
+          : html`<button class=${`ghost watch ${onCamera ? "on" : ""}`} disabled=${!started || onCamera || asked} onClick=${showMe}>
+              ${onCamera ? COPY.run.onScreen : asked ? COPY.run.showMeAsked : COPY.run.showMe}
+            </button>`
+      }
     </div>
   `;
 }
@@ -155,6 +200,8 @@ export function Result({ ctx }) {
   const [sel, setSel] = useState(null); // the stretch tapped on the map (its row lights up)
   const see = seeWhy(r, s.me?.id);
   const [peek, setPeek] = useState(false); // the faster racer's setup card is open
+  const duel = !!run.side; // a duel lap (contracts §2i): judged against the crown, no heat
+  const duelLine = r.duel ? duelVerdict(r.duel, run, s.me?.nickname) : null;
 
   async function again() {
     dispatch({ type: "clearResult" });
@@ -180,9 +227,10 @@ export function Result({ ctx }) {
             : html`<h1>${COPY.result.oops}</h1>
               <p class="lead">${run.outcome === "aborted" ? COPY.result.aborted : `${run.failReason ? COPY.result.fail[run.failReason] : ""}${run.failSection ? ` · ${COPY.sections[run.failSection]}` : ""}`}</p>`
       }
+      ${duelLine ? html`<p class=${`duel-verdict ${r.duel.newChampion ? "crown" : ""}`}>${duelLine}</p>` : null}
       ${r.rank ? html`<p class="muted">${COPY.garage.rank} #${r.rank}</p>` : null}
     </div>
-    ${s.heat ? html`<${HeatCard} s=${s} />` : null}
+    ${s.heat && !duel ? html`<${HeatCard} s=${s} />` : null}
     ${r.coach ? html`<section class="card coach">💡 ${r.coach.text}</section>` : null}
     ${
       r.stretches?.length || run.failStretch
@@ -223,11 +271,31 @@ export function Result({ ctx }) {
     }
     <div class="go-bar-space" aria-hidden="true"></div>
     <div class="go-bar two">
-      ${gridLeft ? html`<div class="span2"><${GridCall} s=${s} left=${gridLeft} /></div>` : null}
+      ${gridLeft && !duel ? html`<div class="span2"><${GridCall} s=${s} left=${gridLeft} /></div>` : null}
       <button class="ghost" onClick=${() => dispatch({ type: "clearResult", coach: r.coach })}>${COPY.result.change}</button>
-      <button class="go small" onClick=${again}>${gridLeft ? COPY.grid.join : COPY.result.again}</button>
+      <button class="go small" onClick=${again}>${
+        s.config.mode === "duel" ? COPY.duel.join : gridLeft ? COPY.grid.join : COPY.result.again
+      }</button>
     </div>
   `;
+}
+
+/**
+ * A duel lap's verdict (run.ended.duel): the crown taken, or how far short of whose record. A
+ * champion racing again (nobody else waiting) is judged against their own time.
+ */
+function duelVerdict(d, run, myNickname) {
+  if (d.newChampion) return COPY.duel.newChampion;
+  const own = d.recordNickname !== undefined && d.recordNickname === myNickname;
+  const gap = d.gapMs !== undefined ? (Math.abs(d.gapMs) / 1000).toFixed(1) : null;
+  if (run.outcome !== "finished" || gap === null)
+    return d.recordNickname === undefined
+      ? COPY.duel.noTimeNobody
+      : own
+        ? COPY.duel.noTimeOwn
+        : COPY.duel.noTime(d.recordNickname);
+  if (own) return d.gapMs < 0 ? COPY.duel.ownRecord : COPY.duel.ownShort(gap);
+  return COPY.duel.short(gap, d.recordNickname);
 }
 
 /** A gap to the session's fastest smaller than this isn't worth a note. */

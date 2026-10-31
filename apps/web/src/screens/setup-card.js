@@ -8,8 +8,8 @@ import { secs } from "./common.js";
 /**
  * Props:
  *   who        { nickname, avatarUrl?, timeMs?, timeLabel }   whose setup
- *   setup      Setup { stars, routes, style, weather }
- *   mine       my build { stars, routes, style }
+ *   setup      Setup { stars, routes, weather } (routes: the ones their stars chose, §2h)
+ *   mine       my build { stars, routes }
  *   maxStars   config.starsMaxPerAbility
  *   ability    an ability to highlight ("Mia has 8 grip, you have 4")
  *   fork       a fork to highlight ("Mia took the ford, you took the bridge")
@@ -66,7 +66,6 @@ export function SetupCard({ who, setup, mine, maxStars, ability, fork, onClose }
               ${COPY.forks[f][setup.routes[f]][0]}
             </span>`;
           })}
-          <span class=${`chip ${setup.style === mine.style ? "" : "diff"}`}>${COPY.styles[setup.style]}</span>
         </div>
         <p class="hint center">${t.decide}</p>
       </section>

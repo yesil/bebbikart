@@ -1,4 +1,4 @@
-import { ABILITIES, FORK_CHOICES, starsLeft, TRACK_STRETCHES } from "@bebbikart/shared";
+import { ABILITIES, ROUTE_STARS, routesFor, starsLeft, TRACK_STRETCHES } from "@bebbikart/shared";
 import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
@@ -7,7 +7,8 @@ import { Avatar, GridCall, isLoop, Paddock, secs, useGridCall } from "./common.j
 import { SetupCard } from "./setup-card.js";
 import { TrackMap } from "./track-map.js";
 
-const pick = (b) => ({ stars: { ...b.stars }, routes: { ...b.routes }, style: b.style });
+// The phone saves stars only; the server derives the routes from them (contracts §2h).
+const pick = (b) => ({ stars: { ...b.stars } });
 const same = (a, b) => JSON.stringify(pick(a)) === JSON.stringify(pick(b));
 
 export function Garage({ ctx }) {
@@ -50,10 +51,13 @@ export function Garage({ ctx }) {
     change({ ...build, stars: { ...build.stars, [a]: n } });
   };
 
+  const duel = cfg.mode === "duel";
+  const routes = routesFor(build.stars);
   const gridLeft = useGridCall(s);
-  const cooldownLeft = me.lastRun?.endedAt
-    ? Date.parse(me.lastRun.endedAt) + cfg.launchCooldownMs - now
-    : 0;
+  const cooldownLeft =
+    !duel && me.lastRun?.endedAt ? Date.parse(me.lastRun.endedAt) + cfg.launchCooldownMs - now : 0;
+  // Duel mode: my place in the line (1 = next), 0 when I'm not in it.
+  const place = duel ? (s.queue?.line ?? []).findIndex((e) => e.playerId === me.id) + 1 : 0;
   const blocked =
     left !== 0
       ? COPY.garage.starsLeft(left)
@@ -63,12 +67,20 @@ export function Garage({ ctx }) {
           ? `${COPY.errors.cooldown} ${Math.ceil(cooldownLeft / 1000)}`
           : null;
 
+  /** Free race: launch. Duel: join the line (the server launches me when a half is free). */
   async function go() {
     if (blocked) return;
     clearTimeout(saveTimer.current);
     try {
       if (dirty) await api("PUT", "/api/players/me/build", build);
       await api("POST", "/api/players/me/runs");
+    } catch (err) {
+      dispatch({ type: "toast", text: errorText(err) });
+    }
+  }
+  async function leaveLine() {
+    try {
+      await api("DELETE", "/api/players/me/queue");
     } catch (err) {
       dispatch({ type: "toast", text: errorText(err) });
     }
@@ -93,10 +105,11 @@ export function Garage({ ctx }) {
         : null
     }
 
+    ${duel ? html`<${DuelCard} s=${s} place=${place} />` : null}
     <${Paddock} s=${s} />
 
     <${WeatherStrip} weather=${s.weather} />
-    <${GarageMap} track=${cfg.track} routes=${build.routes} weather=${s.weather} />
+    <${GarageMap} track=${cfg.track} routes=${routes} weather=${s.weather} />
 
     <section class="card">
       <div class="row-head">
@@ -118,48 +131,92 @@ export function Garage({ ctx }) {
       })}
     </section>
 
-    <section class="card">
-      <h2>🛣️ ${COPY.garage.routes}</h2>
-      ${Object.entries(FORK_CHOICES).map(
-        ([fork, choices]) => html`
-        <div key=${fork} class="fork">
-          <div class="muted small">${COPY.forks[fork].title}</div>
-          <div class="choices">
-            ${choices.map((c) => {
-              const [label, note] = COPY.forks[fork][c];
-              return html`<button
-                class=${`choice ${build.routes[fork] === c ? "on" : ""}`}
-                onClick=${() => change({ ...build, routes: { ...build.routes, [fork]: c } })}
-              >
-                <b>${label}</b><small>${note}</small>
-              </button>`;
-            })}
-          </div>
-        </div>
-      `,
-      )}
-    </section>
-
-    <section class="card">
-      <h2>🎛️ ${COPY.garage.style}</h2>
-      <div class="choices three">
-        ${Object.entries(COPY.styles).map(
-          ([
-            st,
-            label,
-          ]) => html`<button class=${`choice ${build.style === st ? "on" : ""}`} onClick=${() => change({ ...build, style: st })}>
-            <b>${label}</b>
-          </button>`,
-        )}
-      </div>
-    </section>
+    <${Ways} stars=${build.stars} />
 
     <button class="ghost" onClick=${() => dispatch({ type: "redo", on: true })}>📷 ${COPY.garage.newDrawings}</button>
 
-    <div class="go-bar">
-      ${blocked ? html`<div class="muted small center">${blocked}</div>` : html`<${GridCall} s=${s} left=${gridLeft} />`}
-      <button class="go" disabled=${!!blocked || saving} onClick=${go}>${gridLeft && !blocked ? COPY.grid.join : COPY.garage.go}</button>
-    </div>
+    ${
+      place
+        ? html`<div class="go-bar">
+            <div class="line-place">${COPY.duel.place(place)}</div>
+            <button class="ghost" onClick=${leaveLine}>${COPY.duel.leave}</button>
+          </div>`
+        : html`<div class="go-bar">
+            ${
+              blocked
+                ? html`<div class="muted small center">${blocked}</div>`
+                : duel
+                  ? null
+                  : html`<${GridCall} s=${s} left=${gridLeft} />`
+            }
+            <button class="go" disabled=${!!blocked || saving} onClick=${go}>
+              ${duel ? COPY.duel.join : gridLeft && !blocked ? COPY.grid.join : COPY.garage.go}
+            </button>
+          </div>`
+    }
+  `;
+}
+
+/**
+ * Which way the stars take at each fork (contracts §2h): the way they take now, and how many
+ * stars of which ability take (or keep) the risky way. Updates live as the stars move.
+ */
+function Ways({ stars }) {
+  const routes = routesFor(stars);
+  return html`
+    <section class="card ways">
+      <h2>${COPY.garage.ways}</h2>
+      ${Object.entries(ROUTE_STARS).map(([fork, rule]) => {
+        const [icon, name] = COPY.abilities[rule.ability];
+        const have = stars[rule.ability];
+        const on = routes[fork] === rule.choice;
+        return html`<div key=${fork} class=${`way ${on ? "on" : ""}`}>
+          <b>${COPY.forks[fork][routes[fork]][0]}</b>
+          <small>${icon} ${
+            on
+              ? COPY.garage.wayOn(have, name, COPY.forks[fork].way)
+              : COPY.garage.wayOff(rule.stars - have, name, COPY.forks[fork].way)
+          }</small>
+        </div>`;
+      })}
+    </section>
+  `;
+}
+
+/**
+ * Duel mode (contracts §2i): who holds the crown and how many tried, who is on the track, the
+ * line in launch order (the champion last), and my place in it.
+ */
+function DuelCard({ s, place }) {
+  const q = s.queue ?? { line: [], racing: [], split: false, skipped: [] };
+  const me = s.me;
+  const c = q.champion;
+  const mine = c?.playerId === me.id;
+  const who = (e) => (e.playerId === me.id ? html`<b>${e.nickname}</b>` : e.nickname);
+  return html`
+    <section class="card duel">
+      <h2>${COPY.duel.title}</h2>
+      <p class=${`crown ${mine ? "mine" : ""}`}>
+        ${c ? (mine ? COPY.duel.mine(secs(c.timeMs)) : COPY.duel.champion(c.nickname, secs(c.timeMs))) : COPY.duel.none}
+      </p>
+      ${c ? html`<p class="muted small">${COPY.duel.tries(c.tries)}</p>` : null}
+      ${
+        q.racing.length
+          ? html`<div class="duel-row"><span class="muted small">${COPY.duel.onTrack}</span>
+              ${q.racing.map((r) => html`<span key=${r.side} class=${`chip side-${r.side}`}>${COPY.duel.sideShort[r.side]}: ${who(r)}</span>`)}
+            </div>`
+          : null
+      }
+      <div class="duel-row"><span class="muted small">${COPY.duel.line}</span>
+        ${
+          q.line.length
+            ? html`<ol class="line">${q.line.map((e) => html`<li key=${e.playerId} class=${e.playerId === me.id ? "mine" : ""}>${who(e)}</li>`)}</ol>`
+            : html`<span class="small">${COPY.duel.nobody}</span>`
+        }
+      </div>
+      ${mine && place ? html`<p class="hint">${COPY.duel.restHint}</p>` : null}
+      ${q.skipped.includes(me.id) ? html`<p class="warn-line">${COPY.duel.skipped}</p>` : null}
+    </section>
   `;
 }
 

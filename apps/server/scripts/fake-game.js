@@ -40,6 +40,14 @@ ws.onmessage = (e) => {
       r.pitIn = true;
       console.log(`[fake-game] pit in ${payload.runId}`);
     }
+  } else if (type === "run.push") {
+    if (runs.has(payload.runId))
+      console.log(`[fake-game] push ${payload.on ? "on" : "off"} ${payload.runId}`);
+  } else if (type === "queue.updated") {
+    const q = payload;
+    console.log(
+      `[fake-game] duel: racing ${q.racing.map((r) => `${r.side}:${r.nickname}`).join(" ") || "-"} · line ${q.line.map((e) => e.nickname).join(", ") || "-"} · champion ${q.champion ? `${q.champion.nickname} ${q.champion.timeMs} ms` : "-"}`,
+    );
   } else if (type === "run.abort") {
     runs.get(payload.runId)?.stop();
   }
@@ -68,7 +76,9 @@ function race(start) {
   if (LOOP_TRACKS.includes(config.track)) return raceLoop(start);
   const r = { boostsLeft: 3, boosts: 0, stop: () => {} };
   runs.set(start.runId, r);
-  console.log(`[fake-game] run ${start.runId} for ${start.playerId}`);
+  console.log(
+    `[fake-game] run ${start.runId} for ${start.playerId}${start.side ? ` (${start.side})` : ""}`,
+  );
   const total = 12_000;
   const splits = {};
   let t = 0;

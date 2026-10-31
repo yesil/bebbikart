@@ -22,6 +22,7 @@ const initial = {
   grid: null, // grid.updated: an open start countdown { goAt, racers } anyone can still join
   paddock: [], // paddock.updated: everyone in the session (friends' racers being made, racing)
   camera: null, // camera.updated: { playerId?, runId? } of the racer on the big screen
+  queue: null, // queue.updated (duel mode, contracts §2i): the line, the two halves, the champion
   tab: "garage",
   revealSeen: readRevealSeen(),
   toast: null,
@@ -91,6 +92,7 @@ function onWs(s, type, p) {
         config: p.config,
         me: p.me ?? null, // no me = this device has no racer (e.g. it quit)
         weather: p.weather,
+        queue: p.config.mode === "duel" ? s.queue : null,
       };
     case "player.updated":
       return { ...s, me: p };
@@ -99,7 +101,9 @@ function onWs(s, type, p) {
     case "session.updated":
       return { ...s, session: p };
     case "config.updated":
-      return { ...s, config: p };
+      return { ...s, config: p, queue: p.mode === "duel" ? s.queue : null };
+    case "queue.updated":
+      return { ...s, queue: p };
     case "weather.updated":
       return { ...s, weather: p };
     case "leaderboard.updated":

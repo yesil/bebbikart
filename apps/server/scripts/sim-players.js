@@ -21,7 +21,7 @@
 //   --pin PIN (BK_ADMIN_PIN, 1234) --json FILE (write the full report) --quiet (no timeline)
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ABILITIES, DRIVING_STYLES, FORK_CHOICES, LOOP_TRACKS, makeMsg } from "@bebbikart/shared";
+import { ABILITIES, LOOP_TRACKS, makeMsg } from "@bebbikart/shared";
 import { REPO_ROOT } from "../src/env.js";
 
 const SAMPLES = join(REPO_ROOT, "packages/asset-pipeline/samples");
@@ -104,7 +104,7 @@ async function rest(method, path, { cookie, body, form, admin } = {}) {
   return data;
 }
 
-/** A random build that follows the star rules of the server's config. */
+/** A random build (stars only) that follows the star rules of the server's config. */
 function randomBuild(config) {
   const stars = Object.fromEntries(ABILITIES.map((a) => [a, 0]));
   for (let left = config.starsTotal; left > 0; ) {
@@ -114,8 +114,7 @@ function randomBuild(config) {
       left--;
     }
   }
-  const routes = Object.fromEntries(Object.entries(FORK_CHOICES).map(([f, c]) => [f, pick(c)]));
-  return { stars, routes, style: pick(DRIVING_STYLES) };
+  return { stars }; // the server derives the routes from the stars (contracts §2h)
 }
 
 // ------------------------------------------------------------------ one phone
