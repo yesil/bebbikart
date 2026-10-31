@@ -423,6 +423,13 @@ export function createGame({ db, settings, hub, log = console.log }) {
     hub.toGame("run.stop", { runId: run.id });
     return true;
   }
+  /** "Show me on the big screen": the game queues the racer for one of its next camera cuts. */
+  function watch(playerId, runId) {
+    const run = activeRun(playerId);
+    if (!run || (runId && run.id !== runId)) return false;
+    hub.toGame("run.watch", { runId: run.id });
+    return true;
+  }
   function abortRun(run, reason) {
     if (run.status === "done") return;
     const done = { ...run, status: "done", outcome: "aborted", endedAt: now() };
@@ -520,6 +527,12 @@ export function createGame({ db, settings, hub, log = console.log }) {
         hub.toPhones("weather.updated", pl);
         hub.toAdmins("weather.updated", pl);
         return;
+      case "game.camera": {
+        // Every phone hears who is on the big screen; the racer's own phone shows it.
+        const r = pl.runId ? runs.get(pl.runId) : undefined;
+        hub.toPhones("camera.updated", r ? { playerId: r.playerId, runId: r.id } : {});
+        return;
+      }
       default:
     }
   }
@@ -712,6 +725,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     launch,
     boost,
     stop,
+    watch,
     abortRun,
     abortAllRuns,
     onGameMessage,
