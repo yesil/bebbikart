@@ -14,6 +14,7 @@ class FakeRacer:
 	var airborne := false
 	var looping := false
 	var p := 0.3
+	var react := 0.0  # what the director's reaction lookup answers for it
 
 	func _init(id: String) -> void:
 		run_id = id
@@ -23,6 +24,7 @@ class FakeRacer:
 
 
 var fails: PackedStringArray = []
+var fakes := {}  # run_id -> the latest FakeRacer made with that id (the reaction lookup reads it)
 
 
 func _initialize() -> void:
@@ -35,6 +37,9 @@ func _initialize() -> void:
 	_phone_requests_queue()
 	_keys_and_lock()
 	_interval_zero_never_switches()
+	_holds_a_finish_cheer()
+	_no_cut_mid_reaction()
+	_inset_prefers_a_reaction()
 	_blocker_box_maths()
 	_village_houses_clear_the_road()
 	if fails.is_empty():
@@ -49,6 +54,20 @@ func _initialize() -> void:
 func _expect(ok: bool, what: String) -> void:
 	if not ok:
 		fails.append(what)
+
+
+func _fake(id: String) -> FakeRacer:
+	var f := FakeRacer.new(id)
+	fakes[id] = f
+	return f
+
+
+## The director's reaction lookup: the fake's `react`. An id it never made is a broken test.
+func _reaction(id: String) -> float:
+	if not fakes.has(id):
+		fails.append("reaction asked for unknown run %s" % id)
+		return 0.0
+	return (fakes[id] as FakeRacer).react
 
 
 ## Runs the director for `seconds`; returns [[time, run_id, reason], ...] for every cut.
@@ -68,16 +87,16 @@ func _ids(cuts: Array) -> Array:
 
 
 func _one_racer_stays() -> void:
-	var d := CameraDirector.new()
-	var cuts := _run(d, [FakeRacer.new("a")], 30.0)
+	var d := CameraDirector.new(_reaction)
+	var cuts := _run(d, [_fake("a")], 30.0)
 	_expect(_ids(cuts) == ["a"], "one racer: expected one cut to a, got %s" % [cuts])
 	_expect(d.next_in() < 0.0, "one racer: no switch should be coming")
 
 
 func _two_racers_alternate() -> void:
-	var d := CameraDirector.new()
-	var a := FakeRacer.new("a")
-	var b := FakeRacer.new("b")
+	var d := CameraDirector.new(_reaction)
+	var a := _fake("a")
+	var b := _fake("b")
 	var cuts := _run(d, [a, b], 25.0)
 	_expect(_ids(cuts) == ["a", "b", "a", "b"], "two racers: expected a b a b, got %s" % [cuts])
 	if cuts.size() >= 3:
@@ -86,18 +105,18 @@ func _two_racers_alternate() -> void:
 
 
 func _new_racer_waits_its_turn() -> void:
-	var d := CameraDirector.new()
-	var racers: Array = [FakeRacer.new("a"), FakeRacer.new("b")]
+	var d := CameraDirector.new(_reaction)
+	var racers: Array = [_fake("a"), _fake("b")]
 	var cuts := _run(d, racers, 5.0)
-	racers.append(FakeRacer.new("c"))  # starts at 5 s: b (waiting since 0 s) goes first
+	racers.append(_fake("c"))  # starts at 5 s: b (waiting since 0 s) goes first
 	cuts += _run(d, racers, 15.0, 5.0)
 	_expect(_ids(cuts) == ["a", "b", "c"], "new racer: expected a b c, got %s" % [cuts])
 
 
 func _never_mid_jump() -> void:
-	var d := CameraDirector.new()
-	var a := FakeRacer.new("a")
-	var b := FakeRacer.new("b")
+	var d := CameraDirector.new(_reaction)
+	var a := _fake("a")
+	var b := _fake("b")
 	_run(d, [a, b], 7.0)
 	a.airborne = true
 	var cuts := _run(d, [a, b], 1.5, 7.0)
@@ -112,13 +131,13 @@ func _never_mid_jump() -> void:
 
 
 func _never_to_a_finishing_racer() -> void:
-	var d := CameraDirector.new()
-	var a := FakeRacer.new("a")
-	var b := FakeRacer.new("b")
+	var d := CameraDirector.new(_reaction)
+	var a := _fake("a")
+	var b := _fake("b")
 	b.p = 0.97
 	var cuts := _run(d, [a, b], 20.0)
 	_expect(_ids(cuts) == ["a"], "finishing: b is about to finish and should get no shot, got %s" % [cuts])
-	var c := FakeRacer.new("c")
+	var c := _fake("c")
 	c.looping = true
 	c.p = 0.99  # a loop racer near the line is mid-run, not finishing
 	cuts = _run(d, [a, c], 5.0)
@@ -126,9 +145,9 @@ func _never_to_a_finishing_racer() -> void:
 
 
 func _leaving_racer_cuts_at_once() -> void:
-	var d := CameraDirector.new()
-	var a := FakeRacer.new("a")
-	var b := FakeRacer.new("b")
+	var d := CameraDirector.new(_reaction)
+	var a := _fake("a")
+	var b := _fake("b")
 	_run(d, [a, b], 2.0)
 	var cuts := _run(d, [b], 0.1, 2.0)
 	_expect(cuts.size() == 1 and cuts[0][1] == "b" and cuts[0][2] == "left",
@@ -138,8 +157,8 @@ func _leaving_racer_cuts_at_once() -> void:
 
 
 func _phone_requests_queue() -> void:
-	var d := CameraDirector.new()
-	var racers: Array = [FakeRacer.new("a"), FakeRacer.new("b"), FakeRacer.new("c"), FakeRacer.new("d")]
+	var d := CameraDirector.new(_reaction)
+	var racers: Array = [_fake("a"), _fake("b"), _fake("c"), _fake("d")]
 	_run(d, racers, 1.0)
 	_expect(d.request("d"), "phone: d's request should be taken")
 	_expect(d.request("c"), "phone: c's request should be taken")
@@ -156,8 +175,8 @@ func _phone_requests_queue() -> void:
 
 
 func _keys_and_lock() -> void:
-	var d := CameraDirector.new()
-	var racers: Array = [FakeRacer.new("a"), FakeRacer.new("b"), FakeRacer.new("c")]
+	var d := CameraDirector.new(_reaction)
+	var racers: Array = [_fake("a"), _fake("b"), _fake("c")]
 	_run(d, racers, 1.0)
 	d.step(1, racers)
 	_expect(d.run_id == "b" and d.reason == "key", "Tab: expected b, got %s" % d.run_id)
@@ -174,10 +193,93 @@ func _keys_and_lock() -> void:
 
 
 func _interval_zero_never_switches() -> void:
-	var d := CameraDirector.new()
+	var d := CameraDirector.new(_reaction)
 	d.cycle_s = 0.0
-	var cuts := _run(d, [FakeRacer.new("a"), FakeRacer.new("b")], 30.0)
+	var cuts := _run(d, [_fake("a"), _fake("b")], 30.0)
 	_expect(_ids(cuts) == ["a"], "interval 0: expected only the first cut, got %s" % [cuts])
+
+
+func _holds_a_finish_cheer() -> void:
+	var d := CameraDirector.new(_reaction)
+	var a := _fake("a")
+	var b := _fake("b")
+	_run(d, [a, b], 2.0)
+	a.react = 1.0  # crossed the line: cheering on screen after its run
+	var cuts := _run(d, [b], 1.5, 2.0)
+	_expect(cuts.is_empty(), "finish cheer: cut away from a cheering racer at %s" % [cuts])
+	a.react = 0.0
+	cuts = _run(d, [b], 0.25, 3.5)
+	_expect(_ids(cuts) == ["b"] and cuts[0][2] == "left", "finish cheer: expected a cut to b once it ended, got %s" % [cuts])
+	# A reaction that never ends still gets cut after MAX_AIR_WAIT_S.
+	b.react = 1.0
+	cuts = _run(d, [], CameraDirector.MAX_AIR_WAIT_S + 0.25, 3.75)
+	_expect(cuts.size() == 1 and cuts[0][1] == "" and cuts[0][0] >= 3.75 + CameraDirector.MAX_AIR_WAIT_S,
+		"long cheer: expected the cut after %.1f s, got %s" % [CameraDirector.MAX_AIR_WAIT_S, cuts])
+
+
+func _no_cut_mid_reaction() -> void:
+	var d := CameraDirector.new(_reaction)
+	var a := _fake("a")
+	var b := _fake("b")
+	_run(d, [a, b], 7.5)
+	a.react = 0.8  # an overtake's fist pump, just before the switch is due
+	var cuts := _run(d, [a, b], 1.5, 7.5)
+	_expect(cuts.is_empty(), "reaction: cut mid fist pump at %s" % [cuts])
+	a.react = 0.2  # fading out, below HOLD_W
+	cuts = _run(d, [a, b], 0.25, 9.0)
+	_expect(_ids(cuts) == ["b"], "reaction: expected the cut once it faded, got %s" % [cuts])
+	b.react = 1.0  # never ends: cut after the wait
+	cuts = _run(d, [a, b], CameraDirector.DEFAULT_CYCLE_S + CameraDirector.MAX_AIR_WAIT_S + 0.25, 9.25)
+	_expect(_ids(cuts) == ["a"] and cuts[0][0] >= 9.125 + CameraDirector.DEFAULT_CYCLE_S + CameraDirector.MAX_AIR_WAIT_S - 0.01,
+		"long reaction: expected the cut after the wait, got %s" % [cuts])
+	# A phone's racer waits for the reaction too (at most MAX_AIR_WAIT_S past MIN_SHOT_S).
+	var e := CameraDirector.new(_reaction)
+	var c := _fake("c")
+	var f := _fake("f")
+	_run(e, [c, f], 1.0)
+	e.request("f")
+	c.react = 1.0
+	cuts = _run(e, [c, f], 3.0, 1.0)
+	_expect(cuts.is_empty(), "phone: cut mid-reaction at %s" % [cuts])
+	c.react = 0.0
+	cuts = _run(e, [c, f], 0.25, 4.0)
+	_expect(_ids(cuts) == ["f"] and cuts[0][2] == "phone", "phone: expected f once the reaction ended, got %s" % [cuts])
+
+
+func _inset_prefers_a_reaction() -> void:
+	var d := CameraDirector.new(_reaction)
+	var a := _fake("a")
+	var b := _fake("b")
+	var c := _fake("c")
+	var ids := ["a", "b", "c"]
+	var step := func(secs: float) -> void:
+		for _i in int(round(secs / DT)):
+			d.update(DT, [a, b, c])
+			d.pick_inset(DT, ids)
+	step.call(1.0)
+	_expect(d.inset_run == "a", "inset: should show the racer on camera, got %s" % d.inset_run)
+	b.react = 0.9
+	step.call(0.25)
+	_expect(d.inset_run == "b", "inset: should go to b's reaction, got %s" % d.inset_run)
+	b.react = 0.0
+	step.call(0.5)
+	_expect(d.inset_run == "b", "inset: should stay INSET_MIN_S on b, got %s" % d.inset_run)
+	step.call(1.0)
+	_expect(d.inset_run == "a", "inset: should be back on a once b's reaction is over, got %s" % d.inset_run)
+	c.react = 0.9  # a long one: at most MIN_SHOT_S, not again until it is over
+	step.call(CameraDirector.MIN_SHOT_S + 0.25)
+	_expect(d.inset_run == "a", "inset: should leave c after MIN_SHOT_S, got %s" % d.inset_run)
+	step.call(1.0)
+	_expect(d.inset_run == "a", "inset: c had its turn for this reaction, got %s" % d.inset_run)
+	c.react = 0.0
+	b.react = 0.9
+	step.call(0.25)
+	_expect(d.inset_run == "b", "inset: should go to b's new reaction, got %s" % d.inset_run)
+	a.react = 0.9  # the racer on camera reacts too: the inset goes back to it after INSET_MIN_S
+	step.call(0.5)
+	_expect(d.inset_run == "b", "inset: should stay INSET_MIN_S on b, got %s" % d.inset_run)
+	step.call(1.0)
+	_expect(d.inset_run == "a", "inset: the racer on camera reacting gets the inset back, got %s" % d.inset_run)
 
 
 # ---------------------------------------------------------------- blockers (houses, bridge roof)

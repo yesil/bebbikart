@@ -5,7 +5,9 @@ extends CanvasLayer
 ##  - lower middle: their name, big, for a moment after every cut ("wants to be on the big screen!"
 ##    when their phone asked for it);
 ##  - bottom right: picture in picture, a second camera on the same racer that looks back at its
-##    face, or at its side. V or the options menu cycles face → side → off.
+##    face, or at its side. V or the options menu cycles face → side → off. While another racer is
+##    mid-reaction (a finish cheer, crash slump, overtake) and the one on camera is not, the inset
+##    shows them instead, with their name on the chip (show_inset, CameraDirector.pick_inset).
 ## Racer views provide shot_frame() (world space: root, head, head_r, center, radius, fwd).
 ## Their name tags sit on NAME_TAG_LAYER, which the inset camera does not draw.
 
@@ -22,6 +24,8 @@ const SIDE_FOV := 42.0
 
 var inset := "face"
 var _view = null                   # racer view on camera (RacerView or KitRacerView), or null
+var _inset_view = null             # another racer's view the inset shows (show_inset), or null
+var _inset_nick := ""
 var _vp: SubViewport
 var _cam: Camera3D
 var _inset_box: Control
@@ -58,13 +62,15 @@ func set_inset(id: String) -> bool:
 		return false
 	inset = id
 	_fwd = Vector3.ZERO
-	if _inset_label != null:
-		match id:
-			"face":
-				_inset_label.text = I18n.t("cam.inset_face")
-			"side":
-				_inset_label.text = I18n.t("cam.inset_side")
+	_label_inset()
 	return true
+
+
+func _label_inset() -> void:
+	if _inset_label == null or inset == "off":
+		return
+	var text := I18n.t("cam.inset_face") if inset == "face" else I18n.t("cam.inset_side")
+	_inset_label.text = "%s · %s" % [text, _inset_nick] if _inset_view != null else text
 
 
 ## V: face → side → off → face. Returns the new inset id.
@@ -90,6 +96,17 @@ func show_racer(view, nickname: String, color: Color, chasing: bool, left_frac: 
 	_tag_bar.value = clampf(left_frac, 0.0, 1.0)
 
 
+## The inset shows `view` (another racer mid-reaction) instead of the one on camera; null = the one
+## on camera again.
+func show_inset(view, nickname: String) -> void:
+	if view == _inset_view and (view == null or nickname == _inset_nick):
+		return
+	_fwd = Vector3.ZERO
+	_inset_view = view
+	_inset_nick = nickname
+	_label_inset()
+
+
 ## The camera just cut to this racer: their name, big, for POP_S.
 func pop(nickname: String, color: Color, by_phone: bool) -> void:
 	_pop_name.text = nickname
@@ -105,8 +122,9 @@ func _process(delta: float) -> void:
 	# Fade in over 0.15 s, out over the last 0.5 s.
 	_pop.modulate.a = clampf(_pop_t / 0.5, 0.0, 1.0) * clampf((POP_S - _pop_t) / 0.15, 0.0, 1.0)
 	var frame: Dictionary = {}
-	if inset != "off" and _view != null and is_instance_valid(_view) and _view.visible:
-		frame = _view.shot_frame()
+	var v = _inset_view if _inset_view != null and is_instance_valid(_inset_view) else _view
+	if inset != "off" and v != null and is_instance_valid(v) and v.visible:
+		frame = v.shot_frame()
 	var on := not frame.is_empty()
 	_inset_box.visible = on
 	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS if on else SubViewport.UPDATE_DISABLED

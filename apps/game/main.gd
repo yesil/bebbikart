@@ -76,6 +76,7 @@ var sim: Sim
 var net                    # net/mock_net.gd or net/server_net.gd (same interface)
 var assets = null          # net/roster_assets.gd, server mode only
 var views := {}            # runId -> RacerView
+var leaving := {}          # runId -> KitRacerView still on screen after its run (finish cheer, crash slump)
 var colors := {}           # playerId -> Color (the race HUD's distinct palette, in join order)
 var nicks := {}            # playerId -> nickname
 var making := {}           # playerId -> design stage last shown (roster stage)
@@ -302,7 +303,7 @@ func _load_kit_samples() -> bool:
 ## HUD with the second camera. --cam-cycle / --inset win over the options menu's saved picks.
 ## Returns false (and quits with an error) on a bad value.
 func _setup_camera_director() -> bool:
-	director = CameraDirector.new()
+	director = CameraDirector.new(_reaction_of)
 	var cycle := str(args.get("cam-cycle", _saved_setting("camera", "cycle_s", CameraDirector.DEFAULT_CYCLE_S)))
 	if not cycle.is_valid_float() or float(cycle) < 0.0:
 		push_error("camera: --cam-cycle must be seconds >= 0 (0 = never switch), not \"%s\"" % cycle)
@@ -756,13 +757,15 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 			if v != null:
 				if v.has_method("leave"):
 					v.leave(pl["outcome"])  # kit racers cheer or slump a moment, then free themselves
+					if v.leaving != "":
+						leaving[pl["runId"]] = v
 				else:
 					v.queue_free()
 				views.erase(pl["runId"])
 			if pl["outcome"] == "aborted":
 				net.run_gone(pl["runId"])
 				hud.run_gone(pl["runId"])
-			return  # the camera director moves on from a racer that left on its next update
+			return  # the camera director stays a moment on a racer still cheering or slumping, then moves on
 		Messages.GAME_RUN_FINISHED, Messages.GAME_RUN_FAILED:
 			var fv = views.get(pl["runId"])
 			if fv != null:
@@ -783,7 +786,7 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 
 
 func _nick_of(run_id: String) -> String:
-	var v = views.get(run_id)
+	var v = _view_of(run_id)
 	return v.nickname if v != null else "?"
 
 
@@ -802,10 +805,11 @@ func _process(delta: float) -> void:
 	# On a loop, laps first, then position in the lap.
 	racing.sort_custom(func(a, b): return a.lap + a.progress() > b.lap + b.progress())
 	director.update(delta, _camera_pool())
+	director.pick_inset(delta, _inset_pool())
 	if director.run_id != follow_run:
 		follow_run = director.run_id
 		_camera_cut()
-	camera.target = views.get(follow_run)
+	camera.target = _view_of(follow_run)
 	audio.follow_run = follow_run
 	camera.targets = views.values()
 	for id in views:
@@ -838,6 +842,37 @@ func _camera_pool() -> Array:
 	return pool
 
 
+## Who the inset can show: the racers in sight, and the ones still on screen after their run.
+func _inset_pool() -> Array:
+	var ids: Array = []
+	for id in views:
+		if views[id].visible:
+			ids.append(id)
+	for id in leaving.keys():
+		if is_instance_valid(leaving[id]):
+			ids.append(id)
+		else:
+			leaving.erase(id)
+	return ids
+
+
+## A run's view on the track, or still on screen after its run; null if it has none (any more).
+func _view_of(run_id: String) -> Node:
+	var v = views.get(run_id)
+	if v == null and leaving.has(run_id):
+		v = leaving[run_id]
+		if not is_instance_valid(v):
+			leaving.erase(run_id)
+			v = null
+	return v
+
+
+## How strongly a run's driver is mid-reaction (the camera director holds on it); 0 without a view.
+func _reaction_of(run_id: String) -> float:
+	var v = _view_of(run_id)
+	return v.reaction_weight() if v != null else 0.0
+
+
 ## The director cut to another racer (or to nobody): their name pops up, and the server hears
 ## who is on camera so that racer's phone can say so (game.camera → camera.updated).
 func _camera_cut() -> void:
@@ -848,13 +883,15 @@ func _camera_cut() -> void:
 
 func _update_camera_hud() -> void:
 	var left := director.next_in()
-	cam_hud.show_racer(views.get(follow_run), _nick_of(follow_run), _color_of(follow_run),
+	cam_hud.show_racer(_view_of(follow_run), _nick_of(follow_run), _color_of(follow_run),
 		camera.mode == CameraRig.Mode.FOLLOW, left / director.cycle_s if left >= 0.0 else -1.0, not director.auto)
+	var other := director.inset_run != follow_run
+	cam_hud.show_inset(_view_of(director.inset_run) if other else null, _nick_of(director.inset_run) if other else "")
 
 
 func _color_of(run_id: String) -> Color:
-	var r: Racer = sim.by_run.get(run_id)
-	return colors.get(r.player_id, Color.WHITE) if r != null else Color.WHITE
+	var v = _view_of(run_id)  # its sim racer: also one that left (finish cheer on camera)
+	return colors.get(v.racer.player_id, Color.WHITE) if v != null and v.racer != null else Color.WHITE
 
 
 func _update_overlay(racing: Array) -> void:

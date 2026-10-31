@@ -91,6 +91,11 @@ func shot_frame() -> Dictionary:
 	}
 
 
+## The placeholder kart has no driver, so it never reacts (the camera director asks every view).
+func reaction_weight() -> float:
+	return 0.0
+
+
 func _part(mesh: Mesh, m: Material, pos: Vector3) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
