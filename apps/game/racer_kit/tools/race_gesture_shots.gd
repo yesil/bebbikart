@@ -126,6 +126,14 @@ func _aim(v, other, kind: String) -> void:
 		cam.look_at_from_position(m + f * (4.5 + gap * 0.6) + side * 1.2 + Vector3.UP * 1.7, m + Vector3.UP * 0.85)
 	elif kind == "grid":
 		cam.look_at_from_position(p + f * 6.5 + right * 1.5 + Vector3.UP * 2.2, p + Vector3.UP * 0.8)
+	elif v.leaving != "":
+		# Past the line the road ends among trees: from the side over the road, a little ahead.
+		var rt = v._leave_seg["route"]
+		var s: float = minf(v._leave_ls, rt.length)
+		var to_mid: Vector3 = rt.world_at(s, 0.0) - p
+		to_mid.y = 0.0
+		var side: Vector3 = right if right.dot(to_mid) >= 0.0 else -right
+		cam.look_at_from_position(p + f * 2.0 + side * 3.6 + Vector3.UP * 1.5, p + Vector3.UP * 0.85)
 	else:
 		cam.look_at_from_position(p + f * 4.4 + right * 2.0 + Vector3.UP * 1.7, p + Vector3.UP * 0.85)
 

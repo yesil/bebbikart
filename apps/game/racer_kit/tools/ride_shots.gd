@@ -8,7 +8,7 @@ extends SceneTree
 ##
 ## Needs a window (headless has no renderer); exits 1 if a spec is missing or a scene is unknown.
 
-const SCENES := ["rest", "finish", "jump", "land", "bend", "boost"]
+const SCENES := ["rest", "grid", "green", "jump", "land", "bend", "boost", "finish"]
 const DEFAULT := [
 	"res://racer_kit/samples/monster_kart.json",
 	"../../packages/asset-pipeline/out-v6/girl-car.spec.json",
@@ -91,14 +91,15 @@ func _build_stage() -> void:
 	cam = Camera3D.new()
 	cam.fov = 36
 	stage.add_child(cam)
-	cam.look_at_from_position(Vector3(-3.4, 1.5, -3.0), Vector3(0, 0.85, 0))
+	cam.look_at_from_position(Vector3(-3.7, 1.7, -3.3), Vector3(0, 1.0, 0))
 	cam.make_current()
 	label = Label.new()
-	label.position = Vector2(10, 6)
-	label.add_theme_font_size_override("font_size", 26)
+	label.position = Vector2(30, 20)
+	# The project stretches the UI from 1920x1080: sized for a small review window.
+	label.add_theme_font_size_override("font_size", 1920 * 22 / maxi(1, DisplayServer.window_get_size().x))
 	label.add_theme_color_override("font_color", Color("#2b2140"))
 	label.add_theme_color_override("font_outline_color", Color.WHITE)
-	label.add_theme_constant_override("outline_size", 8)
+	label.add_theme_constant_override("outline_size", 1920 * 6 / maxi(1, DisplayServer.window_get_size().x))
 	var ui := CanvasLayer.new()
 	ui.add_child(label)
 	stage.add_child(ui)
@@ -133,6 +134,15 @@ func _fire(r: ToyRacer, scene: String) -> float:
 	match scene:
 		"rest":
 			return 0.4
+		"grid":
+			r.gestures.hold(ToyRacer.Gestures.G.READY, true)  # leaning in on 3-2-1
+			r.ride.crouch(1.0)
+			return 0.9
+		"green":
+			r.gestures.play(ToyRacer.Gestures.G.WHOOP, 0, 0.9)
+			r.ride.go()
+			r.speed = 4.0
+			return 0.3
 		"finish":
 			r.finish()
 			return 0.6
