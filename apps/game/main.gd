@@ -9,6 +9,7 @@
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
 #   --track=countryside|village (mock mode; with --server the session config picks the track),
 #   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full,
+#   --kit (mock mode: fake racers built with the racer kit from res://racer_kit/samples, in turn),
 #   --cam-cycle=SEC (switch racer every SEC s, 0 = never; default: options menu pick, else 8),
 #   --inset=face|side|off (second camera; default: options menu pick, else face),
 #   --quality=low|medium|high (default: last pick in the options menu, else medium),
@@ -77,6 +78,7 @@ var nicks := {}            # playerId -> nickname
 var making := {}           # playerId -> design stage last shown (roster stage)
 var results: Array = []    # recent finished/failed lines
 var camera: CameraRig
+var kit_specs: Array = []      # --kit: sample RacerSpecs for the fake racers
 var director: CameraDirector   # which racer the camera follows, and when it switches
 var cam_hud: CameraHud         # on-camera name, cut pop, picture-in-picture second camera
 var fx: WeatherFx
@@ -139,6 +141,8 @@ func _ready() -> void:
 		assets.problem.connect(func(text: String): _result(I18n.f("log.error", [text])))
 		print("BebbiKart server mode: %s (protocol v%d)" % [url, Protocol.PROTOCOL_VERSION])
 	else:
+		if args.has("kit") and not _load_kit_samples():
+			return
 		net = MockNet.new(config, n_racers, seed_)
 		print("BebbiKart mock mode: protocol v%d, %d fake players, seed %d, course %s" % [
 			Protocol.PROTOCOL_VERSION, n_racers, seed_, JSON.stringify(course.all_route_lengths())])
@@ -237,6 +241,30 @@ func _make_menu() -> void:
 		menu.set_camera(director.cycle_s, cam_hud.inset)
 	if assets != null:
 		menu.set_session(net.session_status)
+
+
+## --kit: every sample RacerSpec in res://racer_kit/samples, validated. False (and quits with the
+## reasons) if there are none or one is broken: no stand-in racers.
+func _load_kit_samples() -> bool:
+	var problems: PackedStringArray = []
+	for path in SpecFolders.list(SpecFolders.SAMPLES):
+		var spec = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if typeof(spec) != TYPE_DICTIONARY:
+			problems.append("%s is not a JSON object" % path)
+			continue
+		var errs: PackedStringArray = RacerSpec.validate(spec)["errors"]
+		if not errs.is_empty():
+			problems.append("%s: %s" % [path, "; ".join(errs)])
+			continue
+		kit_specs.append(spec)
+	if kit_specs.is_empty():
+		problems.append("no sample specs in " + SpecFolders.SAMPLES)
+	if not problems.is_empty():
+		push_error("--kit: " + " | ".join(problems))
+		get_tree().quit(1)
+		return false
+	print("--kit: %d sample racers" % kit_specs.size())
+	return true
 
 
 ## The camera director (which racer the camera follows and how often it switches) and the camera
@@ -560,6 +588,12 @@ func _handle(msg: Dictionary) -> void:
 				v = KitRacerView.new()
 				add_child(v)
 				v.setup(r, spec, assets.drawing_for(pl["playerId"]), nicks.get(pl["playerId"], "?"))
+			elif not kit_specs.is_empty():
+				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
+				var i: int = net.players.map(func(p): return p["playerId"]).find(pl["playerId"])
+				v = KitRacerView.new()
+				add_child(v)
+				v.setup(r, kit_specs[maxi(i, 0) % kit_specs.size()], null, nicks.get(pl["playerId"], "?"))
 			else:
 				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
 				v = RacerView.new()
