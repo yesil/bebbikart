@@ -170,6 +170,12 @@ func _handle(msg: Dictionary) -> void:
 					push_error(err)
 					_result(err)
 					return
+				var checked: Dictionary = RacerSpec.validate(spec)
+				if not (checked["errors"] as PackedStringArray).is_empty():
+					var err := "ERROR run %s: invalid RacerSpec for %s: %s" % [pl["runId"], nicks.get(pl["playerId"], "?"), "; ".join(checked["errors"])]
+					push_error(err)
+					_result(err.left(160))
+					return
 				var r: Racer = sim.add_run(pl["runId"], pl["playerId"], pl["build"])
 				v = KitRacerView.new()
 				add_child(v)
