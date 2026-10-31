@@ -8,8 +8,10 @@ extends Node
 ## passing (cockier): RacerGestures.mood_mem. Each pair of players remembers who passed whom and
 ## who waved at whom (`_rivals`, for the whole game session): passing back someone who passed you
 ## earns them a revenge fist shake, and friends (more waves than passes) high-five at the line.
-## On the start grid (sim countdown): fidgets, looks at the neighbours, a wave to the crowd or the
-## signature gesture, leaning in on 3-2-1, a whoop on green (the ride crouches and leaps too).
+## On the start grid (sim countdown): fidgets, looks at the neighbours, a fist bump with a
+## neighbour in reach, a wave to the crowd or the signature gesture, leaning in on 3-2-1 with the
+## eyes on the start lights (the gantry's lamps where the track has a start gantry, the road
+## ahead where it has none), a whoop on green (the ride crouches and leaps too).
 ## Runs after main.gd has synced the views each frame. Placeholder views (no toy) are skipped.
 ## Finish and crash reactions themselves are the views' own (KitRacerView.leave()).
 
@@ -36,9 +38,13 @@ const PASSED_MOOD := -0.35   # mood memory per pass (RacerGestures.remember)
 const PASSING_MOOD := 0.3
 const GRID_LEAN_S := 2.4     # s before green the drivers start leaning in
 const GRID_CALM_S := 1.3     # s before green the hands go back to the handle
+const BUMP_LANE := 2.3       # m sideways: grid neighbours this close may fist-bump (lanes are 2 m apart)
+const BUMP_AFTER_S := 0.4    # s on the grid before a fist bump
+const LIGHTS_PATH := "StartGrid/StartGantry"  # the countryside's start gantry with its lamps (seed_decor.gd)
 const LINGER_GAP := 0.25     # m kept between finishers standing after their run, and from racers going by
 const NUDGE_SPEED := 10.0    # m/s they slide apart at
 const OLD_S := 1.2           # s after its run a finisher has had its moment (cheer done)
+const SQUEEZE_S := 0.25      # s two finishers may stay pressed together in a crowd before one pops
 const HF_SIDE := Vector2(3.0, 3.5)  # m along / sideways: two finishers this close can high-five
 const HF_S := 2.0            # s the high five may take (roll level within reach, then slap hands)
 const HF_LINE_UP_S := 0.7    # s at most to roll level before the slap starts anyway
@@ -54,6 +60,7 @@ var _side_t := {}            # pair key -> seconds alongside
 var _side_cool := {}         # pair key -> seconds until it may happen again
 var _kits: Array = []        # racing kit views this frame (reused)
 var _lingering: Array = []   # finishers / crashed racers still on screen (reused)
+var _squeezed := {}          # "id-id" -> seconds two finishers have been pressed together
 var _next_id := 0
 var _sweep := 0.0
 var _clock := 0.0
@@ -63,6 +70,8 @@ var _rng := RandomNumberGenerator.new()
 ## "playerA|playerB" (sorted) -> {playerA: times A passed B, playerB: times B passed A, "bond":
 ## waves minus passes}. Kept for the whole game session, across runs.
 var _rivals := {}
+var _lamps: Array = []       # the start gantry's lamps, looked up once; empty on a track without one
+var _lamps_looked := false
 
 
 func _init(p_main) -> void:
@@ -109,6 +118,8 @@ func _process(delta: float) -> void:
 	_left_course()
 	_high_fives(delta)
 	_keep_apart(delta)
+	if _lingering.is_empty():
+		_squeezed.clear()
 	# Forget pairs of racers that left now and then.
 	_sweep -= delta
 	if _sweep <= 0.0:
@@ -297,7 +308,7 @@ func _keep_apart(delta: float) -> void:
 	for i in _lingering.size():
 		var a = _lingering[i]
 		for j in range(i + 1, _lingering.size()):
-			if a.hf_with != _lingering[j]:  # a high-fiving pair keeps its own distance
+			if a.hf_with != _lingering[j] or not _slapping(a):  # mid-slap, a pair keeps its own distance
 				_apart(a, _lingering[j], true, delta)
 		for b in _kits:
 			_apart(a, b, false, delta)
@@ -328,13 +339,19 @@ func _apart(a, b, both: bool, delta: float) -> void:
 			a.nudge(away * minf(step * 1.5, -gap_lat), 0.0)
 		return
 	var lock_b := _slapping(b)
+	if lock_a and lock_b:
+		return  # two pairs mid-slap side by side: a moment, then they move again
 	if lock_a != lock_b:
-		# One of them is mid high five and stays put: the other moves the whole way.
+		# One of them is mid high five and stays put: the other moves the whole way, sideways and
+		# back off along the road, and pops away if it stays pressed against them.
 		var mover = b if lock_a else a
 		var dir := -away if lock_a else away
 		if gap_along < 0.0:
-			mover.nudge(dir * minf(step, -gap_lat), 0.0)
+			var behind: bool = (along < 0.0) if mover == b else (along > 0.0)
+			mover.nudge(dir * minf(step, -gap_lat), minf(step, -gap_along) * (1.0 if behind else -1.0))
 			mover._leave_v = 0.0
+			if _squeeze(a, b, delta) > SQUEEZE_S and mover._leave_t > mover.POP:
+				mover._leave_t = mover.POP
 		return
 	var back = a if along > 0.0 else b
 	var front = b if back == a else a
@@ -343,7 +360,9 @@ func _apart(a, b, both: bool, delta: float) -> void:
 		# the newcomer.
 		var older = a if a._leave_t < b._leave_t else b
 		var stay: float = older.FINISH_STAY if older.leaving == "finished" else older.FAIL_STAY
-		if stay - older._leave_t > OLD_S and older._leave_t > older.POP:
+		# Squeezed together in a crowd for a moment, or one has had its cheer already: it pops.
+		var had: float = stay - older._leave_t
+		if (had > OLD_S or (_squeeze(a, b, delta) > SQUEEZE_S and had > 0.6)) and older._leave_t > older.POP:
 			older._leave_t = older.POP
 			return
 		a.nudge(away * minf(step, -gap_lat) * 0.5, 0.0)
@@ -364,7 +383,7 @@ func _can_high_five(a, b) -> bool:
 		return false
 	var need: float = a.half_size().x + b.half_size().x + LINGER_GAP
 	var reach: float = a.toy.gestures.high_five_reach(_side_of(a, b)) + b.toy.gestures.high_five_reach(_side_of(b, a))
-	return reach * 0.95 >= need
+	return reach * 0.88 >= need
 
 
 func _high_five(a, b) -> void:
@@ -389,6 +408,8 @@ func _slap(a, b) -> void:
 	events.append({"type": "high_five", "views": [a, b]})
 	a.hf_go = a.hf_t
 	b.hf_go = b.hf_t
+	for v in [a, b]:
+		v._leave_t = maxf(v._leave_t, Gestures.HF_PART + 0.6)  # both stay until the hands have parted
 	for p in [[a, b], [b, a]]:
 		var g: Gestures = p[0].toy.gestures
 		g.high_five(_meet(p[0], p[1]), _side_of(p[0], p[1]))
@@ -397,14 +418,14 @@ func _slap(a, b) -> void:
 
 ## Where a's hand slaps b's: between their shoulders (nearer the shorter arm's), a little above
 ## them, a palm's thickness short of the meeting point.
-func _meet(a, b) -> Vector3:
+func _meet(a, b, up := 0.15) -> Vector3:
 	var ga: Gestures = a.toy.gestures
 	var gb: Gestures = b.toy.gestures
 	var sa: Vector3 = ga.character.global_transform * ga._shoulder[0 if _side_of(a, b) < 0 else 1]
 	var sb: Vector3 = gb.character.global_transform * gb._shoulder[0 if _side_of(b, a) < 0 else 1]
 	var ra := ga.high_five_reach(_side_of(a, b))
 	var rb := gb.high_five_reach(_side_of(b, a))
-	var mid := sa.lerp(sb, ra / maxf(ra + rb, 0.01)) + Vector3.UP * 0.15
+	var mid := sa.lerp(sb, ra / maxf(ra + rb, 0.01)) + Vector3.UP * up
 	var dir := sb - sa
 	dir.y = 0.0
 	return mid - dir.normalized() * HF_GAP
@@ -434,7 +455,7 @@ func _high_fives(delta: float) -> void:
 		var d: Vector3 = b.global_position - a.global_position
 		var lat := d.dot(n)
 		var reach: float = a.toy.gestures.high_five_reach(_side_of(a, b)) + b.toy.gestures.high_five_reach(_side_of(b, a))
-		var want := maxf(a.half_size().x + b.half_size().x + LINGER_GAP, reach * 0.85)
+		var want := maxf(a.half_size().x + b.half_size().x + LINGER_GAP, reach * 0.78)
 		var move := clampf(absf(lat) - want, -6.0 * delta, 6.0 * delta) * 0.5 * signf(lat)
 		a.nudge(move, 0.0)
 		b.nudge(-move, 0.0)
@@ -454,6 +475,13 @@ func _high_fives(delta: float) -> void:
 				continue
 		a.toy.gestures.high_five_point(_meet(a, b))
 		b.toy.gestures.high_five_point(_meet(b, a))
+
+
+## Seconds two finishers have been pressed together (counts this frame's delta).
+func _squeeze(a, b, delta: float) -> float:
+	var key := "%d-%d" % [mini(a.get_instance_id(), b.get_instance_id()), maxi(a.get_instance_id(), b.get_instance_id())]
+	_squeezed[key] = float(_squeezed.get(key, 0.0)) + delta
+	return _squeezed[key]
 
 
 ## Mid-slap (lined up, until the hands part): the pair is not pushed around by the others.
@@ -488,6 +516,7 @@ func _grid(v, delta: float) -> void:
 	var g: Gestures = toy.gestures
 	if v.grid_t < 0.0:
 		v.grid_t = 0.0
+		v.grid_bumped = false
 		v.grid_next = _rng.randf_range(0.35, 0.7)
 		v.grid_beat = ceili(go_in)
 		v.grid_ready = false
@@ -505,11 +534,14 @@ func _grid(v, delta: float) -> void:
 			toy.ride.fidget()
 		elif _rng.randf() < 0.5:
 			_look_around(v, 0.9)
+	if not v.grid_bumped and v.grid_t > BUMP_AFTER_S and go_in > GRID_CALM_S + 0.5:
+		_fist_bump(v)
 	if go_in < GRID_LEAN_S:
 		toy.ride.crouch(1.0 - go_in / GRID_LEAN_S)
 		if not v.grid_ready:
 			v.grid_ready = true
 			g.hold(Gestures.G.READY, true)
+			_watch_lights(v, go_in + 0.3)
 	if go_in < GRID_CALM_S:
 		for f in [Gestures.G.SCRATCH, Gestures.G.TAP, Gestures.G.STRETCH, Gestures.G.WAVE, g.sig_pose]:
 			g.stop(f)
@@ -518,6 +550,51 @@ func _grid(v, delta: float) -> void:
 		g.kick(Vector3(0.0, -2.0, 0.0))  # a nod on each light
 		toy.ride.fidget()
 	v.grid_beat = beat
+
+
+## Eyes on the start lights: the nearest lamp of the start gantry, or up the road ahead on a track
+## without one.
+func _watch_lights(v, secs: float) -> void:
+	if not _lamps_looked:
+		_lamps_looked = true
+		for c in main.get_children():
+			var gantry: Node = c.get_node_or_null(LIGHTS_PATH)
+			if gantry != null:
+				for l in gantry.get_children():
+					if String(l.name).begins_with("Lamp") and not String(l.name).begins_with("LampHousing"):
+						_lamps.append(l)
+	if _lamps.is_empty():
+		v.toy.look_at_point(v.global_position + v.forward() * 8.0 + Vector3.UP * 3.0, secs)
+		return
+	var best: Node3D = _lamps[0]
+	for l in _lamps:
+		if (l as Node3D).global_position.distance_squared_to(v.global_position) < best.global_position.distance_squared_to(v.global_position):
+			best = l
+	v.toy.look_at_node(best, secs)
+
+
+## A fist bump with the nearest grid neighbour (both waiting a moment, neither bumped yet) whose
+## fist it can reach; they look at each other first.
+func _fist_bump(v) -> void:
+	for k in main.views:
+		var o = main.views[k]
+		if o == v or o.get("toy") == null or not o.parked or o.grid_bumped or o.grid_t < 0.1:
+			continue
+		var d: Vector3 = o.global_position - v.global_position
+		var fwd: Vector3 = v.forward()
+		if absf(d.dot(fwd)) > 0.8 or Vector2(d.x, d.z).length() > BUMP_LANE:
+			continue
+		var reach: float = v.toy.gestures.high_five_reach(_side_of(v, o), Gestures.FB_REACH) \
+			+ o.toy.gestures.high_five_reach(_side_of(o, v), Gestures.FB_REACH)
+		if reach * 0.97 < Vector2(d.x, d.z).length():
+			continue
+		v.grid_bumped = true
+		o.grid_bumped = true
+		for p in [[v, o], [o, v]]:
+			p[0].toy.look_at_node(p[1].toy.head_pivot, 0.9)
+			p[0].toy.gestures.fist_bump(_meet(p[0], p[1], -0.05), _side_of(p[0], p[1]))
+		events.append({"type": "fist_bump", "views": [v, o]})
+		return
 
 
 ## Green: hands up and a whoop, the ride leaps off.

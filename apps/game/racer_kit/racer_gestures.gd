@@ -19,8 +19,8 @@ extends RefCounted
 ## (SALUTE … JIVE, see STYLE), the social ones (TAUNT a rival, WHOOP on green, FLINCH at a crash).
 enum G { RAIN, HAT, TUCK, WHEEE, BRACE, WAVE, FIST_PUMP, CHEER, SURPRISED, FLAIL, DIZZY, SLUMP, GLANCE_BACK, HEAD_SHAKE,
 	READY, TAP, SCRATCH, STRETCH, SALUTE, CLAP, BOW, SPIN, PEEK, TWIRL, JIVE, TAUNT, WHOOP, FLINCH,
-	HIGH_FIVE, SHAKE_FIST }
-const COUNT := 30
+	HIGH_FIVE, SHAKE_FIST, FIST_BUMP }
+const COUNT := 31
 const NAMES := {
 	"rain": G.RAIN, "hat_hold": G.HAT, "tuck": G.TUCK, "wheee": G.WHEEE, "brace": G.BRACE,
 	"wave": G.WAVE, "fist_pump": G.FIST_PUMP, "cheer": G.CHEER, "surprised": G.SURPRISED,
@@ -28,39 +28,43 @@ const NAMES := {
 	"head_shake": G.HEAD_SHAKE, "ready": G.READY, "tap": G.TAP, "scratch": G.SCRATCH, "stretch": G.STRETCH,
 	"salute": G.SALUTE, "clap": G.CLAP, "bow": G.BOW, "spin": G.SPIN, "peek": G.PEEK, "twirl": G.TWIRL,
 	"jive": G.JIVE, "taunt": G.TAUNT, "whoop": G.WHOOP, "flinch": G.FLINCH,
-	"high_five": G.HIGH_FIVE, "shake_fist": G.SHAKE_FIST,
+	"high_five": G.HIGH_FIVE, "shake_fist": G.SHAKE_FIST, "fist_bump": G.FIST_BUMP,
 }
 # Per gesture (index = G): arms used (0 none, 3 both, 4 one: the side passed to play()), the
 # default side (-1 left, 1 right), blend in / out (s), one-shot length (s), longest reach as a
 # multiple of the arm (rubber arms for the head), the face mood while it plays, and the hand
 # (0 as built, 1 an open flat palm, 2 a round fist).
 const ARMS := [4, 4, 3, 3, 3, 4, 4, 3, 3, 3, 3, 3, 0, 0,
-	0, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 4, 3, 3, 4, 4]
+	0, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 4, 3, 3, 4, 4, 4]
 const SIDE := [-1, -1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0,
-	0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1]
+	0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1]
 const BLEND_IN := [0.45, 0.4, 0.18, 0.16, 0.06, 0.2, 0.07, 0.08, 0.07, 0.1, 0.1, 0.3, 0.15, 0.06,
-	0.35, 0.2, 0.3, 0.5, 0.12, 0.15, 0.25, 0.08, 0.2, 0.35, 0.1, 0.08, 0.07, 0.05, 0.12, 0.08]
+	0.35, 0.2, 0.3, 0.5, 0.12, 0.15, 0.25, 0.08, 0.2, 0.35, 0.1, 0.08, 0.07, 0.05, 0.12, 0.08, 0.12]
 const BLEND_OUT := [0.55, 0.5, 0.3, 0.35, 0.25, 0.4, 0.3, 0.4, 0.45, 0.35, 0.5, 0.6, 0.35, 0.2,
-	0.2, 0.3, 0.35, 0.5, 0.3, 0.35, 0.4, 0.25, 0.35, 0.45, 0.3, 0.35, 0.45, 0.45, 0.35, 0.35]
+	0.2, 0.3, 0.35, 0.5, 0.3, 0.35, 0.4, 0.25, 0.35, 0.45, 0.3, 0.35, 0.45, 0.45, 0.35, 0.35, 0.35]
 const LENGTH := [3.0, 3.0, 1.2, 1.2, 0.35, 1.6, 0.9, 1.4, 0.9, 1.0, 1.1, 1.6, 0.9, 0.75,
-	3.0, 1.2, 1.4, 1.6, 1.3, 1.3, 1.4, 1.0, 1.6, 1.8, 1.2, 1.2, 1.0, 0.8, 1.0, 1.1]
+	3.0, 1.2, 1.4, 1.6, 1.3, 1.3, 1.4, 1.0, 1.6, 1.8, 1.2, 1.2, 1.0, 0.8, 1.0, 1.1, 0.9]
 const REACH := [1.35, 1.35, 1.0, 1.05, 1.0, 1.0, 1.15, 1.25, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.35, 1.05, 1.35, 1.2, 1.1, 1.0, 1.35, 1.05, 1.05, 1.35, 1.25, 1.25, HF_REACH, 1.15]
+	1.0, 1.0, 1.35, 1.05, 1.35, 1.2, 1.1, 1.0, 1.35, 1.05, 1.05, 1.35, 1.25, 1.25, HF_REACH, 1.15, FB_REACH]
 const MOOD := ["determined", "determined", "determined", "excited", "determined", "happy", "excited",
 	"cheering", "excited", "dizzy", "dizzy", "sad", "", "",
 	"determined", "", "", "happy", "happy", "cheering", "happy", "excited", "determined", "happy", "excited",
-	"excited", "cheering", "excited", "cheering", "determined"]
+	"excited", "cheering", "excited", "cheering", "determined", "happy"]
 const HAND := [1, 1, 0, 1, 0, 1, 2, 1, 1, 1, 0, 0, 0, 0,
-	0, 0, 0, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 2]
+	0, 0, 0, 1, 1, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1, 2, 2]
 ## How much each gesture is a reaction worth watching (reaction_weight(); the big-screen camera
 ## holds on it): 0 for weather holds, jump poses, the brace and the lean before the start.
 const REACT := [0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.8, 1.0, 0.6, 0.5, 0.8, 1.0, 0.5, 0.4,
-	0.0, 0.1, 0.3, 0.3, 0.9, 0.9, 0.8, 1.0, 0.8, 0.8, 0.9, 0.8, 0.9, 0.7, 1.0, 0.8]
+	0.0, 0.1, 0.3, 0.3, 0.9, 0.9, 0.8, 1.0, 0.8, 0.8, 0.9, 0.8, 0.9, 0.7, 1.0, 0.8, 0.8]
 ## High five: the arm reaches this far (x arm length) to meet a friend's hand; the slap lands at
 ## HF_HIT s, the hands stay together until HF_PART.
 const HF_REACH := 1.4
 const HF_HIT := 0.42
 const HF_PART := 0.62
+## Fist bump with a neighbour on the start grid: the fists touch at FB_HIT s, part at FB_PART.
+const FB_HIT := 0.34
+const FB_PART := 0.5
+const FB_REACH := 1.8   # rubber arms across the 2 m between grid lanes
 ## Key gestures for the big screen (fist pump, cheer, taunt, whoop): a short wind-up (ANT_S), then
 ## the key pose held still for HOLD_S before it moves, big rubber-arm arcs, and for the cheer and
 ## the whoop a squash of the whole driver into the wind-up and a stretch out of it.
@@ -717,6 +721,12 @@ func high_five(point: Vector3, side: int) -> void:
 	play(G.HIGH_FIVE, side)
 
 
+## Fist bump with the arm on `side`: a quick wind-up, the fist meets `point` (world) at FB_HIT s.
+func fist_bump(point: Vector3, side: int) -> void:
+	_hf_point = point
+	play(G.FIST_BUMP, side)
+
+
 func high_five_point(point: Vector3) -> void:
 	_hf_point = point
 
@@ -728,10 +738,10 @@ func hand_world(side: int) -> Vector3:
 
 ## How far from the racer's middle (world, sideways at shoulder height) the hand on `side` reaches
 ## for a high five.
-func high_five_reach(side: int) -> float:
+func high_five_reach(side: int, k := HF_REACH) -> float:
 	var i := 0 if side < 0 else 1
 	var s := float(side)
-	var far: Vector3 = _shoulder[i] + Vector3(s, 0.25, 0.0).normalized() * _len[i] * HF_REACH * 0.92
+	var far: Vector3 = _shoulder[i] + Vector3(s, 0.25, 0.0).normalized() * _len[i] * k * 0.92
 	var g := character.global_transform
 	var mid := r.global_position
 	var p := g * far
@@ -1082,6 +1092,8 @@ func update(dt: float) -> void:
 				G.HIGH_FIVE:
 					gr -= 0.1 * float(_side[g]) * ws  # lean toward the friend
 					hp += 0.12 * ws
+				G.FIST_BUMP:
+					gr -= 0.14 * float(_side[g]) * ws  # lean right over to the neighbour
 				G.SHAKE_FIST:
 					gp -= (0.04 + 0.1 * _wind(tt)) * ws
 					hr += sin(tt * 14.0) * 0.06 * ws * _moving(tt)
@@ -1359,6 +1371,18 @@ func _pose(g: int, i: int, s: float) -> Vector3:
 			if tt < HF_PART:
 				return meet
 			return meet.lerp(_p_up[i], smoothstep(HF_PART, HF_PART + 0.25, tt))
+		G.FIST_BUMP:
+			# Fist drawn back, punched across to touch the neighbour's, held a beat, back.
+			var at := _char_inv * (r.rig.transform * r.model.transform).affine_inverse() \
+				* (r.global_transform.affine_inverse() * _hf_point) if r.is_inside_tree() else _p_out[i]
+			var drawn := _p_wind[i]
+			if tt < FB_HIT - 0.14:
+				return drawn
+			if tt < FB_HIT:
+				return drawn.lerp(at, smoothstep(FB_HIT - 0.14, FB_HIT, tt))
+			if tt < FB_PART:
+				return at
+			return at.lerp(drawn, smoothstep(FB_PART, FB_PART + 0.25, tt))
 		G.SHAKE_FIST:
 			var shake := Vector3(s * 0.06 * sin(tt * 30.0), 0.03 * sin(tt * 60.0), 0.0) * _moving(tt)
 			return _p_wind[i].lerp(_p_pump_hi[i] + shake, 1.0 - _wind(tt))
@@ -1392,7 +1416,7 @@ func _pole(g: int, s: float) -> Vector3:
 			p = POLE_HEAD
 		G.TUCK, G.BRACE, G.TAP:
 			p = POLE_GRIP
-		G.HIGH_FIVE:
+		G.HIGH_FIVE, G.FIST_BUMP:
 			p = POLE_HEAD
 		G.DIZZY, G.SLUMP:
 			p = POLE_LAP

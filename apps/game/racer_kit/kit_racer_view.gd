@@ -20,6 +20,7 @@ var grid_t := -1.0       # seconds waiting on the start grid; -1 = not on it
 var grid_next := 0.0     # grid_t of the next fidget
 var grid_beat := 0       # whole seconds to green at the last nod
 var grid_ready := false  # leaning in for the start
+var grid_bumped := false # fist-bumped a neighbour this countdown
 var race_t := 0.0        # seconds since it left the grid (race_reactions.gd)
 var cheered := false     # already cheered together with another finisher
 var hf_with = null       # the finisher this one is high-fiving (race_reactions.gd), or null
@@ -144,9 +145,10 @@ func sync() -> void:
 	_was_bumped = bumped
 
 
-## Half the toy's footprint (x across, y along the road), metres; finishers keep this apart.
+## Half the racer's footprint (x across, y along the road), metres: the sim's own (its built
+## toy's ride, world/toy_footprint.gd), so finishers keep the spacing the race kept.
 func half_size() -> Vector2:
-	return Vector2(_box.size.x, _box.size.z) * 0.5 if toy != null else Vector2(0.6, 0.9)
+	return Vector2(racer.radius, racer.half_len)
 
 
 ## Slides a finisher sideways on its road (keeping on it) and back along it; race_reactions.gd

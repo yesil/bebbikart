@@ -27,7 +27,7 @@ const MAX_US := 50.0
 const EVENTS := ["wave", "cheer", "fist_pump", "glance_back", "slump", "dizzy", "brace", "surprised",
 	"head_shake", "flail", "wheee", "tuck", "rain", "hat_hold",
 	"ready", "tap", "scratch", "stretch", "salute", "clap", "bow", "spin", "peek", "twirl", "jive",
-	"taunt", "whoop", "flinch", "high_five", "shake_fist",
+	"taunt", "whoop", "flinch", "high_five", "shake_fist", "fist_bump",
 	"state:rain", "state:wind", "state:air", "state:slip", "state:water", "state:boost",
 	"bump", "land", "fail", "celebrate", "finish", "look", "drive", "grid", "signature",
 	"mood:grumpy", "mood:cocky", "idle"]
@@ -193,6 +193,7 @@ func _fire(r: ToyRacer, ev: String, on: bool) -> void:
 		"finish": r.finish()
 		"signature": r.signature()
 		"high_five": r.gestures.high_five(r.global_position + r.global_basis.x * 0.9 + Vector3.UP * 1.1, 1)
+		"fist_bump": r.gestures.fist_bump(r.global_position + r.global_basis.x * 0.9 + Vector3.UP * 0.9, 1)
 		"look": r.look_at_point(r.global_position + Vector3(-3.0, 1.5, 2.0), 2.0)
 		_: r.gesture(ev)
 
