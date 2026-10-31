@@ -12,6 +12,8 @@
 // ones. New designs are capped by --max-new (default 8): real Claude calls cost money.
 //
 // Flags: --players N (4) --url URL --races N (2) --stagger MS (0) --join-stagger MS (0)
+//   --waves N --wave-gap MS (1, 20000): Go in N groups, wave-gap apart (a second group lines up
+//   while the first is still racing, e.g. lapping past the start line)
 //   --state FILE --fresh (forget saved racers) --max-new N (8) --names A,B,C --seed N (1)
 //   --renders 0 (don't wait for the game's hero/avatar renders, e.g. with fake-game)
 //   --track countryside|village (switches via the admin API: ends the session, new leaderboard)
@@ -48,6 +50,8 @@ const N = Number(args.players ?? 4);
 const BASE = (args.url ?? "http://localhost:8080").replace(/\/$/, "");
 const RACES = Number(args.races ?? 2);
 const STAGGER = Number(args.stagger ?? 0);
+const WAVES = Math.max(1, Number(args.waves ?? 1));
+const WAVE_GAP = Number(args["wave-gap"] ?? 20_000);
 const JOIN_STAGGER = Number(args["join-stagger"] ?? 0);
 const MAX_NEW = Number(args["max-new"] ?? 8);
 const WAIT_RENDERS = args.renders !== "0";
@@ -361,7 +365,8 @@ class Race {
 
   onMessage(m, at) {
     const p = m.payload;
-    if (p?.runId !== this.runId && p?.run?.id !== this.runId) return;
+    // Only this race's run (not one still going from before, e.g. on the same device elsewhere).
+    if (!this.runId || (p?.runId ?? p?.run?.id) !== this.runId) return;
     if (m.type === "run.grid") {
       this.greenAt = at + p.goInMs;
       this.r.gridGoInMs = p.goInMs;
@@ -467,7 +472,11 @@ function checkHeats(phones, n, lastEnd) {
     for (const { ph, h } of list)
       if (JSON.stringify(h.entries) !== first)
         fail(ph.tag, `race ${n}: heat ${id} differs between phones`);
-    const lag = Math.max(...list.map(({ h }) => h.at)) - lastEnd;
+    // From this heat's own last result (a later wave may still have been racing).
+    const heatEnd = Math.max(
+      ...list.map(({ ph }) => ph.races.find((r) => r.race === n)?.endedAt ?? 0),
+    );
+    const lag = Math.max(...list.map(({ h }) => h.at)) - heatEnd;
     const names = list[0].h.entries
       .map((e) => `${e.place ? `${e.place}.` : e.outcome ? "oops" : "?"} ${e.nickname}`)
       .join(", ");
@@ -508,7 +517,7 @@ async function main() {
   );
   writeFileSync(
     STATE,
-    `${JSON.stringify({ ...saved, [key]: phones.map((p) => ({ deviceId: p.deviceId, name: p.name })) }, null, 2)}\n`,
+    `${JSON.stringify({ ...saved, [key]: [...phones.map((p) => ({ deviceId: p.deviceId, name: p.name })), ...slots.slice(N)] }, null, 2)}\n`,
   );
   const ready = phones.filter((ph, i) => {
     if (joined[i].status === "fulfilled") return true;
@@ -525,7 +534,8 @@ async function main() {
     if (n > 1) await Bun.sleep(ready[0].config.launchCooldownMs + 500);
     const results = await Promise.allSettled(
       ready.map(async (ph, i) => {
-        await Bun.sleep(i * STAGGER);
+        const per = Math.ceil(ready.length / WAVES);
+        await Bun.sleep(Math.floor(i / per) * WAVE_GAP + (i % per) * STAGGER);
         const r = await new Race(ph, n).go();
         ph.races.push(r);
         return r;

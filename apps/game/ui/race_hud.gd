@@ -726,6 +726,7 @@ func _rerank_local() -> void:
 func _avatar_chip(size: int) -> Dictionary:
 	var root := _panel(Color.WHITE, size / 2, Color.WHITE, 3)
 	root.custom_minimum_size = Vector2(size, size)
+	(root.get_theme_stylebox("panel") as StyleBoxFlat).set_content_margin_all(3)  # the chip is the size
 	var tex := TextureRect.new()
 	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
