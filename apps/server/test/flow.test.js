@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMockClient } from "@bebbikart/asset-pipeline";
-import { DEFAULT_CONFIG, makeMsg } from "@bebbikart/shared";
+import { DEFAULT_BUILD, DEFAULT_CONFIG, makeMsg } from "@bebbikart/shared";
 import { loadSettings, REPO_ROOT } from "../src/env.js";
 import { startServer } from "../src/index.js";
 
@@ -65,6 +65,13 @@ function client(headers, hello) {
 }
 
 test("phone → drawings → racer on the big screen → race → result", async () => {
+  // Each designer pass takes a moment, like the real one, so the big screen's roster (debounced
+  // 250 ms) gets to show the design steps before the racer is ready.
+  const instant = settings.designClient.complete;
+  settings.designClient.complete = async (...args) => {
+    await Bun.sleep(300);
+    return instant(...args);
+  };
   // Game connects first.
   const game = client({}, { role: "game", gameKey: settings.gameKey });
   await game.start();
@@ -133,6 +140,7 @@ test("phone → drawings → racer on the big screen → race → result", async
     .filter((m) => m.type === "roster.updated")
     .flatMap((m) => m.payload.map((e) => e.stage).filter(Boolean));
   expect(seen.length).toBeGreaterThan(0);
+  settings.designClient.complete = instant;
   expect(ready.payload.asset.spec.title).toBe("The Purple Flash");
   const roster = await game.wait("roster.updated", (r) => r.some((e) => e.status === "ready"));
   const entry = roster.payload.find((e) => e.playerId === player.id);
@@ -155,7 +163,7 @@ test("phone → drawings → racer on the big screen → race → result", async
   phone.send("phoneToServer", "phone.go", {});
   const start = await game.wait("run.start");
   const runId = start.payload.runId;
-  expect(start.payload.build.stars.speed).toBe(2);
+  expect(start.payload.build.stars.speed).toBe(DEFAULT_BUILD.stars.speed);
   await phone.wait("run.queued");
   game.send("gameToServer", "game.run.started", { runId });
   await phone.wait("run.started");
