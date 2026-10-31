@@ -412,7 +412,7 @@ interface Envelope<T extends string, P> {
 | `run.heat`                   | `{ heatId, done, entries: HeatEntry[] }`                                                       | A heat-mate's run ended (see "Heats" below)           |
 | `grid.updated`               | `{ goInMs, racers: [{ playerId, nickname }] }`                                                 | To every phone: a run joined the open countdown (§2c) |
 | `paddock.updated`            | `PaddockEntry[]`                                                                               | Everyone in the session (see "Paddock" below)         |
-| `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1 |
+| `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs?, place?, of? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1; `place` of `of` = position right now in its heat (racers home first, then by distance) |
 | `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
 | `run.ended`                  | `{ run, isPersonalBest, rank?, coach: CoachTip }`                                              | Finish or fail                                        |

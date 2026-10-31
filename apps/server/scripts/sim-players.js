@@ -379,6 +379,7 @@ class Race {
         this.pending = null;
       }
       this.boostsLeft = p.boostsLeft;
+      if (p.place) Object.assign(this.r, { lastPlace: p.place, of: p.of });
       if (this.loop && p.lap > 1 && args.pit && !this.pitSent) {
         this.pitSent = true;
         this.phone.send("phone.stop", { runId: this.runId });
@@ -422,7 +423,7 @@ class Race {
         : `${run.outcome} ${run.failReason ?? ""}@${run.failSection ?? ""}`;
     line(
       this.phone.tag,
-      `result: ${what}${e.rank ? ` rank #${e.rank}` : ""}${e.isPersonalBest ? " PB" : ""} · "${e.coach?.text}"`,
+      `result: ${what}${this.r.lastPlace ? ` (last seen ${this.r.lastPlace} of ${this.r.of})` : ""}${e.rank ? ` rank #${e.rank}` : ""}${e.isPersonalBest ? " PB" : ""} · "${e.coach?.text}"`,
     );
   }
 }

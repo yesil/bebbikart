@@ -739,6 +739,24 @@ h2 {
   font-variant-numeric: tabular-nums;
   min-height: 3.2rem;
 }
+/* Place right now among the racers who left together (run.progress place/of) */
+.live-place {
+  align-self: center;
+  font-size: 1.5rem;
+  font-weight: 900;
+  padding: 4px 16px;
+  border-radius: 99px;
+  background: var(--line);
+}
+.live-place.p1 {
+  background: #ffd23f;
+}
+.live-place.p2 {
+  background: #e3e8ef;
+}
+.live-place.p3 {
+  background: #f0c49a;
+}
 .get-ready {
   text-align: center;
   font-size: 1.3rem;

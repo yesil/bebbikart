@@ -685,6 +685,22 @@ test("a heat: racers who left together see each other's places on their phones, 
     runIds.push((await game.wait("run.start", (p) => p.playerId === r.me.id)).payload.runId);
   }
   for (const runId of runIds) game.send("gameToServer", "game.run.started", { runId });
+  // Live place in the heat: A is further along than B.
+  for (const [runId, progress] of [
+    [runIds[0], 0.5],
+    [runIds[1], 0.3],
+  ])
+    game.send("gameToServer", "game.run.progress", {
+      runId,
+      progress,
+      elapsedMs: 9000,
+      section: "pond",
+      boostsLeft: 3,
+    });
+  const pa = await a.phone.wait("run.progress", (p) => p.runId === runIds[0] && p.progress === 0.5);
+  expect([pa.payload.place, pa.payload.of]).toEqual([1, 2]);
+  const pb = await b.phone.wait("run.progress", (p) => p.runId === runIds[1] && p.progress === 0.3);
+  expect([pb.payload.place, pb.payload.of]).toEqual([2, 2]);
   const result = { splits: {}, events: [], boostsUsed: 0, weatherSeen: [] };
   game.send("gameToServer", "game.run.finished", {
     runId: runIds[1],

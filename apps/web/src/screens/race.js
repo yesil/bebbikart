@@ -83,6 +83,11 @@ export function Run({ ctx }) {
           : null
       }
       ${counting ? html`<div class="get-ready">${COPY.run.getReady}</div>` : null}
+      ${
+        started && live.place && live.of > 1
+          ? html`<div class=${`live-place p${Math.min(live.place, 4)}`}>${COPY.run.place(live.place, live.of)}</div>`
+          : null
+      }
       <div class=${`timer ${counting ? `count ${left > 0 ? "" : "go"}` : ""}`}>
         ${started ? secs(loop ? (live.lapMs ?? live.elapsedMs) : live.elapsedMs) : counting ? (left > 0 ? left : COPY.run.go) : COPY.run.queued}
       </div>

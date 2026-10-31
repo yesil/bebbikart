@@ -161,6 +161,9 @@ export const CHANNELS = {
       deltaVsBestMs: z.number().int().optional(),
       boostsLeft: z.number().int().nonnegative(),
       ...lapInfo,
+      // In a heat (§7 "Heats"): place right now among the racers who left together, of how many.
+      place: z.number().int().positive().optional(),
+      of: z.number().int().positive().optional(),
     }),
     // Loop tracks: a lap completed. isLapBest = the player's fastest lap ever (session).
     "run.lap": z.object({

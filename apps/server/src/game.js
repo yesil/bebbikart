@@ -518,6 +518,21 @@ export function createGame({ db, settings, hub, log = console.log }) {
     heat.runIds.push(runId);
     runHeat.set(runId, heat.id);
   }
+  /** Where a run is among its heat right now: racers home with a time first, then by distance. */
+  function heatPlace(r) {
+    const heat = heats.get(runHeat.get(r.id));
+    if (!heat || heat.runIds.length < 2) return undefined;
+    const members = heat.runIds
+      .map((id) => runs.get(id))
+      .filter((m) => m && players.has(m.playerId));
+    let ahead = 0;
+    for (const m of members) {
+      if (m.id === r.id) continue;
+      if (m.status === "done") ahead += rankTime(m) !== undefined ? 1 : 0;
+      else if ((m.liveDist ?? 0) > (r.liveDist ?? 0)) ahead++;
+    }
+    return { place: ahead + 1, of: members.length };
+  }
   function pushHeat(runId) {
     const heat = heats.get(runHeat.get(runId));
     if (!heat) return;
@@ -602,7 +617,10 @@ export function createGame({ db, settings, hub, log = console.log }) {
       case "game.run.progress": {
         const r = gameRun(pl.runId);
         if (!r) return;
+        r.liveDist = (pl.lap ? pl.lap - 1 : 0) + pl.progress; // laps + progress on loops
         const out = { ...pl };
+        const hp = heatPlace(r);
+        if (hp) Object.assign(out, hp);
         const best = bestRunOf(r.playerId);
         if (best?.splits) {
           // vs best at the same point: compare elapsed with best's time for completed sections.
@@ -670,7 +688,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function finishRun(ok, pl) {
     const r = gameRun(pl.runId);
     if (!r) return;
-    const { liveSplits, liveLaps, ...base } = r;
+    const { liveSplits, liveLaps, liveDist, ...base } = r;
     const run = {
       ...base,
       status: "done",
