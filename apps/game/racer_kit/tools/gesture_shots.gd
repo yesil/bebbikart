@@ -2,7 +2,8 @@ extends SceneTree
 ## Windowed review of RacerGestures: a row of racers caught mid-gesture, one PNG per gesture.
 ##
 ##   godot --path apps/game --resolution 1920x1080 --script res://racer_kit/tools/gesture_shots.gd \
-##     -- --out=<dir> [--only=cheer,wave] [--racers=<spec file>,<spec file>…]
+##     -- --out=<dir> [--only=cheer,wave] [--racers=<spec file>,<spec file>…] [--at=SEC]
+## --at: take every scene's picture SEC after its gesture starts (the wind-up, the held key pose).
 ##
 ## Default racers: a mix of every ride base with hair, hats and ears from the samples and the
 ## designer output. Needs a window (headless has no renderer); exits 1 if a spec is missing.
@@ -27,6 +28,7 @@ var scene_i := -1
 var t := 0.0
 var shot_at := 0.0
 var fired := false
+var at := -1.0
 
 
 func _initialize() -> void:
@@ -37,6 +39,8 @@ func _initialize() -> void:
 			out_dir = a.trim_prefix("--out=")
 		elif a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
+		elif a.begins_with("--at="):
+			at = float(a.trim_prefix("--at="))
 		elif a.begins_with("--racers="):
 			list = Array(a.trim_prefix("--racers=").split(",", false))
 	if out_dir == "":
@@ -130,6 +134,12 @@ func _fire(r: ToyRacer, scene: String) -> float:
 		"cheer":
 			r.celebrate(3)
 			return 0.62
+		"whoop":
+			r.gesture("whoop")
+			return 0.4
+		"taunt":
+			r.gesture("taunt")
+			return 0.4
 		"wave":
 			r.wave()
 			r.look_at_node(cam, 2.0)
@@ -191,7 +201,9 @@ func _process(delta: float) -> bool:
 	if not fired and t > 0.3:
 		fired = true
 		for r in racers:
-			shot_at = 0.3 + _fire(r, scene)
+			shot_at = 0.3 + (at if at >= 0.0 else _fire(r, scene))
+			if at >= 0.0:
+				_fire(r, scene)
 	if fired and t >= shot_at:
 		var img := root.get_texture().get_image()
 		var path := out_dir.path_join("%02d_%s.png" % [scene_i, scene])

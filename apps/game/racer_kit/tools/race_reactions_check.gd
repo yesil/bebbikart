@@ -1,15 +1,19 @@
 extends SceneTree
 ## Headless check of the race-wide reactions (race_reactions.gd) in the real mock race with kit
 ## racers: counts every reaction event and fails if the start grid (lean in, whoop on green),
-## overtakes, a rival alongside or two racers finishing together never happened, or if a racer
-## coasting after its finish leaves the road. Crashes are rare, so flinches are only counted.
+## overtakes, a rival alongside or two racers finishing together never happened, if a racer
+## coasting after its finish leaves the road, if two finishers stand inside each other (after
+## SETTLE_S), if a rival moment fires while a group leaves the grid or a finisher cheers together
+## twice. Crashes are rare, so flinches are only counted.
 ## main.gd reads the same user args (pass --kit).
 ##
 ##   godot --headless --path apps/game --script res://racer_kit/tools/race_reactions_check.gd \
-##     -- --kit --racers=16 --seed=4 --speed=2 [--limit=120]
+##     -- --kit --racers=16 --seed=4 --speed=2 [--limit=120] [--verbose]
 
 const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
 const MUST := ["go", "overtake", "alongside", "finish_together"]
+const SETTLE_S := 0.5
+const MAX_PAIR_FRAMES := 15
 
 var main: Node
 var limit := 120.0
@@ -20,6 +24,8 @@ var off_road := 0      # frames a coasting finisher was off its road
 var coast_frames := 0
 var early_rivals := 0  # rival moments right after the grid (a group leaving together)
 var together := {}     # finisher -> joint cheers
+var overlaps := 0      # frames two finishers standing after their run were inside each other
+var pair_frames := {}  # pair -> those frames
 
 
 func _initialize() -> void:
@@ -49,6 +55,22 @@ func _process(delta: float) -> bool:
 		var v = main.views[k]
 		if v.get_script() == KitRacerView and v.grid_ready:
 			ready_seen[v] = true
+	var lv: Array = []
+	for id in main.leaving:
+		var v = main.leaving[id]
+		if is_instance_valid(v) and v.leaving != "":
+			lv.append(v)
+	for i in lv.size():
+		for j in range(i + 1, lv.size()):
+			# Two racers can cross the line already touching (the sim keeps a smaller circle than a
+			# toy's footprint): they have SETTLE_S to slide apart. Popping away does not count.
+			if _settled(lv[i]) and _settled(lv[j]) and _overlap(lv[i], lv[j]):
+				overlaps += 1
+				var key := "%d-%d" % [mini(lv[i].get_instance_id(), lv[j].get_instance_id()), maxi(lv[i].get_instance_id(), lv[j].get_instance_id())]
+				pair_frames[key] = int(pair_frames.get(key, 0)) + 1
+				if "--verbose" in OS.get_cmdline_user_args():
+					print("overlap %s %.2f / %s %.2f, %s %s, gap %.2f" % [lv[i].nickname, lv[i]._leave_t, lv[j].nickname, lv[j]._leave_t,
+						lv[i].leaving, lv[j].leaving, lv[i].global_position.distance_to(lv[j].global_position)])
 	for id in main.leaving:
 		var v = main.leaving[id]
 		if is_instance_valid(v) and v.leaving == "finished":
@@ -63,6 +85,24 @@ func _process(delta: float) -> bool:
 	return false
 
 
+func _settled(v) -> bool:
+	var stay: float = v.FINISH_STAY if v.leaving == "finished" else v.FAIL_STAY
+	return stay - v._leave_t > SETTLE_S and v._leave_t > v.POP
+
+
+## Footprints (KitRacerView.half_size, in the first one's road frame) overlapping by more than 5 cm.
+func _overlap(a, b) -> bool:
+	var fwd: Vector3 = a.forward()
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var d: Vector3 = b.global_position - a.global_position
+	var along := absf(d.dot(fwd))
+	var lat := absf(d.dot(Vector3(-fwd.z, 0.0, fwd.x)))
+	var ha: Vector2 = a.half_size()
+	var hb: Vector2 = b.half_size()
+	return along < ha.y + hb.y - 0.05 and lat < ha.x + hb.x - 0.05
+
+
 func _report() -> void:
 	var bad := PackedStringArray()
 	for k in MUST:
@@ -75,10 +115,17 @@ func _report() -> void:
 	var twice := together.values().filter(func(n): return n > 1).size()
 	if twice > 0:
 		bad.append("%d finishers cheered together more than once" % twice)
+	# In a crowd at the line (three or more finishing within a second) a pair may need a moment to
+	# slide apart; one pair inside each other for longer than MAX_PAIR_FRAMES fails.
+	var worst := 0
+	for k in pair_frames:
+		worst = maxi(worst, int(pair_frames[k]))
+	if worst > MAX_PAIR_FRAMES:
+		bad.append("two finishers inside each other for %d frames (limit %d)" % [worst, MAX_PAIR_FRAMES])
 	if off_road > 0:
 		bad.append("coasting finishers off the road for %d of %d frames" % [off_road, coast_frames])
-	print("race reactions in %.0f s: %s, leaning in on the grid: %d racers, coasting finishers on the road: %d frames%s" % [
-		limit, JSON.stringify(counts), ready_seen.size(), coast_frames,
+	print("race reactions in %.0f s: %s, leaning in on the grid: %d racers, coasting finishers on the road: %d frames, finishers inside each other: %d frames (%d pairs)%s" % [
+		limit, JSON.stringify(counts), ready_seen.size(), coast_frames, overlaps, pair_frames.size(),
 		"" if counts.flinch > 0 else " (no crash near a racer this run)"])
 	if not bad.is_empty():
 		push_error("race_reactions_check: " + "; ".join(bad))

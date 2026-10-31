@@ -118,7 +118,16 @@ func _aim(v, other, kind: String) -> void:
 	var f: Vector3 = v.forward()
 	var right := f.cross(Vector3.UP).normalized()
 	var p: Vector3 = v.global_position
-	if other != null:
+	if other != null and v.leaving != "":
+		# Two finishers: past the line the road ends among trees, so from the side over the road.
+		var m2: Vector3 = (p + other.global_position) * 0.5
+		var rt2 = v._leave_seg["route"]
+		var to_mid2: Vector3 = rt2.world_at(minf(v._leave_ls, rt2.length), 0.0) - m2
+		to_mid2.y = 0.0
+		var side2: Vector3 = right if right.dot(to_mid2) >= 0.0 else -right
+		cam.look_at_from_position(m2 + f * 2.0 + side2 * (4.0 + p.distance_to(other.global_position) * 0.5) + Vector3.UP * 1.7,
+			m2 + Vector3.UP * 0.85)
+	elif other != null:
 		var m: Vector3 = (p + other.global_position) * 0.5
 		var gap: float = p.distance_to(other.global_position)
 		# From ahead of the pair, a little to the side: both faces and the arms between them.

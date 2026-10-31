@@ -33,6 +33,9 @@ const PASSED_MOOD := -0.35   # mood memory per pass (RacerGestures.remember)
 const PASSING_MOOD := 0.3
 const GRID_LEAN_S := 2.4     # s before green the drivers start leaning in
 const GRID_CALM_S := 1.3     # s before green the hands go back to the handle
+const LINGER_GAP := 0.25     # m kept between finishers standing after their run, and from racers going by
+const NUDGE_SPEED := 10.0    # m/s they slide apart at
+const OLD_S := 1.2           # s after its run a finisher has had its moment (cheer done)
 
 var main                     # main.gd: reads views, leaving views and sim
 ## This frame's events, for tools: {"type": "overtake" | "alongside" | "flinch" | "finish_together"
@@ -43,6 +46,7 @@ var _order := {}             # pair key -> 1 / -1: which of the two was ahead al
 var _side_t := {}            # pair key -> seconds alongside
 var _side_cool := {}         # pair key -> seconds until it may happen again
 var _kits: Array = []        # racing kit views this frame (reused)
+var _lingering: Array = []   # finishers / crashed racers still on screen (reused)
 var _next_id := 0
 var _sweep := 0.0
 var _clock := 0.0
@@ -93,6 +97,7 @@ func _process(delta: float) -> void:
 	for v in _kits:
 		v.react_prev = v.global_position
 	_left_course()
+	_keep_apart(delta)
 	# Forget pairs of racers that left now and then.
 	_sweep -= delta
 	if _sweep <= 0.0:
@@ -236,6 +241,62 @@ func _left_course() -> void:
 			_finishers.append([_clock, v])
 	while not _finishers.is_empty() and _clock - float(_finishers[0][0]) > FINISH_TOGETHER_S:
 		_finishers.pop_front()
+
+
+## Finishers coasting and standing after their run (main.leaving) slide apart sideways, and the
+## one behind stops behind, so two never sit inside each other (and none inside a racer going by).
+func _keep_apart(delta: float) -> void:
+	_lingering.clear()
+	for id in main.leaving:
+		var v = main.leaving[id]
+		if is_instance_valid(v) and v.toy != null and v.leaving != "":
+			_lingering.append(v)
+	for i in _lingering.size():
+		var a = _lingering[i]
+		for j in range(i + 1, _lingering.size()):
+			_apart(a, _lingering[j], true, delta)
+		for b in _kits:
+			_apart(a, b, false, delta)
+
+
+func _apart(a, b, both: bool, delta: float) -> void:
+	var fwd: Vector3 = a.forward()
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var n := Vector3(-fwd.z, 0.0, fwd.x)  # the road's +d side (Route.normal_at)
+	var d: Vector3 = b.global_position - a.global_position
+	var along := d.dot(fwd)
+	var lat := d.dot(n)
+	var ha: Vector2 = a.half_size()
+	var hb: Vector2 = b.half_size()
+	var gap_lat := absf(lat) - (ha.x + hb.x + LINGER_GAP)
+	var gap_along := absf(along) - (ha.y + hb.y + LINGER_GAP)
+	if gap_lat >= 0.0:
+		return  # side by side with room
+	# Away from the other one; when right in line, toward the road edge it is already nearer.
+	var away := -signf(lat) if absf(lat) > 0.05 else (1.0 if float(a._leave_d) >= 0.0 else -1.0)
+	var step := NUDGE_SPEED * delta
+	if not both:
+		# A racer going by: overlapping, or coming up behind within 8 m: get out of its way.
+		if gap_along < 0.0 or (along < 0.0 and gap_along < 8.0):
+			a.nudge(away * minf(step * 1.5, -gap_lat), 0.0)
+		return
+	var back = a if along > 0.0 else b
+	var front = b if back == a else a
+	if gap_along < 0.0:
+		# A crowd at the line: one that has had its moment pops away now instead of standing inside
+		# the newcomer.
+		var older = a if a._leave_t < b._leave_t else b
+		var stay: float = older.FINISH_STAY if older.leaving == "finished" else older.FAIL_STAY
+		if stay - older._leave_t > OLD_S and older._leave_t > older.POP:
+			older._leave_t = older.POP
+			return
+		a.nudge(away * minf(step, -gap_lat) * 0.5, 0.0)
+		b.nudge(-away * minf(step, -gap_lat) * 0.5, 0.0)
+		back._leave_v = minf(back._leave_v, front._leave_v)
+		back.nudge(0.0, minf(step, -gap_along))
+	elif back._leave_v > front._leave_v and gap_along < (back._leave_v - front._leave_v) * 0.5:
+		back._leave_v = front._leave_v + gap_along / 0.5  # ease in behind it
 
 
 func _cheer_together(a, b) -> void:

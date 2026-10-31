@@ -30,6 +30,7 @@ var _leave_seg := {}      # where on the course the racer coasts after its run: 
 var _leave_ls := 0.0      # along it, sideways offset, height above the road
 var _leave_d := 0.0
 var _leave_dy := 0.0
+var _nudged := 0.0        # seconds left of being kept apart from another racer (race_reactions.gd)
 var _yaw_prev := 0.0
 var _turn := 0.0
 var _braced := false
@@ -140,6 +141,20 @@ func sync() -> void:
 	_was_bumped = bumped
 
 
+## Half the toy's footprint (x across, y along the road), metres; finishers keep this apart.
+func half_size() -> Vector2:
+	return Vector2(_box.size.x, _box.size.z) * 0.5 if toy != null else Vector2(0.6, 0.9)
+
+
+## Slides a finisher sideways on its road (keeping on it) and back along it; race_reactions.gd
+## uses it so finishers standing after their run never sit inside each other.
+func nudge(side: float, back: float) -> void:
+	var hw := float(_leave_seg.get("half_width", 3.0)) - 0.3
+	_leave_d = clampf(_leave_d + side, -hw, hw)
+	_leave_ls -= back
+	_nudged = 0.15  # crowded: no pulling over for a moment
+
+
 ## How strongly the driver is mid-reaction (ToyRacer.reaction_weight); 0 without a built toy.
 func reaction_weight() -> float:
 	return toy.reaction_weight() if toy != null else 0.0
@@ -189,6 +204,11 @@ func _process(delta: float) -> void:
 	var brake := 3.0 if _leave_ls > float(_leave_seg["route"].length) and not racer.looping else 1.0
 	_leave_v = maxf(0.0, _leave_v - delta * maxf(8.0, _leave_v * 2.5) * brake)
 	_leave_ls += _leave_v * delta
+	_nudged = maxf(0.0, _nudged - delta)
+	if leaving == "finished" and _nudged <= 0.0:
+		# Pull over to the nearer road edge, out of the way of the racers finishing behind.
+		var edge := float(_leave_seg.get("half_width", 3.0)) - half_size().x - 0.3
+		_leave_d = move_toward(_leave_d, edge if _leave_d >= 0.0 else -edge, delta * 2.5)
 	var rt = _leave_seg["route"]
 	if _leave_ls > rt.length and racer.looping and not racer.segs.is_empty() and _leave_seg != racer.segs[0]:
 		_leave_ls -= rt.length

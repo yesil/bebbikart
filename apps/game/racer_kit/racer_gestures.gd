@@ -36,14 +36,14 @@ const ARMS := [4, 4, 3, 3, 3, 4, 4, 3, 3, 3, 3, 3, 0, 0,
 	0, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 4, 3, 3]
 const SIDE := [-1, -1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0,
 	0, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0]
-const BLEND_IN := [0.45, 0.4, 0.18, 0.16, 0.06, 0.2, 0.1, 0.15, 0.07, 0.1, 0.1, 0.3, 0.15, 0.06,
-	0.35, 0.2, 0.3, 0.5, 0.12, 0.15, 0.25, 0.08, 0.2, 0.35, 0.1, 0.15, 0.1, 0.05]
+const BLEND_IN := [0.45, 0.4, 0.18, 0.16, 0.06, 0.2, 0.07, 0.08, 0.07, 0.1, 0.1, 0.3, 0.15, 0.06,
+	0.35, 0.2, 0.3, 0.5, 0.12, 0.15, 0.25, 0.08, 0.2, 0.35, 0.1, 0.08, 0.07, 0.05]
 const BLEND_OUT := [0.55, 0.5, 0.3, 0.35, 0.25, 0.4, 0.3, 0.4, 0.45, 0.35, 0.5, 0.6, 0.35, 0.2,
 	0.2, 0.3, 0.35, 0.5, 0.3, 0.35, 0.4, 0.25, 0.35, 0.45, 0.3, 0.35, 0.45, 0.45]
 const LENGTH := [3.0, 3.0, 1.2, 1.2, 0.35, 1.6, 0.9, 1.4, 0.9, 1.0, 1.1, 1.6, 0.9, 0.75,
 	3.0, 1.2, 1.4, 1.6, 1.3, 1.3, 1.4, 1.0, 1.6, 1.8, 1.2, 1.2, 1.0, 0.8]
-const REACH := [1.35, 1.35, 1.0, 1.05, 1.0, 1.0, 1.05, 1.05, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-	1.0, 1.0, 1.35, 1.05, 1.35, 1.2, 1.1, 1.0, 1.35, 1.05, 1.05, 1.35, 1.05, 1.25]
+const REACH := [1.35, 1.35, 1.0, 1.05, 1.0, 1.0, 1.15, 1.25, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+	1.0, 1.0, 1.35, 1.05, 1.35, 1.2, 1.1, 1.0, 1.35, 1.05, 1.05, 1.35, 1.25, 1.25]
 const MOOD := ["determined", "determined", "determined", "excited", "determined", "happy", "excited",
 	"cheering", "excited", "dizzy", "dizzy", "sad", "", "",
 	"determined", "", "", "happy", "happy", "cheering", "happy", "excited", "determined", "happy", "excited",
@@ -54,6 +54,11 @@ const HAND := [1, 1, 0, 1, 0, 1, 2, 1, 1, 1, 0, 0, 0, 0,
 ## holds on it): 0 for weather holds, jump poses, the brace and the lean before the start.
 const REACT := [0.0, 0.0, 0.0, 0.0, 0.0, 0.7, 0.8, 1.0, 0.6, 0.5, 0.8, 1.0, 0.5, 0.4,
 	0.0, 0.1, 0.3, 0.3, 0.9, 0.9, 0.8, 1.0, 0.8, 0.8, 0.9, 0.8, 0.9, 0.7]
+## Key gestures for the big screen (fist pump, cheer, taunt, whoop): a short wind-up (ANT_S), then
+## the key pose held still for HOLD_S before it moves, big rubber-arm arcs, and for the cheer and
+## the whoop a squash of the whole driver into the wind-up and a stretch out of it.
+const ANT_S := 0.14
+const HOLD_S := 0.3
 const OPEN_HAND := Vector3(1.15, 1.4, 0.5)   # palm scale: long along the forearm, thin across
 const FIST := Vector3(1.2, 1.12, 1.2)
 
@@ -160,6 +165,8 @@ var _p_up := PackedVector3Array()
 var _p_wave := PackedVector3Array()
 var _p_pump_hi := PackedVector3Array()
 var _p_pump_lo := PackedVector3Array()
+var _p_big := PackedVector3Array()       # arms flung up and wide (cheer, whoop)
+var _p_wind := PackedVector3Array()      # the wind-up before it: fists low and close
 var _p_out := PackedVector3Array()
 var _p_lap := PackedVector3Array()
 var _p_rain := PackedVector3Array()
@@ -396,8 +403,10 @@ func _setup_poses(body_box: AABB) -> void:
 		var L := _len[i]
 		_p_up.append(_reach(i, S + Vector3(s * 0.5, 1.0, -0.12).normalized() * L * 1.05, 1.05, true))
 		_p_wave.append(_reach(i, S + Vector3(s * 0.75, 0.8, -0.3).normalized() * L * 0.9, 1.0, true))
-		_p_pump_hi.append(_reach(i, S + Vector3(s * 0.3, 1.0, -0.4).normalized() * L, 1.0, true))
-		_p_pump_lo.append(_reach(i, S + Vector3(s * 0.5, 0.55, -0.65).normalized() * L * 0.6, 1.0, true))
+		_p_pump_hi.append(_reach(i, S + Vector3(s * 0.35, 1.0, -0.3).normalized() * L * 1.12, 1.15, true))
+		_p_pump_lo.append(_reach(i, S + Vector3(s * 0.5, 0.35, -0.7).normalized() * L * 0.55, 1.0, true))
+		_p_big.append(_reach(i, S + Vector3(s * 0.8, 1.0, -0.15).normalized() * L * 1.22, 1.25, true))
+		_p_wind.append(_reach(i, S + Vector3(s * 0.25, -0.35, -0.8).normalized() * L * 0.6, 1.0, false))
 		_p_out.append(_reach(i, S + Vector3(s * 1.0, 0.5, -0.4).normalized() * L * 0.95, 1.0, true))
 		# Rain: a hand shields the forehead (kid-drawing arms rarely reach over a big head).
 		var brow := hc + Vector3(s * _head_r.x * 0.3, _head_r.y * 0.45, -_head_r.z)
@@ -905,6 +914,7 @@ func update(dt: float) -> void:
 	var hr := 0.0
 	var hdrop := 0.0
 	var glance := 0.0
+	var cs := 0.0  # squash (-) / stretch (+) of the whole driver
 	var hat_w := 0.0
 	if _active > 0:
 		for g in COUNT:
@@ -937,12 +947,13 @@ func update(dt: float) -> void:
 					gt += _yaw * 0.3 * ws
 					hr += 0.06 * float(_side[g]) * ws
 				G.FIST_PUMP:
-					gp += 0.06 * ws
+					gp += (0.06 - 0.14 * _wind(tt)) * ws
 					hp += 0.12 * ws
 				G.CHEER:
-					gp += 0.1 * ws
-					gl += 0.02 * ws * (0.5 + 0.5 * sin(tt * 12.0)) * amp
+					gp += (0.1 - 0.12 * _wind(tt)) * ws
+					gl += 0.02 * ws * (0.5 + 0.5 * sin(tt * 12.0)) * amp * _moving(tt)
 					hp += 0.22 * ws
+					cs += _pop(tt) * ws * amp
 				G.SURPRISED:
 					gp += 0.12 * ws
 					gl += 0.035 * ws
@@ -1008,12 +1019,13 @@ func update(dt: float) -> void:
 					gr += sin(tt * 8.0) * 0.07 * ws * amp
 					gl += 0.015 * ws * absf(sin(tt * 8.0))
 				G.TAUNT:
-					hr += sin(tt * 9.0) * 0.2 * ws
-					gp -= 0.05 * ws
+					hr += sin(tt * 9.0) * 0.2 * ws * _moving(tt)
+					gp -= (0.05 + 0.08 * _wind(tt)) * ws
 				G.WHOOP:
-					gp += 0.14 * ws
+					gp += (0.14 - 0.12 * _wind(tt)) * ws
 					hp += 0.4 * ws
 					gl += 0.02 * ws
+					cs += _pop(tt) * ws * amp
 				G.FLINCH:
 					gp += 0.12 * ws
 					gl -= 0.035 * ws
@@ -1039,7 +1051,7 @@ func update(dt: float) -> void:
 	_breath += dt * lerpf(2.4, 10.0, pant_k)
 	var b := sin(_breath) * lerpf(0.012, 0.03, pant_k)
 	var basis := Basis.from_euler(Vector3(_pitch + gp + b * 0.5, gt, _roll + gr)) * _char_rest.basis \
-		* Basis.from_scale(Vector3(1.0 + 0.5 * b, 1.0 + b, 1.0 + 0.5 * b))
+		* Basis.from_scale(Vector3(1.0 + 0.5 * b - 0.45 * cs, 1.0 + b + cs, 1.0 + 0.5 * b - 0.45 * cs))
 	_char_xf = carry * Transform3D(basis, _char_rest.origin + Vector3(0.0, gl, 0.0))
 	character.transform = _char_xf
 	_char_inv = _char_xf.affine_inverse()
@@ -1233,9 +1245,11 @@ func _pose(g: int, i: int, s: float) -> Vector3:
 		G.WAVE:
 			return _p_wave[i] + Vector3(s * 0.09 * sin(tt * 13.0), 0.02 * sin(tt * 26.0), 0.0) * amp
 		G.FIST_PUMP:
-			return _p_pump_lo[i].lerp(_p_pump_hi[i], 0.5 + 0.5 * sin(tt * 13.0 - 1.5))
+			# Wind up low, punch up and hold it, then pump.
+			var up := 0.0 if tt < ANT_S else (1.0 if tt < ANT_S + HOLD_S else 0.5 + 0.5 * cos((tt - ANT_S - HOLD_S) * 13.0))
+			return _p_pump_lo[i].lerp(_p_pump_hi[i], up)
 		G.CHEER:
-			return _p_up[i] + Vector3(0.0, 0.07 * sin(tt * 12.0 + i * 1.3), 0.0) * amp
+			return _p_wind[i].lerp(_p_big[i] + Vector3(0.0, 0.08 * sin(tt * 12.0 + i * 1.3), 0.0) * amp * _moving(tt), 1.0 - _wind(tt))
 		G.SURPRISED:
 			return _p_out[i] + Vector3(0.0, 0.02 * sin(tt * 30.0), 0.0)
 		G.FLAIL:
@@ -1266,12 +1280,32 @@ func _pose(g: int, i: int, s: float) -> Vector3:
 		G.JIVE:
 			return _p_pump_lo[i].lerp(_p_pump_hi[i], 0.5 + 0.5 * sin(tt * 16.0 + i * PI))
 		G.TAUNT:
-			return _p_nose[i] + Vector3(s * 0.025 * sin(tt * 22.0), 0.0, 0.0)
+			return _p_wind[i].lerp(_p_nose[i] + Vector3(s * 0.03 * sin(tt * 22.0), 0.0, 0.0) * _moving(tt), 1.0 - _wind(tt))
 		G.WHOOP:
-			return _p_up[i] + Vector3(s * 0.04, 0.05 * sin(tt * 14.0 + i), 0.0) * amp
+			return _p_wind[i].lerp(_p_big[i] + Vector3(s * 0.04, 0.06 * sin(tt * 14.0 + i), 0.0) * amp * _moving(tt), 1.0 - _wind(tt))
 		G.FLINCH:
 			return _p_flinch[i] + Vector3(0.0, 0.01 * sin(tt * 45.0), 0.0)
 	return _hand_rest[i]
+
+
+## Wind-up before a key pose: 1 at the start, 0 from ANT_S on.
+static func _wind(tt: float) -> float:
+	return 1.0 - smoothstep(0.0, ANT_S, tt)
+
+
+## Movement on top of a held key pose: 0 until ANT_S + HOLD_S, then up to 1.
+static func _moving(tt: float) -> float:
+	return smoothstep(ANT_S + HOLD_S, ANT_S + HOLD_S + 0.2, tt)
+
+
+## Squash into the wind-up, a stretch out of it that wobbles back (cheer, whoop).
+static func _pop(tt: float) -> float:
+	if tt < ANT_S:
+		return -0.1 * sin(tt / ANT_S * PI * 0.5)
+	var u := tt - ANT_S
+	if u < 0.05:
+		return lerpf(-0.1, 0.14, u / 0.05)
+	return 0.14 * exp(-(u - 0.05) * 6.0) * cos((u - 0.05) * 16.0)
 
 
 func _pole(g: int, s: float) -> Vector3:
