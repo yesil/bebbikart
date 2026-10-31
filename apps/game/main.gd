@@ -161,6 +161,8 @@ func _build_scene() -> void:
 	fx.setup(sim.weather, env, sun)
 	fx.follow = camera
 	audio = AudioDirector.new()
+	audio.sound_of = func(pid: String) -> Dictionary:
+		return assets.spec_for(pid).get("sound", {}) if assets != null else net.sound_of(pid)
 	add_child(audio)
 	if not audio.setup(sim, track, camera, args.has("mute")):
 		_result("ERROR audio failed to load, see the log")

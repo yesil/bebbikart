@@ -29,6 +29,25 @@ var failed := 0
 var course = null
 
 
+## A random RacerSpec.sound for a fake player (real racers get theirs from the spec).
+func _make_sound() -> Dictionary:
+	var engines := KitCatalog.names("engineSounds")
+	var horns := KitCatalog.names("hornSounds")
+	var pitch: Array = KitCatalog.limit("soundPitch")
+	if engines.is_empty() or horns.is_empty():
+		push_error("mock: racer kit has no sounds (%s)" % KitCatalog.load_error())
+		return {}
+	return {"engine": engines[rng.randi() % engines.size()], "horn": horns[rng.randi() % horns.size()],
+		"pitch": rng.randf_range(float(pitch[0]), float(pitch[1]))}
+
+
+func sound_of(player_id: String) -> Dictionary:
+	for p in players:
+		if p["playerId"] == player_id:
+			return p["sound"]
+	return {}
+
+
 func _init(config: Dictionary, n_players: int, seed_: int) -> void:
 	cfg = config
 	rng.seed = seed_
@@ -47,6 +66,7 @@ func _init(config: Dictionary, n_players: int, seed_: int) -> void:
 			"runId": "",
 			"taps": [],
 			"bestTimeMs": 0,
+			"sound": _make_sound(),
 		})
 	# roster.updated carries a bare RosterEntry[] (contracts §7).
 	inbox.append(Messages.make_msg(Messages.ROSTER_UPDATED, roster()))

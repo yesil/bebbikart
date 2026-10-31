@@ -1,9 +1,12 @@
 # Big-screen audio: adaptive music, stingers, engines and weather ambience.
 # There is no shared race (racers are released from a queue and finish one by one), so the
-# music follows the crowd: paddock music while no one races, the track's tune while racers are
-# out, and its faster "climax" version when someone is on the final lap (or the final stretch
-# on the countryside), or 8+ racers are out. Per-racer moments are rate-limited stingers on top.
-# CPU: 2 music streams, 3 engine voices, 3 ambience loops, a pool of 12 one-shots, and one
+# music follows the screen: paddock music while no one races, the track's tune while racers are
+# out, and its faster "climax" version while the racer on camera is on its final lap (or the
+# final stretch on the countryside). Per-racer moments are rate-limited stingers on top.
+# Each racer sounds like its ride: RacerSpec.sound picks the engine loop (putter, rocket, hooves…),
+# its pitch, and a horn played on a perfect boost and at the finish. A racer without a sound
+# (older specs) is logged once and stays silent; nothing is guessed.
+# CPU: 2 music streams, 3 engine voices (only the followed racer and the 2 nearest the camera), 3 ambience loops, a pool of 12 one-shots, and one
 # low-pass on the Music bus, bypassed when dry. Decisions run at 10 Hz.
 # Every file is loaded at setup; a missing one is an error on screen and in the log.
 extends Node
@@ -20,7 +23,6 @@ const MUSIC := {
 	"village_hot": "music/village_pure_raceway_climax.ogg",
 }
 const SFX := {
-	"engine": "sfx/engine_loop.wav",
 	"start": "sfx/start.ogg",
 	"lap": "sfx/lap.ogg",
 	"best_lap": "sfx/best_lap_jingle.ogg",
@@ -45,10 +47,14 @@ const LEVEL := {"start": -10.0, "lap": -8.0, "best_lap": -4.0, "finish": -2.0, "
 const GAP := {"start": 0.5, "lap": 0.3, "best_lap": 3.0, "finish": 3.0, "cheer": 3.0,
 	"failed": 2.0, "boost": 0.15, "bump": 0.4, "land": 0.3, "splash": 0.5, "thunder": 0.0}
 
+const RACERS_DIR := "racers/"   # engine_<name>.wav loops and horn_<name>.wav one-shots
+const HORN_DB := -4.0
+const HORN_GAP := 0.6           # any horn; the same racer honks at most every 3 s
+const HORN_RACER_GAP := 3.0
+
 const DECIDE_HZ := 10.0
-const HOLD_S := 6.0             # a music state must be wanted this long before it switches
+const HOLD_S := 4.0             # a music state must be wanted this long before it switches
 const FADE_S := 2.0             # music crossfade
-const HOT_RACERS := 8
 const HOT_STRETCH := 0.8        # countryside: progress() past this is the final stretch
 const PADDOCK_DB := -4.5        # paddock music sits lower (about 60%)
 const DUCK_DB := -6.0           # music under a finish
@@ -63,6 +69,8 @@ var sim
 var track := ""
 var camera: Node3D
 var follow_run := ""            # set by main each frame
+## player_id -> RacerSpec.sound ({engine, pitch, horn}) or {} if the racer has none. Set by main.
+var sound_of: Callable
 
 var _streams := {}              # key -> AudioStream
 var _music: Array[AudioStreamPlayer] = []   # two decks for crossfades
@@ -81,6 +89,8 @@ var _thunder_t := 20.0
 var _was_air := false
 var _was_water := false
 var _rng := RandomNumberGenerator.new()
+var _horn_last := {}            # run_id -> time of its last horn
+var _no_sound := {}             # player_id -> true once its missing sound was logged
 var _music_bus := -1
 var _banner: Label
 
@@ -104,6 +114,16 @@ func setup(p_sim, p_track: String, p_camera: Node3D, mute: bool) -> bool:
 			if s == null:
 				problems.append("missing audio file %s" % path)
 			_streams[_key(table, key)] = s
+	for kind in ["engine", "horn"]:
+		var names := KitCatalog.names(kind + "Sounds")
+		if names.is_empty():
+			problems.append("racer kit has no %sSounds (%s)" % [kind, KitCatalog.load_error()])
+		for n in names:
+			var path: String = DIR + RACERS_DIR + "%s_%s.wav" % [kind, n]
+			var s := load(path) as AudioStream
+			if s == null:
+				problems.append("missing audio file %s" % path)
+			_streams["%s:%s" % [kind, n]] = s
 	if not problems.is_empty():
 		_show_errors(problems)
 		return false
@@ -121,7 +141,6 @@ func setup(p_sim, p_track: String, p_camera: Node3D, mute: bool) -> bool:
 	for i in ENGINES:
 		var p := AudioStreamPlayer.new()
 		p.bus = "Sfx"
-		p.stream = _streams["sfx:engine"]
 		p.volume_db = -80.0
 		add_child(p)
 		_engines.append(p)
@@ -157,6 +176,7 @@ func on_event(type: String, pl: Dictionary) -> void:
 			elif pl["runId"] == follow_run:
 				_play("lap")
 		"game.run.finished":
+			_horn(pl["runId"])
 			if _play("finish"):
 				_play("cheer")
 				_duck = DUCK_S
@@ -165,6 +185,8 @@ func on_event(type: String, pl: Dictionary) -> void:
 		"sim.boost":
 			if _near(pl["runId"]):
 				_play("boost", 1.15 if pl["kind"] == "boost_perfect" else 0.9)
+				if pl["kind"] == "boost_perfect":
+					_horn(pl["runId"])
 		"sim.bump":
 			if _near(pl["hitter"]) or _near(pl["victim"]):
 				_play("bump")
@@ -215,17 +237,14 @@ func _decide_music() -> void:
 		_switch_music(want)
 
 
+## The racer on camera is on its final lap (loop) or final stretch (point to point).
 func _is_hot() -> bool:
-	if sim.racers.size() >= HOT_RACERS:
-		return true
-	for o in sim.racers:
-		var r: Racer = o
-		if r.looping:
-			if r.laps_max > 0 and r.lap >= r.laps_max - 1:
-				return true
-		elif r.progress() >= HOT_STRETCH:
-			return true
-	return false
+	var r: Racer = sim.by_run.get(follow_run)
+	if r == null:
+		return false
+	if r.looping:
+		return r.laps_max > 0 and r.lap >= r.laps_max - 1
+	return r.progress() >= HOT_STRETCH
 
 
 func _switch_music(key: String) -> void:
@@ -290,6 +309,39 @@ func _near(run_id: String) -> bool:
 	return false
 
 
+## A racer's horn, if it has a sound and has not honked lately.
+func _horn(run_id: String) -> void:
+	var r: Racer = sim.by_run.get(run_id)
+	if r == null:
+		return
+	var so := _sound(r)
+	if so.is_empty() or _now - float(_horn_last.get(run_id, -100.0)) < HORN_RACER_GAP:
+		return
+	if _now - float(_last.get("horn", -100.0)) < HORN_GAP:
+		return
+	for p in _voices:
+		if not p.playing:
+			_last["horn"] = _now
+			_horn_last[run_id] = _now
+			p.stream = _streams["horn:" + String(so["horn"])]
+			p.volume_db = HORN_DB
+			p.pitch_scale = float(so["pitch"])
+			p.play()
+			return
+
+
+## The racer's RacerSpec.sound, or {} (logged once per player) when it has none.
+func _sound(r: Racer) -> Dictionary:
+	var so: Dictionary = sound_of.call(r.player_id) if sound_of.is_valid() else {}
+	if so.is_empty() or not _streams.has("engine:" + String(so.get("engine", ""))) \
+			or not _streams.has("horn:" + String(so.get("horn", ""))) or not so.has("pitch"):
+		if not _no_sound.has(r.player_id):
+			_no_sound[r.player_id] = true
+			push_error("audio: racer %s has no usable sound in its spec (%s); its engine stays silent" % [r.player_id, JSON.stringify(so)])
+		return {}
+	return so
+
+
 # ---------------------------------------------------------------- engines
 
 func _update_engines() -> void:
@@ -315,11 +367,21 @@ func _update_engines() -> void:
 				p.stop()
 			continue
 		var r: Racer = picks[i]
+		var so := _sound(r)
+		if so.is_empty():
+			p.set_meta("run", r.run_id)  # still counts as near for boosts and bumps
+			if p.playing:
+				p.stop()
+			continue
+		var stream: AudioStream = _streams["engine:" + String(so["engine"])]
+		if p.stream != stream:
+			p.stop()
+			p.stream = stream
 		var dist := cam.distance_to(r.world_pos())
 		var near := clampf(1.0 - dist / ENGINE_RANGE, 0.0, 1.0)
 		var speed := clampf(r.v / maxf(1.0, r.top), 0.0, 1.2)
 		p.set_meta("run", r.run_id)
-		p.pitch_scale = 0.8 + 0.7 * speed + (0.1 if r.airborne else 0.0)
+		p.pitch_scale = float(so["pitch"]) * (0.8 + 0.5 * speed + (0.1 if r.airborne else 0.0))
 		p.volume_db = linear_to_db(maxf(0.0001, near * (0.35 + 0.4 * speed))) - (3.0 if i > 0 else 0.0)
 		if near <= 0.0:
 			if p.playing:
