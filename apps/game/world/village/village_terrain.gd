@@ -182,7 +182,8 @@ func corridor_target(seg: Dictionary, s: float) -> float:
 		var mid := plan.bridge_s
 		if absf(s - mid) < VillagePlan.BRIDGE_HALF_LENGTH:
 			return NAN
-	if id == "cross_exposed" and s > 4.0 and s < r.length - 4.0:
+	# Causeway: a deck wherever it is raised clear of the meadow.
+	if id == "cross_exposed" and r.pos_at(s).y - r.pos_at(0.0).y > 0.5:
 		return NAN
 	return r.pos_at(s).y + Course.surface_offset(seg, s)
 
