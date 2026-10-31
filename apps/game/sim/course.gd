@@ -151,7 +151,9 @@ static func _split_s(direct: Array, direct_hw: float, direct_extra: Dictionary, 
 	a.merge(direct_extra, true)
 	var b := {"half_width": detour_hw, "edge": Tuning.OFF_TRACK_MARGIN, "rails": false}
 	b.merge(detour_extra, true)
-	var need := maxf(corridor_half(a) + surface_half(b), corridor_half(b) + surface_half(a))
+	# The baked world was cut with the old 0.85 m kart (Tuning.RADIUS): a wider one here would move
+	# the kicker, the ford dip and the causeway climb away from what is baked (a rebake first).
+	var need := maxf(corridor_half(a, Tuning.RADIUS) + surface_half(b), corridor_half(b, Tuning.RADIUS) + surface_half(a))
 	var line: Array[Vector2] = []
 	for q: Vector3 in detour:
 		line.append(Vector2(q.x, q.z))
@@ -179,13 +181,14 @@ static func _polyline_dist(p: Vector2, line: Array[Vector2]) -> float:
 
 
 ## Half width of the band a kart's body can reach: the centre-line limit the sim enforces
-## (clamp inside rails, else off_track beyond the soft edge) plus the kart radius. Nothing solid
-## may stand in it except the lane's own rails and ramp.
-static func corridor_half(seg: Dictionary) -> float:
+## (clamp inside rails, else off_track beyond the soft edge) plus the kart's half width, by
+## default the widest racer's (Tuning.SIZE_HALF_WIDTH). Nothing solid may stand in it except the
+## lane's own rails and ramp.
+static func corridor_half(seg: Dictionary, kart: float = Tuning.SIZE_HALF_WIDTH.y) -> float:
 	var hw: float = seg["half_width"]
 	if bool(seg["rails"]) or bool(seg.get("low_rails", false)):
-		return hw - RAIL_INSET + Tuning.RADIUS
-	return hw + float(seg["edge"]) + Tuning.RADIUS
+		return hw - RAIL_INSET + kart
+	return hw + float(seg["edge"]) + kart
 
 
 ## Id of a segment (other than `except`) whose drivable corridor, grown by `margin`, contains
