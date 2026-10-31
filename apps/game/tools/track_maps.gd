@@ -10,6 +10,7 @@ const VillageCourse = preload("res://sim/village_course.gd")
 const Route = preload("res://sim/route.gd")
 
 const STEP := 2.5  # metres between points
+const WINDY := 0.7  # a segment this exposed (sim exposure) is where wind hits
 const OUT_DIR := "res://../../packages/shared/src/track-maps"
 
 
@@ -38,7 +39,11 @@ static func map_json(track: String, course) -> String:
 			lo = Vector2(minf(lo.x, p[0]), minf(lo.y, p[1]))
 			hi = Vector2(maxf(hi.x, p[0]), maxf(hi.y, p[1]))
 			pts.append(p)
-		segs.append({"id": id, "stretch": sg["stretch"], "fork": sg["fork"], "choice": sg["choice"], "pts": pts})
+		# Where the weather bites (sim/racer.gd): rain on fords, mud and slick decks, wind on open ground.
+		var wet: bool = not (sg["water"] as Array).is_empty() or float(sg.get("grip", 1.0)) < 1.0 \
+			or float(sg.get("rain_slick", 1.0)) > 1.0
+		segs.append({"id": id, "stretch": sg["stretch"], "fork": sg["fork"], "choice": sg["choice"],
+			"rain": wet, "wind": float(sg["exposure"]) >= WINDY, "pts": pts})
 	# The start line: across the first segment at s = 0, as wide as the road.
 	var first: Dictionary = course.segments[course.ordered_ids[0]]
 	var fr: Route = first["route"]

@@ -21,6 +21,8 @@ export const TrackMapSchema = z.object({
         stretch: z.string(),
         fork: z.string(), // "" when not a fork piece
         choice: z.string(),
+        rain: z.boolean(), // rain hits it hardest: a ford, mud or a slick deck (sim course data)
+        wind: z.boolean(), // wind hits it hardest: open ground
         pts: z.array(point).min(2),
       }),
     )
