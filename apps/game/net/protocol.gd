@@ -86,6 +86,10 @@ const JOB_STATUSES = [
 	"needs_review",
 	"failed"
 ]
+const LANGUAGES = [
+	"en",
+	"de"
+]
 const LOOP_TRACKS = [
 	"village"
 ]
@@ -184,6 +188,7 @@ const DEFAULT_CONFIG = {
 	"launchCooldownMs": 2000,
 	"track": "countryside",
 	"lapsPerRun": 3,
+	"language": "en",
 	"weather": {
 		"rain": {
 			"minCalmMs": 20000,

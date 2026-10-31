@@ -32,6 +32,7 @@ export const DEFAULT_CONFIG = {
   launchCooldownMs: 2_000, // after a run ends, before the same racer can launch again
   track: "countryside", // TrackId; changes only while no session is running (409 track_locked)
   lapsPerRun: 3, // loop tracks: a run ends after this many laps, or earlier on "Pit in"
+  language: "en", // Language; set on the big screen, every phone follows it (§2b)
   weather: {
     rain: { minCalmMs: 20_000, maxCalmMs: 90_000, minMs: 6_000, maxMs: 15_000, warningMs: 5_000 },
     wind: {
@@ -56,12 +57,21 @@ The game manager picks the session's **track** in config (`track`) from the opti
 - `village` is a **loop** (in `LOOP_TRACKS`): the racer crosses the line and keeps going. Each crossing books a lap (`game.run.lap`). The run finishes after `lapsPerRun` laps, or at the next crossing after the player taps **Pit in** (`phone.stop` → `run.stop`). The player's **best lap** ranks: `Player.bestTimeMs` and `LeaderboardEntry.bestTimeMs` hold the best lap, `run.splits` and the ghost trace are the best lap's, and `runTimeCapMs` applies per lap. A run that fails after completing laps still reports them (`laps`, `bestLapMs`), and those laps count.
 - `track` can't change while a session is running (the leaderboard is per session). `PATCH /api/admin/config` with a new track during a session → 409 `track_locked`. The game loads the matching world on `config.updated`, and refuses (logs an error and shows it on the big screen) a track it doesn't have.
 
+## 2b. Language
+
+The game manager picks the **language** (`language`: `"en"` English or `"de"` German, Swiss-friendly: "ss", never "ß") in the options menu on the big screen. The game keeps the pick in its own settings, applies it to every big-screen string right away, and sends `game.config.set { language }` (also right after each `welcome`, when the server's config says otherwise). The server answers with `config.updated`, so every phone switches live; phones never set it.
+
+- Every user-facing string lives in one string table per app with the same keys in `en` and `de`: `apps/web/src/copy.js` (phone), `apps/game/data/strings.json` (big screen), `COACH_COPY` in `packages/shared/src/coach.js` (coach tips, written by the server in `config.language`). `bun test` checks the key sets match.
+- **No fallback language:** a missing key or an unknown language throws (JS) or `push_error`s and shows the missing key on screen (Godot). It never quietly shows English.
+- Racer titles, taglines and personality words come from the racer designer and stay in the language it wrote them in.
+
 ## 3. Enums
 
 ```ts
 type Ability = "speed" | "jump" | "grip" | "water" | "stability" | "bounce";
 type DrivingStyle = "careful" | "balanced" | "daring";
 type TrackId = "countryside" | "village"; // village is a loop (LOOP_TRACKS), see §2a
+type Language = "en" | "de"; // LANGUAGES, see §2b
 type SectionId = "hills" | "pond" | "crossing" | "bends"; // timed sections, in course order (both tracks)
 type ForkId = "pond" | "ramp" | "crossing";
 type ForkChoice = {
@@ -447,11 +457,11 @@ interface RunStart {
 | `game.run.failed`   | `{ runId, reason: FailReason, section, elapsedMs, splits, events, boostsUsed, weatherSeen, laps?, bestLapMs? }` |
 | `game.weather`      | `WeatherState` (on every phase change)                                                       |
 | `game.capacity`     | `{ freeSlots }` (if the game ever wants fewer than `maxConcurrentRuns`)                      |
-| `game.config.set`   | `{ track?, lapsPerRun?, sessionMinutes? }`: game manager options (see below)                  |
+| `game.config.set`   | `{ track?, lapsPerRun?, sessionMinutes?, language? }`: game manager options (see below)       |
 | `game.session.end`  | `{}`: ends the running session                                                                |
 | `game.session.start`| `{}`: starts a session (`sessionMinutes`); after an ended one, a **new** session with an empty leaderboard |
 
-**Game options live on the big screen.** Phones are players: they join, race and quit (Pit in), and never set options. The game manager sets the track, laps and session length in the game's options menu, which sends the `game.config.*` / `game.session.*` messages above. The server answers with `config.updated` / `session.updated` to every client, or with `error { code, message, refId }` where `refId` is the refused message's `id` (`track_locked` when the track changes during a running session, `bad_request` when starting a running session, `bad_message` for any other field). Switching track = `game.session.end`, `game.config.set { track }`, `game.session.start`, sent back to back. Racers stay; bests and ghosts don't carry over to the new session. The admin REST routes do the same for scripts.
+**Game options live on the big screen.** Phones are players: they join, race and quit (Pit in), and never set options. The game manager sets the track, laps, session length and language in the game's options menu, which sends the `game.config.*` / `game.session.*` messages above. The server answers with `config.updated` / `session.updated` to every client, or with `error { code, message, refId }` where `refId` is the refused message's `id` (`track_locked` when the track changes during a running session, `bad_request` when starting a running session, `bad_message` for any other field). Switching track = `game.session.end`, `game.config.set { track }`, `game.session.start`, sent back to back. Racers stay; bests and ghosts don't carry over to the new session. The admin REST routes do the same for scripts.
 
 The **game is the authority** for timing and outcomes. The server trusts these messages and records them.
 
@@ -467,7 +477,8 @@ interface CoachTip {
   ability?: Ability;
   route?: { fork: ForkId; choice: string };
 }
-function coachTip(run: Run, build: Build, best?: Run): CoachTip;
+function coachTip(run: Run, build: Build, best: Run | undefined, language: Language): CoachTip; // throws on an unknown language
+function abortTip(language: Language): CoachTip; // key "aborted", for runs that were stopped
 ```
 
 Rules, in priority order:
@@ -475,7 +486,7 @@ Rules, in priority order:
 2. Finished, best exists → find the section with the largest loss vs best. Use that section's dominant event to suggest a star, route or style change.
 3. Finished, first time / new best → a cheer plus one experiment to try ("New best! Brave enough to try the water shortcut?").
 
-Text is short (≤ 70 chars), positive and kid-readable. The full copy table lives in `coach.js` so it is reviewed in one place.
+Text is short (≤ 70 chars), positive and kid-readable, in `config.language` (§2b). The full copy table, one per language, lives in `coach.js` so it is reviewed in one place.
 
 ## 9. Mocks (part of M0)
 

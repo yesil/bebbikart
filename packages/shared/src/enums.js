@@ -67,6 +67,8 @@ export const RUN_EVENT_KINDS = /** @type {const} */ ([
   "bumped_other",
   "missed_exit", // loop tracks: went round the roundabout again
 ]);
+/** Languages the game and phones speak. The game manager picks one on the big screen (config.language). */
+export const LANGUAGES = /** @type {const} */ (["en", "de"]);
 export const ROLES = /** @type {const} */ (["phone", "game", "admin"]);
 export const MOODS = /** @type {const} */ ([
   "happy",

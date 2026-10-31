@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TRACK_IDS } from "./enums.js";
+import { LANGUAGES, TRACK_IDS } from "./enums.js";
 
 /** Defaults from contracts.md §2. The server merges bebbikart.config.json and env vars on top. */
 export const DEFAULT_CONFIG = Object.freeze({
@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   launchCooldownMs: 2_000, // after a run ends, before the same racer can launch again
   track: "countryside", // TrackId; changes only while no session is running
   lapsPerRun: 3, // loop tracks: a run ends after this many laps (or earlier on "Pit in")
+  language: "en", // Language: set on the big screen; every phone follows it
   weather: Object.freeze({
     rain: Object.freeze({
       minCalmMs: 20_000,
@@ -56,6 +57,7 @@ export const ConfigSchema = z.object({
   launchCooldownMs: ms,
   track: z.enum(TRACK_IDS),
   lapsPerRun: z.number().int().positive(),
+  language: z.enum(LANGUAGES),
   weather: z.object({
     rain: weatherCycle,
     wind: weatherCycle.extend({ maxStrength: z.number().min(0).max(1) }),
