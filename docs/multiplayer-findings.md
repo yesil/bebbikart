@@ -57,6 +57,18 @@ rows fit 20 racers above the camera's name tag.
 | Standings | With 20 racers the standings ran into the camera's name tag (bottom at 968 px); tighter avatar chips put it at 688 px. `tools/hud_check.gd` renders the [podium](screens/multiplayer-podium.jpg) and a 20-racer standings and fails on a collision. |
 | Camera | In one frame the follow camera sat inside a village building (reported to the camera thread). |
 
+## Rounds 6 and 7 (2026-10-31): 16 phones at once on the countryside; 4 new racers with the paddock
+
+| Area | Found | Status |
+|---|---|---|
+| 16 at once | All 16 left in one countdown, 4 rows within 2.7 s of green; all 16 finished, none crashed at the start; results within 11 s of each other. 58 fps average (one dip to 26 at the track reload), Godot 74 % of a core, 790 MB. | fine |
+| Heats | The 4th row left 2.7 s after green, outside the server's 2.5 s heat window, so the group was split into heats of 12 and 4. | **fixed** (30dcdea): a countdown group is one heat however many rows it takes |
+| Race board | With 16 racers the board's "+6 more" slid under the camera's picture-in-picture. | **fixed**: compact rows past 8 racers (board bottom 517 px); `hud_check.gd` checks it |
+| While racers are being made | Phones saw nothing of the others. | **added** (30dcdea): "Also here" strip on the making and garage screens (`paddock.updated`): 4 new kids showed up as "being made" on the other phones 0.7 s after joining, "ready" with their avatar when done |
+| Boost at the start | After the gameplay thread's weak-boost fix (8592a9c), groups of 4-8 tapping Boost early: 0-0.8 % early crashes (were 7 % countryside, 28-33 % village). | fixed by the gameplay thread |
+| Design | 4 new racers at once: ready in 56-71 s, renders ~1 s later. | fine |
+| HUD notes from the gameplay thread | Standings said "racing" for racers on the grid; the lights panel covered the middle while others raced; board times had no unit. | **fixed**: "at the start", small panel up top while others race, "s" |
+
 ## Big-screen HUD (`apps/game/ui/race_hud.gd`)
 
 - A tag over every kart: place badge and name in the racer's colour, pushed apart so tags never
