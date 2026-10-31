@@ -159,6 +159,17 @@ const en = {
     fasterHere: (who, s) => `${who} is ${s} s faster here`,
   },
   sections: { hills: "Hills", pond: "Pond", crossing: "Crossing", bends: "Bends" },
+  map: {
+    title: "🗺️ Track map",
+    label: "Map of the track",
+    missing: (track) => `No map for the track "${track}". Tell the game manager.`,
+    tapHint: "Tap the map to find a stretch in the list",
+    garageHint: "Tap a stretch: which star helps there?",
+    picked: (name, star) => (star ? `${name}: ${star} helps here` : `${name}: the safe way round`),
+    weatherHint: "🌧️ 🌬️ = the weather hits here hardest",
+    rain: "🌧️",
+    wind: "🌬️",
+  },
   // Stretches per track (contracts §2d), as the result list names them.
   stretches: {
     countryside: {
@@ -401,6 +412,17 @@ const de = {
     fasterHere: (who, s) => `${who} ist hier ${s} s schneller`,
   },
   sections: { hills: "Hügel", pond: "Teich", crossing: "Kreuzung", bends: "Kurven" },
+  map: {
+    title: "🗺️ Streckenkarte",
+    label: "Karte der Strecke",
+    missing: (track) => `Keine Karte für die Strecke "${track}". Sag es der Spielleitung.`,
+    tapHint: "Tipp auf die Karte, um den Abschnitt in der Liste zu finden",
+    garageHint: "Tipp auf einen Abschnitt: Welcher Stern hilft dort?",
+    picked: (name, star) => (star ? `${name}: hier hilft ${star}` : `${name}: der sichere Weg`),
+    weatherHint: "🌧️ 🌬️ = hier trifft das Wetter am stärksten",
+    rain: "🌧️",
+    wind: "🌬️",
+  },
   stretches: {
     countryside: {
       bumpy_road: "Holperstrasse",

@@ -877,6 +877,90 @@ h2 {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* Track map (screens/track-map.js): strokes in CSS pixels whatever the track's size. */
+.track-map {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+}
+.track-map polyline {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.track-map .base polyline {
+  stroke: #ece6f2;
+  stroke-width: 11px;
+}
+.track-map .start {
+  stroke: #2b2238;
+  stroke-width: 3px;
+}
+.track-map .seg {
+  cursor: pointer;
+}
+.track-map .seg.on {
+  stroke: #8f86a0;
+  stroke-width: 5px;
+}
+.track-map .seg.off {
+  stroke: #cfc7da;
+  stroke-width: 2px;
+}
+.track-map .seg.good {
+  stroke: var(--good);
+}
+.track-map .seg.bad {
+  stroke: var(--bad);
+}
+.track-map .seg.sel {
+  stroke-width: 9px;
+}
+.track-map .seg.pulse {
+  animation: map-pulse 1.1s ease-in-out infinite;
+}
+@keyframes map-pulse {
+  50% {
+    stroke-width: 10px;
+    opacity: 0.55;
+  }
+}
+.track-map text {
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.track-map .icon {
+  cursor: pointer;
+}
+.track-map .icon circle {
+  fill: #fff;
+  stroke: #d8cfe3;
+  vector-effect: non-scaling-stroke;
+}
+.track-map .icon.off {
+  opacity: 0.45;
+}
+.track-map .flag .who {
+  text-anchor: start;
+  font-weight: 800;
+  fill: var(--ink);
+}
+.map summary {
+  font-weight: 800;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.map .pick {
+  margin: 6px 0 0;
+  text-align: center;
+  font-weight: 700;
+}
+.stretches li.sel {
+  outline: 2px solid var(--accent);
+  border-radius: 8px;
+}
 /* "Where the time went": one row per stretch, fits 320 px. */
 .stretches {
   list-style: none;
