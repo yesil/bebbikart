@@ -466,7 +466,7 @@ const MOCK_LOOK_EXTRAS = {
 };
 
 /**
- * Mock DesignClient: answers each pass (ctx.stage: look, design, critique, refine) with hand-written
+ * Mock DesignClient: answers each pass (ctx.stage: design, review) with hand-written
  * replies. `designId` (e.g. "pair02") answers with that design whatever the files are called (server
  * tests upload under other names). Unknown drawings get `spec: null`, so the job fails the same way a broken real reply would.
  */
@@ -476,47 +476,36 @@ export function createMockClient({ designId } = {}) {
     async complete(_messages, _opts, ctx) {
       const id = designId ?? mockDesignId(ctx.characterPath, ctx.vehiclePath);
       const design = id ? MOCK_DESIGNS[id] : null;
-      if (ctx.stage === "look") {
-        const reply = { check: {} };
-        for (const [kind, path, i] of [
-          ["character", ctx.characterPath, 0],
-          ["vehicle", ctx.vehiclePath, 1],
-        ]) {
-          const seen = design?.seen[i] ?? "a drawing (mock: no description)";
-          reply.check[kind] = MOCK_CHECKS[stem(path)] ?? ok(seen);
-          reply[kind] = {
-            what: seen,
-            meant: seen,
-            features: [
-              {
-                name: seen,
-                where: "whole drawing",
-                color: "#888888",
-                size: "big",
-                count: 1,
-                importance: 3,
-              },
-            ],
-            colors: [],
-            colouringStyle: "crayon",
-            proportions: "",
-            mood: "happy",
-            story: "",
-            unmistakable: [seen],
-          };
-        }
-        return JSON.stringify(reply);
-      }
-      if (ctx.stage === "critique") {
+      if (ctx.stage === "review") {
         return JSON.stringify({
-          scores: { likeness: 8, colour: 8, personality: 8, readability: 8, fun: 8 },
+          scores: { likeness: 8, colour: 8, personality: 8, readability: 8, loyalty: 8 },
           issues: [],
-          verdict: "mock critique: looks fine",
+          patch: [],
+          notes: "mock review: looks fine",
         });
       }
+      const check = {};
+      const observations = {};
+      for (const [kind, path, i] of [
+        ["character", ctx.characterPath, 0],
+        ["vehicle", ctx.vehiclePath, 1],
+      ]) {
+        const seen = design?.seen[i] ?? "a drawing (mock: no description)";
+        check[kind] = MOCK_CHECKS[stem(path)] ?? ok(seen);
+        observations[kind] = {
+          what: seen,
+          detail: "sketch",
+          features: [{ name: seen, color: "#888888", count: 1, importance: 3 }],
+          labels: [],
+        };
+      }
+      if (Object.values(check).some((c) => !c.ok))
+        return JSON.stringify({ check, observations: null, featureMap: [], spec: null, notes: "" });
       let spec = design ? { ...structuredClone(design.spec), ...MOCK_LOOK_EXTRAS[id] } : null;
       if (spec && ctx.reroll) spec = rerollVariant(spec);
       return JSON.stringify({
+        check,
+        observations,
         featureMap: [],
         spec,
         notes: design?.notes ?? "mock has no hand-written design for these files",

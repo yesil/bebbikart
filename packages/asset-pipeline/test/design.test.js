@@ -3,14 +3,14 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clampRacerSpec, RacerSpecSchema } from "@bebbikart/shared";
-import { parseReply, runDesignJob } from "../src/design.js";
+import { applyPatch, parseReply, runDesignJob } from "../src/design.js";
 import { createMockClient, MOCK_DESIGNS, SAMPLE_RUNS } from "../src/mock.js";
 import {
   buildDesignMessages,
-  buildLookMessages,
+  buildReviewMessages,
   designSystemPrompt,
   EXAMPLES,
-  LOOK_PROMPT,
+  reviewSystemPrompt,
 } from "../src/prompt.js";
 
 const SAMPLES = join(import.meta.dir, "..", "samples");
@@ -41,30 +41,41 @@ describe("prompt", () => {
     ]) {
       expect(design).toContain(word);
     }
-    for (const word of ["not_a_drawing", "real_person", "importance", "unmistakable"]) {
-      expect(LOOK_PROMPT).toContain(word);
+    for (const word of [
+      "not_a_drawing",
+      "real_person",
+      "importance",
+      "schwarze Räder",
+      "LOYALTY",
+    ]) {
+      expect(design).toContain(word);
+    }
+    for (const word of ["patch", "remove", "LOYALTY"]) {
+      expect(reviewSystemPrompt()).toContain(word);
     }
   });
 
   test("messages carry both images and retry errors", () => {
-    const look = JSON.stringify(
-      buildLookMessages({
-        characterDataUrl: "data:a",
-        vehicleDataUrl: "data:b",
-        previousErrors: ["no features"],
-      }),
-    );
-    expect(look).toContain("data:a");
-    expect(look).toContain("data:b");
-    expect(look).toContain("no features");
     const design = JSON.stringify(
       buildDesignMessages({
-        observations: { character: { what: "cat" } },
+        characterDataUrl: "data:a",
+        vehicleDataUrl: "data:b",
         previousErrors: ["bad eyes"],
       }),
     );
-    expect(design).toContain("cat");
+    expect(design).toContain("data:a");
+    expect(design).toContain("data:b");
     expect(design).toContain("bad eyes");
+    const review = JSON.stringify(
+      buildReviewMessages({
+        characterDataUrl: "data:a",
+        vehicleDataUrl: "data:b",
+        design: { spec: { title: "Cat" } },
+        renders: { front: "data:front", side: "data:side" },
+      }),
+    );
+    expect(review).toContain("data:front");
+    expect(review).toContain("Cat");
   });
 });
 
@@ -117,7 +128,7 @@ describe("runDesignJob (mock)", () => {
         if (r.status === "ready") {
           const onDisk = JSON.parse(await readFile(r.file, "utf8"));
           expect(RacerSpecSchema.safeParse(onDisk).success).toBe(true);
-          expect(statuses).toEqual(["looking", "designing", "critiquing", "refining", "ready"]);
+          expect(statuses).toEqual(["looking", "critiquing", "ready"]);
         }
       }
       const files = (await readdir(out)).filter((f) => f.endsWith(".spec.json"));
@@ -244,7 +255,7 @@ describe("claude client", () => {
   test("turns pass messages into a system prompt and base64 image blocks", async () => {
     const { toClaudeMessages } = await import("../src/claude.js");
     const { system, turns } = toClaudeMessages(
-      buildLookMessages({
+      buildDesignMessages({
         characterDataUrl: "data:image/jpeg;base64,AAAA",
         vehicleDataUrl: "data:image/png;base64,BBBB",
       }),
@@ -265,5 +276,33 @@ describe("claude client", () => {
     } finally {
       if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
     }
+  });
+});
+
+describe("applyPatch", () => {
+  const spec = structuredClone(MOCK_DESIGNS.pair01.spec);
+  test("set, remove and add with indices from the original spec", () => {
+    const n = spec.character.extras.length;
+    const r = applyPatch(spec, [
+      { op: "add", path: "ride.extras", value: { ...spec.ride.extras[0], color: 3 } },
+      { op: "remove", path: "character.extras.0" },
+      { op: "remove", path: "character.extras.2" },
+      { op: "set", path: "character.extras.2.color", value: 4 },
+      { op: "set", path: "ride.color", value: 0 },
+    ]);
+    expect(r.ok).toBe(true);
+    expect(r.spec.ride.color).toBe(0);
+    expect(r.spec.character.extras).toHaveLength(n - 2);
+    expect(r.spec.ride.extras.at(-1).color).toBe(3);
+    expect(spec.ride.color).toBe(1); // original untouched
+  });
+  test("bad paths and ops are reported, not guessed", () => {
+    const r = applyPatch(spec, [
+      { op: "set", path: "character.wings.size", value: 1 },
+      { op: "remove", path: "ride.extras.99" },
+      { op: "swap", path: "ride.color" },
+    ]);
+    expect(r.ok).toBe(false);
+    expect(r.errors).toHaveLength(3);
   });
 });

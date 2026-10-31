@@ -1,15 +1,13 @@
-// runDesignJob: photos → four Claude passes → validated RacerSpec file (asset-pipeline.md §1, §5).
-//   look (vision: check + describe) → design (spec) → critique (vision: compare with the drawings) → refine (final spec)
+// runDesignJob: photos → two Claude passes → validated RacerSpec file (asset-pipeline.md §1, §5).
+//   design (vision: check, look, write the spec) → render in Godot → review (vision: drawings + render → patch)
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { clampRacerSpec, JOB_STAGES } from "@bebbikart/shared";
 import { createClaudeClient } from "./claude.js";
 import { normaliseDrawing, UnsupportedFileError } from "./normalise.js";
 import {
-  buildCritiqueMessages,
   buildDesignMessages,
-  buildLookMessages,
-  buildRefineMessages,
+  buildReviewMessages,
   PROMPT_VERSION,
   REJECT_MESSAGES,
 } from "./prompt.js";
@@ -25,28 +23,26 @@ const REQUIRED_NEW = ["tagline", "motion", "sound"];
 
 /**
  * Claude effort per pass (adaptive thinking; ilyas asked for Sonnet 5.5 at high effort).
- * Override with CLAUDE_PASS_EFFORT="look,design,critique,refine", each low|medium|high|xhigh|max.
+ * Override with CLAUDE_PASS_EFFORT="design,review", each low|medium|high|xhigh|max.
  */
 export const DESIGN_EFFORT = effortFromEnv(process.env.CLAUDE_PASS_EFFORT) ?? {
-  look: "high",
   design: "high",
-  critique: "high",
-  refine: "high",
+  review: "high",
 };
 
 function effortFromEnv(v) {
   if (!v) return null;
   const parts = v.split(",").map((s) => s.trim());
   const ok = ["low", "medium", "high", "xhigh", "max"];
-  if (parts.length !== 4 || parts.some((p) => !ok.includes(p)))
+  if (parts.length !== 2 || parts.some((p) => !ok.includes(p)))
     throw new Error(
-      `CLAUDE_PASS_EFFORT must be 4 of ${ok.join("|")} for look,design,critique,refine; got "${v}"`,
+      `CLAUDE_PASS_EFFORT must be 2 of ${ok.join("|")} for design,review; got "${v}"`,
     );
-  const [look, design, critique, refine] = parts;
-  return { look, design, critique, refine };
+  const [design, review] = parts;
+  return { design, review };
 }
 
-/** Tries per pass; each retry carries the validation errors. Text passes take ~10 s, so 3 is cheap. */
+/** Tries per pass; each retry carries the validation errors. */
 const ATTEMPTS = 3;
 
 class StageFailed extends Error {}
@@ -109,8 +105,13 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
     let errors = null;
     for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
       let content;
+      let usage = null;
       try {
-        content = await client.complete(messages(errors), opts, { ...ctx, stage, attempt });
+        content = await client.complete(
+          messages(errors),
+          { ...opts, onUsage: (u) => (usage = u) },
+          { ...ctx, stage, attempt },
+        );
       } catch (err) {
         // No fallbacks: a failed call fails the job, loudly, with the reason.
         throw new StageFailed(`Claude ${stage} call failed: ${err.message}`);
@@ -119,7 +120,9 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       const v = reply.ok ? validate(reply.value) : { ok: false, errors: [reply.error] };
       if (v.ok) {
         timings[stage] = Date.now() - started;
-        log(`${stage}: ok in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+        log(
+          `${stage}: ok in ${((Date.now() - started) / 1000).toFixed(1)} s${usage ? ` (${usage.output_tokens} output tokens, ${usage.cache_read_input_tokens ?? 0} cached)` : ""}`,
+        );
         return v.value;
       }
       errors = v.errors;
@@ -131,34 +134,26 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
   }
 
   try {
-    // 2 · Look: check both photos and describe them.
+    // 2 · Design: Claude sees both drawings, checks them, looks closely and writes the spec.
+    // Thinking is reported as "looking", the written reply as "designing".
     onStatus("looking");
-    const look = await pass(
-      "look",
-      (errors) =>
-        buildLookMessages({
-          characterDataUrl: imgs.character.dataUrl,
-          vehicleDataUrl: imgs.vehicle.dataUrl,
-          approved: !!input.skipCheck,
-          previousErrors: errors,
-        }),
-      { vision: true, effort: DESIGN_EFFORT.look },
-      (v) => validateLook(v, !!input.skipCheck),
-    );
-    if (look.rejected) return reject(look.rejected.reason, look.rejected.image, look.rejected.seen);
-    const observations = { character: look.value.character, vehicle: look.value.vehicle };
-
-    // 3 · Design the racer from the description.
-    onStatus("designing");
     const design = await pass(
       "design",
       (errors) =>
-        buildDesignMessages({ observations, reroll: input.reroll, previousErrors: errors }),
-      { effort: DESIGN_EFFORT.design },
-      validateDesign,
+        buildDesignMessages({
+          characterDataUrl: imgs.character.dataUrl,
+          vehicleDataUrl: imgs.vehicle.dataUrl,
+          approved: !!input.skipCheck,
+          reroll: input.reroll,
+          previousErrors: errors,
+        }),
+      { vision: true, effort: DESIGN_EFFORT.design, onText: () => onStatus("designing") },
+      (v) => validateDesignReply(v, !!input.skipCheck),
     );
+    if (design.rejected)
+      return reject(design.rejected.reason, design.rejected.image, design.rejected.seen);
 
-    // 4 · Critique the design against the real drawings (and the racer it builds, when rendered).
+    // 3 · Review: render the racer, show it next to the drawings, apply the reviewer's patch.
     onStatus("critiquing");
     let renders = null;
     if (renderer) {
@@ -166,61 +161,54 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
       try {
         renders = await renderer.render(design.spec);
       } catch (err) {
-        throw new StageFailed(`render for the critique failed: ${err.message}`);
+        throw new StageFailed(`render for the review failed: ${err.message}`);
       }
       timings.render = Date.now() - started;
       log(`render: ok in ${((Date.now() - started) / 1000).toFixed(1)} s`);
     }
-    const critique = await pass(
-      "critique",
-      () =>
-        buildCritiqueMessages({
+    const shown = {
+      observations: design.observations,
+      featureMap: design.featureMap,
+      spec: design.spec,
+    };
+    const review = await pass(
+      "review",
+      (errors) =>
+        buildReviewMessages({
           characterDataUrl: imgs.character.dataUrl,
           vehicleDataUrl: imgs.vehicle.dataUrl,
-          observations,
-          design: { featureMap: design.featureMap, spec: design.spec, notes: design.notes },
+          design: shown,
           renders,
-        }),
-      { vision: true, effort: DESIGN_EFFORT.critique },
-      validateCritique,
-    );
-
-    // 5 · Refine: apply the critique.
-    onStatus("refining");
-    const final = await pass(
-      "refine",
-      (errors) =>
-        buildRefineMessages({
-          observations,
-          design: { featureMap: design.featureMap, spec: design.spec, notes: design.notes },
-          critique,
           previousErrors: errors,
         }),
-      { effort: DESIGN_EFFORT.refine },
-      validateDesign,
+      { vision: true, effort: DESIGN_EFFORT.review, onText: () => onStatus("refining") },
+      (v) => validateReview(v, design.spec),
     );
 
-    const file = await writeSpec(input.outDir, name, final.spec, {
+    const fixes = [...design.fixes, ...review.fixes];
+    const file = await writeSpec(input.outDir, name, review.spec, {
       jobId: input.jobId,
       playerId: input.playerId,
       model: client.name,
       promptVersion: PROMPT_VERSION,
       reroll: !!input.reroll,
-      notes: final.notes,
-      fixes: final.fixes,
+      notes: review.notes || design.notes,
+      fixes,
       timingsMs: timings,
-      observations,
-      featureMap: final.featureMap,
+      observations: design.observations,
+      featureMap: design.featureMap,
       firstDesign: design.spec,
-      critique,
+      critique: { scores: review.scores, issues: review.issues },
+      patch: review.patch,
     });
     onStatus("ready");
     return {
       status: "ready",
-      spec: final.spec,
-      fixes: final.fixes,
-      notes: final.notes,
-      critique,
+      spec: review.spec,
+      fixes,
+      notes: review.notes || design.notes,
+      critique: { scores: review.scores, issues: review.issues },
+      patch: review.patch,
       timingsMs: timings,
       file,
     };
@@ -241,10 +229,10 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
   }
 }
 
-/** Look reply → { ok, value: { rejected } | { value: { character, vehicle } } }. */
-function validateLook(v, approved) {
-  const errors = [];
+/** Design reply → { rejected } or the clamped spec with observations and the featureMap. */
+function validateDesignReply(v, approved) {
   if (!approved) {
+    const errors = [];
     for (const kind of IMAGES) {
       const c = v.check?.[kind];
       if (!c || typeof c.ok !== "boolean") errors.push(`check.${kind}.ok is missing`);
@@ -257,15 +245,96 @@ function validateLook(v, approved) {
           return { ok: true, value: { rejected: { reason: c.reason, image: kind, seen: c.seen } } };
       }
     }
+    if (errors.length) return { ok: false, errors };
   }
-  for (const kind of IMAGES) {
-    const d = v[kind];
-    if (!d || typeof d !== "object")
-      errors.push(`"${kind}" description is missing: describe the drawing`);
-    else if (!Array.isArray(d.features) || d.features.length === 0)
-      errors.push(`${kind}.features is empty: list every visible feature`);
+  const d = validateDesign(v);
+  if (!d.ok) return d;
+  const observations = v.observations && typeof v.observations === "object" ? v.observations : {};
+  return { ok: true, value: { ...d.value, observations } };
+}
+
+/** Review reply → the patched, clamped spec. */
+function validateReview(v, spec) {
+  if (!Array.isArray(v.issues)) return { ok: false, errors: ['"issues" must be a list'] };
+  if (!Array.isArray(v.patch))
+    return { ok: false, errors: ['"patch" must be a list (empty is fine)'] };
+  const patched = applyPatch(spec, v.patch);
+  if (!patched.ok) return { ok: false, errors: patched.errors };
+  const d = validateDesign({ spec: patched.spec });
+  if (!d.ok) return { ok: false, errors: d.errors.map((e) => `after your patch, ${e}`) };
+  return {
+    ok: true,
+    value: {
+      spec: d.value.spec,
+      fixes: d.value.fixes,
+      scores: v.scores ?? {},
+      issues: v.issues,
+      patch: v.patch,
+      notes: typeof v.notes === "string" ? v.notes : "",
+    },
+  };
+}
+
+/**
+ * Applies the reviewer's patch ops to a copy of the spec. Paths are dot-separated, array items by
+ * index; indices refer to the spec as given (sets first, then removes from the highest index, then
+ * adds).
+ * @returns {{ ok: true, spec: object } | { ok: false, errors: string[] }}
+ */
+export function applyPatch(spec, ops) {
+  const out = structuredClone(spec);
+  const errors = [];
+  const walk = (path) => {
+    const keys = String(path ?? "")
+      .split(".")
+      .filter(Boolean)
+      .map((k) => (/^\d+$/.test(k) ? Number(k) : k));
+    if (!keys.length) return null;
+    let parent = out;
+    for (const k of keys.slice(0, -1)) {
+      if (parent == null || typeof parent !== "object" || !(k in parent)) return null;
+      parent = parent[k];
+    }
+    if (parent == null || typeof parent !== "object") return null;
+    return { parent, key: keys.at(-1) };
+  };
+  const order = { set: 0, remove: 1, add: 2 };
+  const sorted = ops
+    .map((op, i) => ({ op, i }))
+    .sort((a, b) => {
+      const d = (order[a.op?.op] ?? 9) - (order[b.op?.op] ?? 9);
+      if (d) return d;
+      if (a.op?.op === "remove") {
+        const ka = Number(String(a.op.path).split(".").at(-1));
+        const kb = Number(String(b.op.path).split(".").at(-1));
+        return (Number.isNaN(kb) ? 0 : kb) - (Number.isNaN(ka) ? 0 : ka);
+      }
+      return a.i - b.i;
+    });
+  for (const { op, i } of sorted) {
+    const where = `patch[${i}] ${op?.op} ${op?.path}`;
+    const at = walk(op?.path);
+    if (!at) {
+      errors.push(`${where}: path not found`);
+      continue;
+    }
+    const { parent, key } = at;
+    if (op.op === "set") {
+      if (Array.isArray(parent) && !(typeof key === "number" && key < parent.length))
+        errors.push(`${where}: index out of range`);
+      else parent[key] = op.value;
+    } else if (op.op === "remove") {
+      if (Array.isArray(parent)) {
+        if (typeof key === "number" && key < parent.length) parent.splice(key, 1);
+        else errors.push(`${where}: index out of range`);
+      } else if (key in parent) delete parent[key];
+      else errors.push(`${where}: nothing to remove`);
+    } else if (op.op === "add") {
+      if (Array.isArray(parent[key])) parent[key].push(op.value);
+      else errors.push(`${where}: "add" needs a path to a list`);
+    } else errors.push(`patch[${i}]: unknown op "${op?.op}" (use set, remove or add)`);
   }
-  return errors.length ? { ok: false, errors } : { ok: true, value: { value: v } };
+  return errors.length ? { ok: false, errors } : { ok: true, spec: out };
 }
 
 /** Design/refine reply → clamped spec with the fields new racers need. */
@@ -284,14 +353,6 @@ function validateDesign(v) {
       featureMap: Array.isArray(v.featureMap) ? v.featureMap : [],
       notes: typeof v.notes === "string" ? v.notes : "",
     },
-  };
-}
-
-function validateCritique(v) {
-  if (!Array.isArray(v.issues)) return { ok: false, errors: ['"issues" must be a list'] };
-  return {
-    ok: true,
-    value: { scores: v.scores ?? {}, issues: v.issues, verdict: v.verdict ?? "" },
   };
 }
 

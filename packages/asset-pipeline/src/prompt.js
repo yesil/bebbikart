@@ -7,7 +7,7 @@
 // usable by the AI right away. Tune wording and examples here; keep examples valid (tests check).
 import { RACER_KIT, REJECT_REASONS, SPEC_LIMITS } from "@bebbikart/shared";
 
-export const PROMPT_VERSION = 2;
+export const PROMPT_VERSION = 3;
 
 /** Kit catalog as compact prompt text: one line per part, grouped by slot. */
 export function catalogText(kit = RACER_KIT) {
@@ -118,95 +118,33 @@ Ride colours: "color" paints the ride's main body; "accent" paints bumpers, seat
 const KIDS_RULES = `Keep it cute and kid-friendly: friendly faces, no weapons, nothing scary or gory, no words, letters or brand
 names (numbers 0–99 are fine as the racing number).`;
 
-// --- 1 · look --------------------------------------------------------------------------------
+// --- what to look for ---------------------------------------------------------------------------
 
-export const LOOK_PROMPT = `You are the eyes of the Racer Designer for BebbiKart, a racing game for children aged 6–10 at a family event.
-A child drew two pictures: their racing CHARACTER (image 1) and their VEHICLE (image 2). Another designer who
-CANNOT see the pictures will build a 3D toy racer from your description alone, so describe them carefully and
-completely. Take your time: look at every part of each drawing.
-
-STEP 1: CHECK each image. Be generous: kids' drawings are messy, sparse, faint, crooked and photographed badly, and
+const CHECK_RULES = `CHECK each image first. Be generous: kids' drawings are messy, sparse, faint, crooked and photographed badly, and
 that is fine. Only flag an image when you are sure:
 - "not_a_drawing": a real photo of a real object or scene (a real car, toy, room), not a drawing on paper.
 - "real_person": a photo that shows a real person or a real face. Never describe the person.
 - "empty_page": blank or nearly blank paper (a stray mark or two is still empty).
-- "unreadable": too dark, blurry or cropped to see anything at all. A wild scribble is NOT unreadable: describe it as a
-  playful abstract creature (character) or a "blob" ride, with its colours, energy and shapes.
-The same drawing may be used for both images (e.g. a kid riding a skateboard on one sheet): describe the rider as the
-character and the vehicle as the vehicle. If a drawing has several things, describe the biggest or most central one
-in full and mention the others briefly.
+- "unreadable": too dark, blurry or cropped to see anything at all. A wild scribble is NOT unreadable: treat it as a
+  playful abstract creature (character) or a "blob" ride.
+The same drawing may be used for both images (e.g. a kid riding a skateboard on one sheet): the rider is the character
+and the vehicle is the vehicle. If a drawing has several things, use the biggest or most central one.`;
 
-STEP 2: DESCRIBE each drawing that passed:
-- what it is, in a few words, and what kind of creature/vehicle the child most likely meant;
-- EVERY visible feature, one per entry: body parts, ears, horns, eyes (how many, shape, colour), mouth and teeth,
-  hair, hats, clothes, accessories, markings, spots and stripes, wheels (how many, how big), wings, tails, flames,
-  windows, flags, numbers, decorations, things held in the hands. Give where it is, its colour as a hex code, its
-  size relative to the whole drawing, and the exact count when there are several (3 horns, 5 buttons);
-- the colours: every crayon/marker colour used, as vivid toy-like hex codes, where each is used and roughly how much of
-  the drawing it covers. Parts left uncoloured keep their natural reading: white paper inside an outline = white
-  (a white skirt, white socks), grey pencil shading = grey or silver;
+const LOOK_RULES = `LOOK at each drawing closely before designing, and write down what you see in "observations":
+- what it is and what the child most likely meant;
+- EVERY visible feature (body parts, ears, horns, eyes, mouth, hair, hats, bows, clothes, socks, shoes, accessories,
+  markings, wheels, wings, tails, lights, windows, numbers, things in the hands): where it is, its colour, its size,
+  the exact count when there are several, and its importance (3 = defining, 2 = clearly drawn, 1 = small detail);
 - written labels: children often write colour or part names next to the drawing with arrows, in any language
   ("Gold", "orange", "weiß", "Gelb", "schwarze Räder" = black wheels, "Licht" = light, "Glas" = glass). Read every
-  label, translate it, and say which part it points at and which colour it asks for: the child's words are
-  instructions and override guesses;
-- the colouring style (outline only, scribbled fill, solid, stripes of colour, rainbow…);
-- proportions and exaggerations (a huge head, tiny legs, an enormous wheel) — exaggerations are what the child cared
-  about most;
-- the mood and personality the drawing gives off (pose, expression, energy), and the story you imagine;
-- the 2–4 things that make THIS drawing unmistakable, so the child will shout "that's mine!";
-- "detail": "sketch" when it is just a few lines or a rough outline with little to copy, "detailed" when the child drew
-  and/or coloured real details (clothes, hair style, patterns, accessories, labelled colours).
-Rate each feature's importance: 3 = defining (must appear), 2 = clearly drawn, 1 = small detail.
+  label, translate it, and note which part it points at: the child's words are instructions and override guesses;
+- the colours: crayon/marker colours as vivid toy-like hex codes. Parts left uncoloured keep their natural reading:
+  white paper inside an outline = white (a white skirt, white socks), grey pencil shading = grey or silver;
+- proportions and exaggerations (a huge head, very long hair, an enormous wheel): what the child cared about most;
+- "detail": "sketch" when it is just a few lines with little to copy, "detailed" when the child drew and/or coloured
+  real details (clothes, hair style, patterns, accessories, labelled colours).`;
 
-Reply with ONE JSON object and nothing else:
-{
-  "check": {
-    "character": { "ok": bool, "reason": one of ${JSON.stringify(REJECT_REASONS.filter((r) => r !== "unsupported_file"))} or null, "seen": short description of what is drawn },
-    "vehicle":   { "ok": bool, "reason": ... or null, "seen": short description }
-  },
-  "character": <description> or null if its check failed,
-  "vehicle": <description> or null if its check failed
-}
-<description> = {
-  "what": string, "meant": string,
-  "features": [ { "name": string, "where": string, "color": "#rrggbb", "size": string, "count": number, "importance": 1|2|3 } ],
-  "colors": [ { "hex": "#rrggbb", "name": string, "usedFor": string, "share": "most"|"lots"|"some"|"a little" } ],
-  "labels": [ { "text": string as written, "meaning": string in English, "pointsAt": string } ],
-  "colouringStyle": string, "proportions": string, "mood": string, "story": string,
-  "unmistakable": [string], "detail": "sketch" | "detailed"
-}`;
-
-export function buildLookMessages({
-  characterDataUrl,
-  vehicleDataUrl,
-  approved = false,
-  previousErrors = null,
-}) {
-  const ask = [
-    "Here are the two drawings. Image 1 = CHARACTER, image 2 = VEHICLE. Check them, then describe them in full. Reply in JSON.",
-  ];
-  if (approved) {
-    ask.push(
-      "A grown-up facilitator has already approved both photos: describe both of them in full even if a check looks doubtful.",
-    );
-  }
-  if (previousErrors?.length) ask.push(retryText(previousErrors));
-  return [
-    { role: "system", content: LOOK_PROMPT },
-    {
-      role: "user",
-      content: [
-        { type: "text", text: "Image 1: CHARACTER drawing" },
-        { type: "image_url", image_url: { url: characterDataUrl } },
-        { type: "text", text: "Image 2: VEHICLE drawing" },
-        { type: "image_url", image_url: { url: vehicleDataUrl } },
-        { type: "text", text: ask.join("\n\n") },
-      ],
-    },
-  ];
-}
-
-// --- 2 · design ------------------------------------------------------------------------------
+// --- 1 · design (sees the drawings) ------------------------------------------------------------
 
 const DESIGN_RULES = `HOW TO DESIGN A GREAT RACER
 0. LOYALTY TO THE DRAWING comes before everything else. The racer must look like what the child drew.
@@ -252,18 +190,29 @@ const DESIGN_RULES = `HOW TO DESIGN A GREAT RACER
 
 export function designSystemPrompt() {
   return `You are the Racer Designer for BebbiKart, a racing game for children aged 6–10 at a family event.
-A child drew their racing character and their vehicle. You get a detailed description of both drawings (you can't see
-them). Turn them into a 3D toy racer by choosing parts from a fixed toy kit and writing a RacerSpec JSON. You write a
-design, not a picture. Take the time to think it through: the child should instantly say "that's mine!", and the
-racer should have its own personality, colour and charm.
+A child drew their racing CHARACTER (image 1) and their VEHICLE (image 2). Turn them into a 3D toy racer by choosing
+parts from a fixed toy kit and writing a RacerSpec JSON. You write a design, not a picture: the game builds the 3D toy
+from your spec. The child should instantly say "that's mine!".
+
+${CHECK_RULES}
+
+${LOOK_RULES}
 
 ${DESIGN_RULES}
 
 Reply with ONE JSON object and nothing else:
 {
-  "featureMap": [ { "feature": string from the description (or "touch: …" for your own additions), "how": which spec fields show it } ],
-  "spec": RacerSpec,
-  "notes": one or two sentences about the design
+  "check": {
+    "character": { "ok": bool, "reason": one of ${JSON.stringify(REJECT_REASONS.filter((r) => r !== "unsupported_file"))} or null, "seen": short description },
+    "vehicle":   { "ok": bool, "reason": ... or null, "seen": short description }
+  },
+  "observations": {
+    "character": { "what": string, "detail": "sketch"|"detailed", "features": [ { "name": string, "color": "#rrggbb", "count": number, "importance": 1|2|3 } ], "labels": [ { "text": string, "meaning": string, "pointsAt": string } ] },
+    "vehicle": same shape
+  } (null for an image whose check failed),
+  "featureMap": [ { "feature": a feature from your observations (or "touch: …" for an addition to a sketch), "how": which spec fields show it } ],
+  "spec": RacerSpec, or null if any check failed,
+  "notes": one sentence about the design
 }
 
 Use only the part names listed in the kit. Stay inside every range.
@@ -274,62 +223,88 @@ ${catalogText()}
 === SCHEMA ===
 ${schemaText()}
 
-=== WORKED EXAMPLE ===
+=== WORKED EXAMPLE (from a written description; you will see real drawings) ===
 ${exampleText()}`;
 }
 
-export function buildDesignMessages({ observations, reroll = false, previousErrors = null }) {
+/** The design pass: both drawings in, check + observations + spec out. */
+export function buildDesignMessages({
+  characterDataUrl,
+  vehicleDataUrl,
+  approved = false,
+  reroll = false,
+  previousErrors = null,
+}) {
   const ask = [
-    "Here is the description of the two drawings:",
-    JSON.stringify(observations, null, 1),
-    "Design the racer. Reply in JSON.",
+    "Image 1 = CHARACTER, image 2 = VEHICLE. Check them, look closely, then design the racer. Reply in JSON.",
   ];
+  if (approved) {
+    ask.push(
+      "A grown-up facilitator has already approved both photos: design the racer even if a check looks doubtful.",
+    );
+  }
   if (reroll) {
     ask.push(
-      "The child asked to TRY ANOTHER LOOK: make a clearly different interpretation of the same drawings (other part choices, proportions, patterns, extras, title and tagline) while keeping the drawing's colours and defining features.",
+      "The child asked to TRY ANOTHER LOOK: make a clearly different interpretation of the same drawings (other part choices, proportions, patterns, title and tagline) while keeping everything the child drew.",
     );
   }
   if (previousErrors?.length) ask.push(retryText(previousErrors));
   return [
     { role: "system", content: designSystemPrompt() },
-    { role: "user", content: ask.join("\n\n") },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "Image 1: CHARACTER drawing" },
+        { type: "image_url", image_url: { url: characterDataUrl } },
+        { type: "text", text: "Image 2: VEHICLE drawing" },
+        { type: "image_url", image_url: { url: vehicleDataUrl } },
+        { type: "text", text: ask.join("\n\n") },
+      ],
+    },
   ];
 }
 
-// --- 3 · critique ----------------------------------------------------------------------------
+// --- 2 · review (sees the drawings and the built racer) ------------------------------------------
 
-export function critiqueSystemPrompt() {
+export function reviewSystemPrompt() {
   return `You are the art director of BebbiKart, a racing game for children aged 6–10. A designer turned a child's two
-drawings (image 1 = CHARACTER, image 2 = VEHICLE) into a 3D toy racer spec, built from a fixed toy kit. When images 3
-and 4 are given, they are renders of the racer that spec builds: compare what you SEE there with the drawings (parts
-that float, hide the driver, are too small to notice, wrong colours), then use the spec to name the fields to change.
-Be demanding: would the child instantly recognise their own drawing? LOYALTY comes first: a "detailed" drawing must
-be reproduced as closely as the kit allows, and anything on the racer that the child did not draw (extra spikes,
-lightning, stars, flags, capes, invented colours) is a "must" fix: remove it. Only a "sketch" may be enhanced.
-The child's written labels (colour and part names, in any language) are instructions: check them one by one.
+drawings (image 1 = CHARACTER, image 2 = VEHICLE) into a 3D toy racer spec built from a fixed toy kit. Images 3 and 4
+(when given) are renders of the racer that spec builds today, front 3/4 and left side. Compare what you SEE in the
+renders with the drawings, find what is wrong, and fix it by editing the spec.
+
+LOYALTY comes first: a "detailed" drawing must be reproduced as closely as the kit allows, and anything on the racer
+that the child did not draw (extra spikes, lightning, stars, flags, capes, beams, invented colours) must be removed.
+Only a "sketch" may be enhanced. The child's written labels (colour and part names, in any language) are
+instructions: check them one by one.
 
 Check, one by one:
-- likeness: is every defining feature of each drawing there, with the right count, colour, size and place? What's
-  missing or wrong? Is anything there that the child did not draw and that clashes with the drawing?
-- colour: does the palette match the crayons used? Are the main colours on the right parts? Remember the ride's
+- likeness: is every defining feature there, with the right count, colour, size and place? What's missing or wrong?
+- colour: does the palette match the crayons and labels? Are the main colours on the right parts? The ride's
   "accent" paints bumpers, seat back and trim, a big part of a kart: if the drawn vehicle is mostly one colour, the
-  accent must be that colour or a shade of it. Are markings (stripes, spots…) and the colouring style captured with
-  patterns?
-- personality: do face, motion, title, tagline and sound fit the drawing's mood? Is it bland?
-- proportions and readability: exaggerations kept? Extras big enough to see, placed sensibly (ears on the head side,
-  horns on top), not floating or buried?
-- additions: list everything on the racer that is not in the drawing; for a detailed drawing each one is a "must" removal.
-A side-view drawing shows one side only: two drawn wheels on a car mean four wheels, keep count 4.
-Uncoloured parts keep their natural reading (white stays white, pencil grey stays grey); do not ask to recolour them.
-Flag any extra that hides the driver (boxes or blocks over the seat, fake cabins): suggest ride.base "car" or
-removing it. Only suggest fixes the kit can do (catalog below). Be concrete: name the spec field and the new value.
+  accent must be that colour or a shade of it. Uncoloured parts keep their natural reading (white stays white,
+  pencil grey stays grey).
+- proportions and readability: exaggerations kept? Extras big enough to see, placed where the drawing has them
+  (ears on the head side, horns on top), not floating, buried or hiding the driver? A side-view drawing shows one
+  side only: two drawn wheels on a car mean four wheels.
+- additions: anything on the racer that is not in the drawing; on a detailed drawing remove each one.
+- personality: do face, motion, title, tagline and sound fit the drawing?
+
+Then write a PATCH: the smallest set of edits that fixes every real problem. Keep what already works. Ops:
+  { "op": "set", "path": "character.hair.style", "value": "very_long" }     replace a value (any depth; whole objects too)
+  { "op": "set", "path": "ride.extras.2.scale", "value": [0.3, 0.3, 0.1] }  array items by index
+  { "op": "remove", "path": "ride.extras.4" }                               delete an array item or an optional field
+  { "op": "add", "path": "character.extras", "value": { ...extra... } }    append to an array
+Indices always refer to the spec as you were given it. An empty patch is fine when the racer already matches.
 
 Reply with ONE JSON object and nothing else:
 {
   "scores": { "likeness": 1-10, "colour": 1-10, "personality": 1-10, "readability": 1-10, "loyalty": 1-10 },
-  "issues": [ { "severity": "must"|"should"|"could", "problem": string, "fix": string } ],
-  "verdict": one sentence
+  "issues": [ { "severity": "must"|"should"|"could", "problem": string } ],
+  "patch": [ op, ... ],
+  "notes": one sentence
 }
+
+${DESIGN_RULES}
 
 === TOY KIT CATALOG ===
 ${catalogText()}
@@ -338,26 +313,30 @@ ${catalogText()}
 ${schemaText()}`;
 }
 
-export function buildCritiqueMessages({
+/** The review pass: drawings + renders + the design in, issues + patch out. */
+export function buildReviewMessages({
   characterDataUrl,
   vehicleDataUrl,
-  observations,
   design,
   renders = null,
+  previousErrors = null,
 }) {
   const built = renders
     ? [
-        {
-          type: "text",
-          text: "Image 3: the 3D toy racer this spec builds today, front 3/4 view. Judge THIS, not the numbers.",
-        },
+        { type: "text", text: "Image 3: the 3D toy racer this spec builds, front 3/4 view." },
         { type: "image_url", image_url: { url: renders.front } },
         { type: "text", text: "Image 4: the same racer from its left side." },
         { type: "image_url", image_url: { url: renders.side } },
       ]
     : [];
+  const ask = [
+    "The designer's observations, featureMap and spec:",
+    JSON.stringify(design),
+    "Review the racer against the drawings and reply with the JSON (scores, issues, patch, notes).",
+  ];
+  if (previousErrors?.length) ask.push(retryText(previousErrors));
   return [
-    { role: "system", content: critiqueSystemPrompt() },
+    { role: "system", content: reviewSystemPrompt() },
     {
       role: "user",
       content: [
@@ -366,37 +345,9 @@ export function buildCritiqueMessages({
         { type: "text", text: "Image 2: VEHICLE drawing" },
         { type: "image_url", image_url: { url: vehicleDataUrl } },
         ...built,
-        {
-          type: "text",
-          text: [
-            "What the designer was told about the drawings:",
-            JSON.stringify(observations),
-            "The designer's racer (featureMap, spec, notes):",
-            JSON.stringify(design),
-            "Review it against the drawings. Reply in JSON.",
-          ].join("\n\n"),
-        },
+        { type: "text", text: ask.join("\n\n") },
       ],
     },
-  ];
-}
-
-// --- 4 · refine ------------------------------------------------------------------------------
-
-export function buildRefineMessages({ observations, design, critique, previousErrors = null }) {
-  const ask = [
-    "The description of the two drawings:",
-    JSON.stringify(observations, null, 1),
-    "Your first design:",
-    JSON.stringify(design),
-    "The art director looked at the real drawings and reviewed your design:",
-    JSON.stringify(critique, null, 1),
-    'Improve the design: apply every "must" and "should" fix, and the "could" fixes that make the racer better. Keep what already works, and add nothing the child did not draw unless the drawing is a sketch. Never move a main colour away from the drawing: the main colour of the ride stays the main drawn colour of the vehicle (add stripes with patterns or extras instead), and the character keeps its own. Reply with the complete JSON again (featureMap, spec, notes).',
-  ];
-  if (previousErrors?.length) ask.push(retryText(previousErrors));
-  return [
-    { role: "system", content: designSystemPrompt() },
-    { role: "user", content: ask.join("\n\n") },
   ];
 }
 

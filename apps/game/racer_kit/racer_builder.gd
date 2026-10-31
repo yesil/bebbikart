@@ -14,6 +14,8 @@ extends RefCounted
 const P = preload("res://racer_kit/kit_parts.gd")
 const R = preload("res://racer_kit/kit_ride_parts.gd")
 const CHAR_UNIT := 0.5
+## The driver is the child's own drawing, so it is drawn bigger than toy scale against the ride.
+const CHAR_SCALE := 1.25
 const RIDE_UNIT := 1.0
 const BOUNCY := ["bouncy", "silly", "speedy", "zoomy", "cheerful", "playful", "wild", "hyper", "quick"]
 const CALM := ["calm", "sleepy", "chill", "gentle", "shy", "wise", "cool"]
@@ -194,6 +196,7 @@ static func _number(ride: Node3D, d: Dictionary, r: Dictionary, cols: Array[Colo
 
 static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: Array[Color]) -> Dictionary:
 	var ch := P.node("Character", d.seat * ride_scale)
+	ch.scale = Vector3.ONE * CHAR_SCALE
 	var bs: Array = c.body.scale
 	var bscale := Vector3(bs[0], bs[1], bs[2])
 	var b := P.body(c.body.shape, cols[c.body.color])
@@ -212,7 +215,7 @@ static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: 
 	if c.has("legs"):
 		const LEG := 0.24
 		if d.stand:
-			ch.position.y += LEG  # stand on the deck
+			ch.position.y += LEG * CHAR_SCALE  # stand on the deck
 		var socks = cols[c.legs.socks] if c.legs.has("socks") else null
 		ch.add_child(P.legs(cols[c.legs.color], c.legs.shoes, cols[c.legs.shoeColor], bp, bscale, LEG, not d.stand, socks))
 	var center: float = b.center * bscale.y
@@ -248,7 +251,7 @@ static func _character(c: Dictionary, d: Dictionary, ride_scale: Vector3, cols: 
 		var sh := Vector3(side * float(bp.ax) * 0.92 * bscale.x, center + float(bp.ay) * 0.42 * bscale.y, 0)
 		var hand: Vector3
 		if d.handle != null and not d.stand:
-			var hpos: Vector3 = d.handle * ride_scale - ch.position
+			var hpos: Vector3 = (d.handle * ride_scale - ch.position) / CHAR_SCALE
 			hand = hpos + Vector3(side * float(d.hand_spread), 0, 0)
 		else:
 			hand = sh + Vector3(side * 0.13, -0.2, -0.06)

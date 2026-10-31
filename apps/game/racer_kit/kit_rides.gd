@@ -116,7 +116,7 @@ static func _car(main: Color, accent: Color) -> Dictionary:
 	# Cabin: glass dome over the seat, roof rim in the main colour.
 	var cabin := MeshInstance3D.new()
 	cabin.name = "Glass"
-	cabin.mesh = KitMesh.dome(0.44, 0.56, 0.62)
+	cabin.mesh = KitMesh.dome(0.46, 0.8, 0.64)
 	cabin.material_override = KitMaterial.glass()
 	cabin.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	cabin.position = Vector3(0, 0.42, 0.08)

@@ -31,21 +31,26 @@ export function createClaudeClient(opts = {}) {
 
   return {
     name: `claude:${model}`,
-    async complete(messages, { effort = defaultEffort } = {}) {
+    /**
+     * @param {{ effort?: string, onText?: () => void, onUsage?: (u: object) => void }} [opts]
+     *   onText fires once, when the reply text starts (thinking is done).
+     */
+    async complete(messages, { effort = defaultEffort, onText, onUsage } = {}) {
       const { system, turns } = toClaudeMessages(messages);
       let msg;
       try {
-        msg = await client.messages
-          .stream({
-            model,
-            max_tokens: CLAUDE_DEFAULTS.maxTokens,
-            thinking: { type: "adaptive" },
-            output_config: { effort },
-            // The system prompts (kit catalog, schema, rules) repeat across passes and racers.
-            system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-            messages: turns,
-          })
-          .finalMessage();
+        const stream = client.messages.stream({
+          model,
+          max_tokens: CLAUDE_DEFAULTS.maxTokens,
+          thinking: { type: "adaptive" },
+          output_config: { effort },
+          // The system prompts (kit catalog, schema, rules) repeat across passes and racers.
+          system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+          messages: turns,
+        });
+        if (onText) stream.once("text", () => onText());
+        msg = await stream.finalMessage();
+        onUsage?.(msg.usage);
       } catch (err) {
         if (err instanceof Anthropic.AuthenticationError)
           throw new ClaudeError(`${model}: invalid ANTHROPIC_API_KEY (${err.message})`);
