@@ -109,8 +109,9 @@ func setup(current_track: String, server_mode: bool) -> void:
 	irow.add_theme_constant_override("separation", 6)
 	cgrid.add_child(irow)
 	var igroup := ButtonGroup.new()
+	var inset_names := {"face": I18n.t("menu.inset_face"), "side": I18n.t("menu.inset_side"), "off": I18n.t("menu.inset_off")}
 	for id in CameraHud.INSET_IDS:
-		var b := _choice(I18n.t("menu.inset_" + id), igroup, 92)
+		var b := _choice(inset_names[id], igroup, 92)
 		b.pressed.connect(func(): inset_chosen.emit(id))
 		irow.add_child(b)
 		_insets[id] = b
