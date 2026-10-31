@@ -122,7 +122,7 @@ interface Player {
   id: string;
   sessionId: string;
   deviceId: string;
-  nickname: string; // 1–16 chars, trimmed, profanity-filtered
+  nickname: string; // 1–16 chars, trimmed, profanity-filtered, unique in the server (a second "Mia" becomes "Mia 2")
   status: PlayerStatus;
   assetPackageId?: string;
   connected: boolean; // has a live phone WS

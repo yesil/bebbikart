@@ -274,13 +274,25 @@ export function createGame({ db, settings, hub, log = console.log }) {
     if (!p) throw new ApiError("not_found", "Create your racer first", 404);
     return p;
   }
+  /** Two kids called Mia are "Mia" and "Mia 2" everywhere (big screen, leaderboard, phones). */
+  function uniqueNickname(nickname, exceptId) {
+    const taken = new Set();
+    for (const p of players.values()) if (p.id !== exceptId) taken.add(p.nickname.toLowerCase());
+    if (!taken.has(nickname.toLowerCase())) return nickname;
+    for (let n = 2; ; n++) {
+      const suffix = ` ${n}`;
+      const name = nickname.slice(0, 16 - suffix.length).trimEnd() + suffix;
+      if (!taken.has(name.toLowerCase())) return name;
+    }
+  }
   function createPlayer(deviceId, nicknameRaw) {
     if (deviceId && playerForDevice(deviceId))
       throw new ApiError("player_exists", "This phone already has a racer", 409);
     if (players.size >= config.maxPlayers)
       throw new ApiError("server_full", "The track is full right now", 409);
-    const nickname = cleanNickname(nicknameRaw);
-    if (!nickname) throw new ApiError("bad_request", "Pick a racer name", 400);
+    const cleaned = cleanNickname(nicknameRaw);
+    if (!cleaned) throw new ApiError("bad_request", "Pick a racer name", 400);
+    const nickname = uniqueNickname(cleaned);
     const p = {
       id: newId("player"),
       sessionId: session.id,
@@ -299,8 +311,9 @@ export function createGame({ db, settings, hub, log = console.log }) {
   }
   function rename(playerId, nicknameRaw) {
     const p = players.get(playerId);
-    const nickname = cleanNickname(nicknameRaw);
-    if (!nickname) throw new ApiError("bad_request", "Pick a racer name", 400);
+    const cleaned = cleanNickname(nicknameRaw);
+    if (!cleaned) throw new ApiError("bad_request", "Pick a racer name", 400);
+    const nickname = uniqueNickname(cleaned, playerId);
     savePlayer({ ...p, nickname });
     pushPlayer(playerId);
     pushRoster();

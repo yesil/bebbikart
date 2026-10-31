@@ -601,3 +601,34 @@ test("language: the big screen picks it, every phone follows live (config.update
   await phone.wait("config.updated", (c) => c.language === "en");
   for (const c of [game, phone, late]) c.ws.close();
 });
+
+test("two racers with the same name: the second is 'Mia 2' everywhere, renaming keeps it unique", async () => {
+  const join = async (nickname) => {
+    const dev = await fetch(`${base}/api/device`, { method: "POST" });
+    const cookie = dev.headers.get("set-cookie").split(";")[0];
+    const res = await fetch(`${base}/api/players`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ nickname }),
+    });
+    return { cookie, me: await res.json() };
+  };
+  const a = await join("Twin");
+  const b = await join("twin");
+  const c = await join("Twin");
+  expect(a.me.nickname).toBe("Twin");
+  expect(b.me.nickname).toBe("twin 2");
+  expect(c.me.nickname).toBe("Twin 3");
+  // Renaming to your own name keeps it; to a taken one gets a number.
+  const rename = async (who, nickname) =>
+    (
+      await fetch(`${base}/api/players/me`, {
+        method: "PATCH",
+        headers: { cookie: who.cookie, "content-type": "application/json" },
+        body: JSON.stringify({ nickname }),
+      })
+    ).json();
+  expect((await rename(a, "Twin")).nickname).toBe("Twin");
+  expect((await rename(c, "Sixteen chars ok")).nickname).toBe("Sixteen chars ok");
+  expect((await rename(b, "Sixteen chars ok")).nickname).toBe("Sixteen chars 2");
+});
