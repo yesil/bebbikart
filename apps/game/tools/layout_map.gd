@@ -294,7 +294,8 @@ func _check_landscape() -> void:
 		if id == "pond_water":
 			continue
 		for q in _samples(id, 1.0):
-			if Landscape.in_pond(q[1], _hw(id) + 2.0):
+			# Fenced (railed) lanes may run along the shore; open roads keep 2 m of bank.
+			if Landscape.in_pond(q[1], _hw(id) + (0.8 if course.segments[id]["rails"] else 2.0)):
 				fails.append("pond: %s runs into the pond at (%.0f, %.0f)" % [id, q[1].x, q[1].y])
 				break
 	# Stream: crossed once, by the bridge lane, at its hump.
@@ -499,7 +500,7 @@ func _draw() -> void:
 	_line(_to_px(_xz(r_end.world_at(r_end.length, -5.0))), _to_px(_xz(r_end.world_at(r_end.length, 5.0))), 4.0, Color.BLACK)
 	_text("FINISH", _to_px(_xz(r_end.pos_at(r_end.length))) + Vector2(14, -6), 2, Color.BLACK)
 	_text("START", _to_px(Vector2(0, 0)) + Vector2(14, -6), 2, Color.BLACK)
-	_text("POND", _to_px(Landscape.POND_CENTER) + Vector2(-30, 30), 1, Color(0.85, 0.95, 1.0))
+	_text("POND", _to_px(Landscape.pond_center()) + Vector2(12, 30), 1, Color(0.85, 0.95, 1.0))
 	_text("STREAM", _to_px(Vector2(-90, 182)) + Vector2(0, -16), 1, Color(0.85, 0.95, 1.0))
 	_text("VALLEY", _to_px(Vector2(-80, 246)), 1, Color(0.2, 0.25, 0.15))
 	_text("DIP", _to_px(Landscape.DIP_CENTER) + Vector2(-34, -4), 1, Color.WHITE)
