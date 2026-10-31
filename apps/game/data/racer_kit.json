@@ -254,6 +254,10 @@
       "desc": "boat or bathtub on wheels"
     },
     {
+      "name": "sailboat",
+      "desc": "sailing boat: a tall mast behind the driver with a big sail in the accent colour; ride_top is the masthead"
+    },
+    {
       "name": "blob",
       "desc": "anything else: a slime, a cloud, a shoe"
     }

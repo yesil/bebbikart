@@ -18,6 +18,7 @@ static func build(base: String, main: Color, accent: Color) -> Dictionary:
 		"board": return _board(main, accent)
 		"rocket": return _rocket(main, accent)
 		"boat": return _boat(main, accent)
+		"sailboat": return _sailboat(main, accent)
 		"blob": return _blob(main, accent)
 	return _kart(main, accent)
 
@@ -288,6 +289,18 @@ static func _boat(main: Color, accent: Color) -> Dictionary:
 	var cloth := P.mi(KitMesh.puffy(PackedVector2Array([Vector2(0, 0), Vector2(0.2, -0.07), Vector2(0, -0.14)]), 0.02, "boat_flag"), accent, Vector3(0, 0.94, 0.62))
 	cloth.rotation.y = -PI / 2
 	b.add_child(cloth)
+	return d
+
+
+## Boat with a tall mast behind the driver and a big sail in the accent colour.
+static func _sailboat(main: Color, accent: Color) -> Dictionary:
+	var d := _boat(main, accent)
+	var b: Node3D = d.body
+	b.add_child(P.mi(KitMesh.tube(PackedVector3Array([Vector3(0, 0.36, 0.42), Vector3(0, 1.75, 0.42)]), 0.03, 8), P.DARK))
+	var sail := P.mi(KitMesh.slab(PackedVector2Array([Vector2(0, 0), Vector2(0, 1.2), Vector2(-0.62, 0)]), 0.03, "sail_main"), accent, Vector3(0, 0.5, 0.45))
+	sail.rotation.y = PI / 2  # outline x runs toward the stern (+Z)
+	b.add_child(sail)
+	d.sockets.ride_top = Vector3(0, 1.75, 0.42)  # the masthead: flags and pennants
 	return d
 
 

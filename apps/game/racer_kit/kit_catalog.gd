@@ -20,7 +20,7 @@ const IMPLEMENTED := {
 	"mouths": ["smile", "grin", "open", "fangs", "beak", "none", "tongue", "buck_teeth", "mustache", "zigzag", "worried"],
 	"hairStyles": ["spiky", "curly", "long", "ponytail", "mohawk", "tuft", "buns", "pigtails", "bob", "very_long", "braid"],
 	"hatTypes": ["cap", "crown", "helmet", "wizard", "beanie", "tophat", "bow", "party"],
-	"rideBases": ["kart", "car", "bike", "animal4", "bird", "board", "rocket", "boat", "blob"],
+	"rideBases": ["kart", "car", "bike", "sailboat", "animal4", "bird", "board", "rocket", "boat", "blob"],
 	"wheelStyles": ["toy", "spoked", "monster", "donut"],
 	"legStyles": ["hooves", "paws", "claws", "stumpy"],
 	"wingStyles": ["feather", "bat", "fairy", "plane"],

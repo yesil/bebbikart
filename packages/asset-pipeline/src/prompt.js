@@ -141,7 +141,8 @@ const LOOK_RULES = `LOOK at each drawing closely before designing, and write dow
   ("Gold", "orange", "weiß", "Gelb", "schwarze Räder" = black wheels, "Licht" = light, "Glas" = glass). Read every
   label, translate it, and note which part it points at: the child's words are instructions and override guesses;
 - the colours: crayon/marker colours as vivid toy-like hex codes. Parts left uncoloured keep their natural reading:
-  white paper inside an outline = white (a white skirt, white socks), grey pencil shading = grey or silver;
+  white paper inside an outline = white (a white skirt, white socks), grey pencil shading = a real mid grey or
+  silver such as #a9a9b8 (never pure white, which reads as a helmet);
 - proportions and exaggerations (a huge head, very long hair, an enormous wheel): what the child cared about most;
 - "detail": "sketch" when it is just a few lines with little to copy, "detailed" when the child drew and/or coloured
   real details (clothes, hair style, patterns, accessories, labelled colours).`;
@@ -188,7 +189,9 @@ const DESIGN_RULES = `HOW TO DESIGN A GREAT RACER
    The character and the ride should contrast so the rider stands out.
 10. ${KIDS_RULES}
 11. Set "drawingSticker": true when the vehicle drawing is a flat-sided thing worth showing (karts, boats, rockets).
-    Give the ride a "number" when the child drew one, or when the racer is a classic race kart/bike.`;
+    Give the ride a "number" only when the child drew one (or, for a sketch, when it is a classic race kart).
+12. Bows and ribbons sit where the child drew them; a single big bow is hat "bow". Several small bows are flat
+    "bowtie" extras pressed onto the hair (offset 0–0.05 so they touch it), never sticking up like ears.`;
 
 export function designSystemPrompt() {
   return `You are the Racer Designer for BebbiKart, a racing game for children aged 6–10 at a family event.

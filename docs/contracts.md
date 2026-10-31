@@ -261,7 +261,7 @@ interface RacerSpec {
     extras: Extra[]; // ≤ 10
   };
   ride: {
-    base: "kart" | "car" | "bike" | "animal4" | "bird" | "board" | "rocket" | "boat" | "blob";
+    base: "kart" | "car" | "sailboat" | "bike" | "animal4" | "bird" | "board" | "rocket" | "boat" | "blob";
     color: PaletteRef;
     accent: PaletteRef;
     scale: Vec3;

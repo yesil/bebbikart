@@ -83,6 +83,10 @@ export const RACER_KIT = Object.freeze({
     { name: "board", desc: "skateboard, surfboard, magic carpet" },
     { name: "rocket", desc: "rocket, plane, spaceship" },
     { name: "boat", desc: "boat or bathtub on wheels" },
+    {
+      name: "sailboat",
+      desc: "sailing boat: a tall mast behind the driver with a big sail in the accent colour; ride_top is the masthead",
+    },
     { name: "blob", desc: "anything else: a slime, a cloud, a shoe" },
   ],
   wheelStyles: [
