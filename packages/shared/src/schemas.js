@@ -151,6 +151,17 @@ export const LeaderboardEntrySchema = z.object({
   setAt: iso,
 });
 
+/** One racer in the paddock, for the phones (paddock.updated): who else is here and how they are doing. */
+export const PaddockEntrySchema = z.object({
+  playerId: z.string(),
+  nickname: z.string(),
+  status: PlayerStatusSchema,
+  stage: z.enum(JOB_STAGES).optional(), // status processing: the design step now
+  avatarUrl: z.string().optional(),
+  connected: z.boolean(),
+  racing: z.boolean(), // on the track or on the start grid
+});
+
 /** One racer in a heat (the runs that left the start together, contracts §7 run.heat). */
 export const HeatEntrySchema = z.object({
   playerId: z.string(),

@@ -411,6 +411,7 @@ interface Envelope<T extends string, P> {
 | `run.grid`                   | `{ runId, goInMs }`                                                                            | On the start grid: the lights go green in goInMs (§2c) |
 | `run.heat`                   | `{ heatId, done, entries: HeatEntry[] }`                                                       | A heat-mate's run ended (see "Heats" below)           |
 | `grid.updated`               | `{ goInMs, racers: [{ playerId, nickname }] }`                                                 | To every phone: a run joined the open countdown (§2c) |
+| `paddock.updated`            | `PaddockEntry[]`                                                                               | Everyone in the session (see "Paddock" below)         |
 | `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1 |
 | `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
@@ -422,10 +423,28 @@ interface Envelope<T extends string, P> {
 | `camera.updated`             | `{ playerId?, runId? }`: the racer the big-screen camera follows now; empty when nobody         | Every camera cut (relayed `game.camera`)              |
 | `error`                      | `{ code, message, refId? }`                                                                    |                                                       |
 
+### Paddock
+
+Every phone gets `paddock.updated` (everyone in the session) right after `welcome` and whenever
+someone joins, leaves, goes on or off line, moves to the next design step, gets their avatar, or
+starts or ends a run, so a kid waiting for their racer sees their friends' racers being made.
+
+```ts
+interface PaddockEntry {
+  playerId: string;
+  nickname: string;
+  status: PlayerStatus;
+  stage?: "looking" | "designing" | "critiquing" | "refining"; // status processing
+  avatarUrl?: string;
+  connected: boolean;
+  racing: boolean; // on the track or on the start grid
+}
+```
+
 ### Heats
 
-Runs that left the start within 2.5 s of each other (a countdown group, or a group pressing Go
-together without one) are a **heat**: they raced each other. Each time one of them ends, the
+Runs that left from the same start countdown (§2c; however many rows it took to release them),
+or, without a countdown, within 2.5 s of each other, are a **heat**: they raced each other. Each time one of them ends, the
 server sends every phone in the heat `run.heat`, so a kid who is home first watches the others
 come in; `done` is true once the last one is home. `heatId` is the heat's first run id. A heat of
 one sends nothing.

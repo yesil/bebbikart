@@ -9,6 +9,7 @@ import {
   GhostTraceSchema,
   HeatEntrySchema,
   LeaderboardEntrySchema,
+  PaddockEntrySchema,
   PlayerViewSchema,
   RosterEntrySchema,
   RunEventSchema,
@@ -142,6 +143,9 @@ export const CHANNELS = {
     "run.queued": z.object({ run: RunSchema }),
     // Relayed game.run.grid: on the start grid, the lights go green in goInMs.
     "run.grid": z.object({ runId: z.string(), goInMs: ms }),
+    // Everyone in the session (§7 "Paddock"), on joins, design steps, renders, races starting and
+    // ending; also right after welcome.
+    "paddock.updated": z.array(PaddockEntrySchema),
     // To every phone: a countdown is open and these racers are on the grid; others can still
     // press Go and join that race (§2c).
     "grid.updated": z.object({

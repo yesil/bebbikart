@@ -20,6 +20,7 @@ const initial = {
   result: null, // run.ended payload, plus prevBest splits
   heat: null, // run.heat: everyone who left the start with my last run, places so far
   grid: null, // grid.updated: an open start countdown { goAt, racers } anyone can still join
+  paddock: [], // paddock.updated: everyone in the session (friends' racers being made, racing)
   camera: null, // camera.updated: { playerId?, runId? } of the racer on the big screen
   tab: "garage",
   revealSeen: readRevealSeen(),
@@ -123,6 +124,8 @@ function onWs(s, type, p) {
               },
         me: s.me ? { ...s.me, currentRun: p.run } : s.me,
       };
+    case "paddock.updated":
+      return { ...s, paddock: p };
     case "grid.updated":
       return { ...s, grid: { goAt: Date.now() + p.goInMs, racers: p.racers } };
     case "run.heat":

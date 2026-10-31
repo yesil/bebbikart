@@ -135,6 +135,7 @@ export function createHub({ settings, log = console.log }) {
         weather: game.weather,
       });
       send(ws, "serverToPhone", "leaderboard.updated", game.leaderboard());
+      send(ws, "serverToPhone", "paddock.updated", game.paddock());
     } else if (h.role === "game") {
       if (h.gameKey !== settings.gameKey) {
         ws.close(WS_CLOSE_UNAUTHORIZED, "bad game key");

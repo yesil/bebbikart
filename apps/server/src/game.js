@@ -177,6 +177,29 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function pushRoster() {
     clearTimeout(rosterTimer);
     rosterTimer = setTimeout(() => hub.toGame("roster.updated", roster()), 250);
+    pushPaddock();
+  }
+  /** Who else is here, for the phones: the kids waiting for their racer see their friends'. */
+  function paddock() {
+    return [...players.values()].map((p) => {
+      const e = {
+        playerId: p.id,
+        nickname: p.nickname,
+        status: p.status,
+        connected: p.connected,
+        racing: !!activeRun(p.id),
+      };
+      const stage = p.status === "processing" ? latestJob(p.id)?.stage : undefined;
+      if (stage) e.stage = stage;
+      const avatar = manifests.get(p.id)?.renders.avatar_happy;
+      if (avatar) e.avatarUrl = avatar;
+      return e;
+    });
+  }
+  let paddockTimer = null;
+  function pushPaddock() {
+    clearTimeout(paddockTimer);
+    paddockTimer = setTimeout(() => hub.toPhones("paddock.updated", paddock()), 400);
   }
   function pushLeaderboard() {
     const lb = leaderboard();
@@ -380,6 +403,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     manifests.set(playerId, { ...m, renders: { ...m.renders, [key]: url }, updatedAt: now() });
     savePlayer(players.get(playerId));
     pushPlayer(playerId);
+    pushPaddock(); // the avatar for the other phones
     if (players.get(playerId).bestTimeMs !== undefined) pushLeaderboard();
   }
 
@@ -426,6 +450,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     hub.toGame("run.start", runStart(run));
     hub.toPhone(playerId, "run.queued", { run });
     pushPlayer(playerId);
+    pushPaddock();
     log(`[run] ${run.id} queued for "${p.nickname}"`);
     return run;
   }
@@ -462,21 +487,32 @@ export function createGame({ db, settings, hub, log = console.log }) {
       coach: abortTip(config.language),
     });
     pushPlayer(run.playerId);
+    runGreen.delete(run.id);
     pushHeat(run.id);
+    pushPaddock();
   }
 
   // ------------------------------------------------------------------ heats
   // Runs that left the start within HEAT_WINDOW_MS of each other raced each other (the start
   // countdown sends a group off together). Each time one of them ends, every phone in the heat
   // gets the places so far (run.heat); the last one home makes it done.
+  // Runs from the same start countdown are one heat however many rows it took to release them
+  // (16 karts leave over ~2.7 s); without a countdown, starts within HEAT_WINDOW_MS are.
   const HEAT_WINDOW_MS = 2_500;
-  const heats = new Map(); // heatId (its first run's id) -> { id, startedAt, runIds }
+  const heats = new Map(); // heatId (its first run's id) -> { id, startedAt, green, runIds }
   const runHeat = new Map(); // runId -> heatId
+  const runGreen = new Map(); // runId -> its countdown's green time (game.run.grid)
   function joinHeat(runId) {
     const t = Date.now();
-    let heat = [...heats.values()].find((h) => t - h.startedAt <= HEAT_WINDOW_MS);
+    const green = runGreen.get(runId);
+    runGreen.delete(runId);
+    let heat = [...heats.values()].find((h) =>
+      green !== undefined
+        ? h.green === green
+        : h.green === undefined && t - h.startedAt <= HEAT_WINDOW_MS,
+    );
     if (!heat) {
-      heat = { id: runId, startedAt: t, runIds: [] };
+      heat = { id: runId, startedAt: t, green, runIds: [] };
       heats.set(heat.id, heat);
     }
     heat.runIds.push(runId);
@@ -526,6 +562,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
       });
       pushPlayer(r.playerId);
       pushHeat(r.id);
+      pushPaddock();
       log(`[run] ${r.id} aborted (${reason})`);
     }
   }
@@ -554,6 +591,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
         hub.toPhone(r.playerId, "run.grid", pl);
         const goAt = Date.now() + pl.goInMs;
         if (!grid || Math.abs(grid.goAt - goAt) > 300) grid = { goAt, playerIds: [] };
+        runGreen.set(r.id, grid.goAt);
         if (!grid.playerIds.includes(r.playerId)) grid.playerIds.push(r.playerId);
         const racers = grid.playerIds
           .filter((id) => players.has(id))
@@ -676,6 +714,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     const rank = ranks().get(r.playerId);
     hub.toPhone(r.playerId, "run.ended", { run, isPersonalBest, ...(rank ? { rank } : {}), coach });
     pushHeat(run.id);
+    pushPaddock();
     pushPlayer(r.playerId);
     if (isPersonalBest) {
       pushLeaderboard();
@@ -787,6 +826,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     playerView,
     leaderboard,
     roster,
+    paddock,
     activeRunStarts: () => [...runs.values()].filter((r) => r.status !== "done").map(runStart),
     allPlayerViews: () => {
       const rm = ranks();
@@ -829,6 +869,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
       clearInterval(capTimer);
       clearTimeout(endTimer);
       clearTimeout(rosterTimer);
+      clearTimeout(paddockTimer);
     },
   };
 }

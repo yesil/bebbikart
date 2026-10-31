@@ -153,6 +153,13 @@ const en = {
   },
   sections: { hills: "Hills", pond: "Pond", crossing: "Crossing", bends: "Bends" },
   tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Leaderboard" },
+  paddock: {
+    title: "Also here",
+    making: "being made",
+    ready: "ready",
+    racing: "racing",
+    photos: "taking photos",
+  },
   grid: {
     call: (names, n) =>
       `${names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(" & ")} ${names.length === 1 ? "is" : "are"} on the grid! Join the race: ${n}`,
@@ -352,6 +359,13 @@ const de = {
   },
   sections: { hills: "Hügel", pond: "Teich", crossing: "Kreuzung", bends: "Kurven" },
   tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Rangliste" },
+  paddock: {
+    title: "Auch hier",
+    making: "wird gebaut",
+    ready: "bereit",
+    racing: "fährt",
+    photos: "macht Fotos",
+  },
   grid: {
     call: (names, n) =>
       `${names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(" & ")} ${names.length === 1 ? "steht" : "stehen"} am Start! Fahr mit: ${n}`,

@@ -3,6 +3,7 @@ import { useEffect, useState } from "preact/hooks";
 import { api, uploadDrawings } from "../api.js";
 import { COPY, errorText } from "../copy.js";
 import { downscale } from "../image.js";
+import { Paddock } from "./common.js";
 
 // Photos survive a retake of just one image (rejected → retake the failing one).
 const photos = { character: null, vehicle: null };
@@ -187,6 +188,7 @@ export function Making({ ctx, review }) {
       }
       <p class="hint">${COPY.making.slow} <b class="clock">${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}</b></p>
     </div>
+    <${Paddock} s=${ctx.s} />
   `;
 }
 

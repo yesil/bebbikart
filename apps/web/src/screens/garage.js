@@ -3,7 +3,7 @@ import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
-import { Avatar, GridCall, isLoop, secs, useGridCall } from "./common.js";
+import { Avatar, GridCall, isLoop, Paddock, secs, useGridCall } from "./common.js";
 
 const pick = (b) => ({ stars: { ...b.stars }, routes: { ...b.routes }, style: b.style });
 const same = (a, b) => JSON.stringify(pick(a)) === JSON.stringify(pick(b));
@@ -90,6 +90,8 @@ export function Garage({ ctx }) {
         ? html`<div class="error-box"><b>${COPY.garage.lookFailed}</b><code>${me.job.error}</code></div>`
         : null
     }
+
+    <${Paddock} s=${s} />
 
     <${WeatherStrip} weather=${s.weather} />
 

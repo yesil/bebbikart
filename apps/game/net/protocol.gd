@@ -265,6 +265,7 @@ const MSG_SERVER_TO_PHONE = [
 	"player.removed",
 	"run.queued",
 	"run.grid",
+	"paddock.updated",
 	"grid.updated",
 	"run.started",
 	"run.progress",

@@ -46,3 +46,36 @@ export function GridCall({ s, left }) {
     left,
   )}</div>`;
 }
+
+/** Who else is here: friends' racers being made, ready, or out racing (paddock.updated). */
+export function Paddock({ s }) {
+  const others = (s.paddock ?? []).filter((e) => e.playerId !== s.me?.id);
+  if (!others.length) return null;
+  const badge = (e) =>
+    e.racing ? "🏁" : e.status === "processing" ? "🎨" : e.status === "ready" ? "✓" : "📷";
+  const note = (e) =>
+    e.racing
+      ? COPY.paddock.racing
+      : e.status === "processing"
+        ? COPY.paddock.making
+        : e.status === "ready"
+          ? COPY.paddock.ready
+          : COPY.paddock.photos;
+  return html`
+    <section class="paddock">
+      <div class="muted small">${COPY.paddock.title}</div>
+      <div class="paddock-row">
+        ${others.map(
+          (e) => html`<div key=${e.playerId} class=${`pad ${e.connected ? "" : "away"}`}>
+            <span class="pad-face">
+              ${e.avatarUrl ? html`<img src=${e.avatarUrl} alt="" />` : html`<span>🏎️</span>`}
+              <i>${badge(e)}</i>
+            </span>
+            <b>${e.nickname}</b>
+            <small>${note(e)}</small>
+          </div>`,
+        )}
+      </div>
+    </section>
+  `;
+}
