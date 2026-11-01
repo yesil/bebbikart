@@ -9,12 +9,17 @@ extends Node
 ##   assets.avatar_for(player_id)   # Texture2D (happy face, for the big-screen HUD) or null
 ## Signals: racer_ready(player_id) when a player's package is first seen (for a "new racer" moment),
 ## problem(text) when something fails (no fallbacks: main shows it on screen, and it is logged).
+##
+## A racer never changes in the middle of a run: a new package for a player whose kart is on the
+## track (is_racing) waits until the kart has left it. The designer's review rounds send up to 3
+## better versions of a ready racer in the background, each a new package with the same drawings.
 
 signal racer_ready(player_id: String)
 signal problem(text: String)
 
 var http_base := "http://localhost:8080"
 var game_key := ""
+var is_racing: Callable  # func(player_id) -> bool: their kart is on the track (set by main)
 
 var entries := {}        # playerId -> RosterEntry
 var _drawings := {}      # packageId -> Texture2D
@@ -23,6 +28,7 @@ var _avatar_urls := {}   # playerId -> avatar_happy URL downloaded or being down
 var _requested := {}     # packageId -> true (download started)
 var _rendered := {}      # packageId -> true (render queued or done)
 var _queue: Array = []   # playerIds waiting for a render
+var _held := {}          # playerId -> latest RosterEntry with a new package, held while they race
 var _rendering := false
 var _renderer: AvatarRenderer
 
@@ -39,33 +45,74 @@ func update(roster: Array) -> void:
 	for e in roster:
 		var pid := String(e.get("playerId", ""))
 		seen[pid] = true
-		var had: bool = entries.has(pid) and entries[pid].has("asset")
-		var old_pkg := String(entries[pid].get("asset", {}).get("packageId", "")) if entries.has(pid) else ""
-		entries[pid] = e
-		if not e.has("asset"):
+		var old_pkg := _package(entries.get(pid, {}))
+		if old_pkg != "" and _package(e) != old_pkg and _racing(pid):
+			# Mid-run: everything else now, the new package once the kart has left the track.
+			if not _held.has(pid):
+				print("RosterAssets: %s has a new racer package %s; it waits until the run ends" % [nickname(pid), _package(e)])
+			_held[pid] = e
+			var now: Dictionary = e.duplicate()
+			now["asset"] = entries[pid]["asset"]
+			_take(now)
 			continue
-		var asset: Dictionary = e["asset"]
-		var pkg := String(asset.get("packageId", ""))
-		if not _requested.has(pkg):
-			_requested[pkg] = true
-			_download_drawing(pkg, String(asset.get("drawings", {}).get("vehicle", "")))
-		var renders: Dictionary = asset.get("renders", {})
-		# Rendered by an earlier run of the game (or before a reroll): fetch the avatar.
-		var av_url := String(renders.get("avatar_happy", ""))
-		if av_url != "" and _avatar_urls.get(pid, "") != av_url and not _rendered.has(pkg):
-			_avatar_urls[pid] = av_url
-			_download_avatar(pid, av_url)
-		if not renders.has("hero") and not _rendered.has(pkg):
-			_rendered[pkg] = true
-			_queue.append(pid)
-			_pump()
-		if not had or old_pkg != pkg:
-			racer_ready.emit(pid)
+		_held.erase(pid)
+		_take(e)
 	for pid in entries.keys():
 		if not seen.has(pid):
 			entries.erase(pid)
 			_avatars.erase(pid)
 			_avatar_urls.erase(pid)
+			_held.erase(pid)
+
+
+func _process(_dt: float) -> void:
+	for pid in _held.keys():
+		if not _racing(pid):
+			var e: Dictionary = _held[pid]
+			_held.erase(pid)
+			print("RosterAssets: %s's run is over: switching to racer package %s" % [nickname(pid), _package(e)])
+			_take(e)
+
+
+## One player's roster entry: keeps it, fetches what its package needs.
+func _take(e: Dictionary) -> void:
+	var pid := String(e.get("playerId", ""))
+	var prev: Dictionary = entries.get(pid, {})
+	var had: bool = prev.has("asset")
+	var old_pkg := _package(prev)
+	entries[pid] = e
+	if not e.has("asset"):
+		return
+	var asset: Dictionary = e["asset"]
+	var pkg := String(asset.get("packageId", ""))
+	if not _requested.has(pkg):
+		_requested[pkg] = true
+		# A better version of a ready racer (the designer's review rounds) has the same
+		# drawings: its sticker is the one already here until this package's copy arrives,
+		# so a run starting right away still has it.
+		if had and old_pkg != pkg and prev.get("status") == "ready" and e.get("status") == "ready" and _drawings.has(old_pkg):
+			_drawings[pkg] = _drawings[old_pkg]
+		_download_drawing(pkg, String(asset.get("drawings", {}).get("vehicle", "")))
+	var renders: Dictionary = asset.get("renders", {})
+	# Rendered by an earlier run of the game (or before a reroll): fetch the avatar.
+	var av_url := String(renders.get("avatar_happy", ""))
+	if av_url != "" and _avatar_urls.get(pid, "") != av_url and not _rendered.has(pkg):
+		_avatar_urls[pid] = av_url
+		_download_avatar(pid, av_url)
+	if not renders.has("hero") and not _rendered.has(pkg):
+		_rendered[pkg] = true
+		_queue.append(pid)
+		_pump()
+	if not had or old_pkg != pkg:
+		racer_ready.emit(pid)
+
+
+func _package(e: Dictionary) -> String:
+	return String(e.get("asset", {}).get("packageId", ""))
+
+
+func _racing(player_id: String) -> bool:
+	return is_racing.is_valid() and bool(is_racing.call(player_id))
 
 
 func nickname(player_id: String) -> String:

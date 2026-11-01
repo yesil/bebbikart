@@ -162,6 +162,8 @@ func _ready() -> void:
 		assets.game_key = key
 		add_child(assets)
 		assets.racer_ready.connect(_on_racer_ready)
+		# A new look for a racer (the designer keeps improving it) waits until their kart is off the track.
+		assets.is_racing = func(pid: String) -> bool: return sim.racers.any(func(r): return r.player_id == pid)
 		assets.problem.connect(func(text: String): _result(I18n.f("log.error", [text])))
 		print("BebbiKart server mode: %s (protocol v%d)" % [url, Protocol.PROTOCOL_VERSION])
 	else:
