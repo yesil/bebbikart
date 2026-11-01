@@ -4,9 +4,10 @@ extends SubViewport
 ## driver's gestures (racer_kit/racer_gestures.gd) while the race camera chases from behind.
 ## A SubViewport on the main World3D, drawn only while it has a racer, and then on every other
 ## frame (`phase`): the two halves' cams take turns, so at most one draws a frame; the plate shows
-## get_texture(). The other half's racer is left out (set_hide_layers): in a duel both racers
-## can sit in the same spot, and only this racer's face belongs here. The fork signs and steering
-## rings (SteerMarks.SIGN_LAYER) are always left out: they draw through everything, over the face.
+## get_texture(). The other half's racer is left out (set_hide_layers): the two duel racers wait
+## in separate grid slots, but their karts drive through each other on their own lines, and only
+## this racer's face belongs here. The fork signs and steering rings (SteerMarks.SIGN_LAYER) are
+## always left out: they draw through everything, over the face.
 
 const SteerMarks = preload("res://world/steer_marks.gd")
 

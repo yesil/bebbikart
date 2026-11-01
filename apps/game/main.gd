@@ -1017,8 +1017,8 @@ func _shows_front(rid: String, v, r) -> bool:
 
 
 ## A racer's meshes go on its half's render layer only (DuelScreen.SIDE_LAYER), so the other
-## half's front shot and face cam can leave it out: in a duel the other half's racer can wait
-## right beside it on the grid, or drive through it.
+## half's front shot and face cam can leave it out: the two duel racers wait in separate grid
+## slots, side by side, and their karts drive through each other on their own lines.
 func _tag_side_layers(n: Node, side: String) -> void:
 	if n is VisualInstance3D:
 		(n as VisualInstance3D).layers = DuelScreen.SIDE_LAYER[side]

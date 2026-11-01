@@ -20,8 +20,8 @@ const SIDES := ["left", "right"]
 const IDLE_SHOT_S := 7.0     # an idle half moves to the next fork shot this often
 const DIVIDER_W := 6.0       # the line between the halves, in 2D units
 ## Each half's racer is drawn on its own render layer (main.gd tags its meshes), so the other
-## half's front shot and face cam can leave it out: in a duel both racers can wait in the same
-## grid spot.
+## half's front shot and face cam can leave it out: the two duel racers wait in separate grid
+## slots, but their karts drive through each other on their own lines.
 const SIDE_LAYER := {"left": 1 << 10, "right": 1 << 11}
 
 var split := false

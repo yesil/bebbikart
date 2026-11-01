@@ -237,7 +237,9 @@ through each other and the autopilot ignores the other kart.
   verdict. At GO the camera swings back behind in 0.9 s. Never while racing: the kid steering
   needs the road ahead (`world/camera_rig.gd` `front`, set per half by `main.gd`). Each half's
   racer is on its own render layer (`DuelScreen.SIDE_LAYER`), and the front shot leaves the
-  other half's racer out: two duelists can wait in the same grid spot.
+  other half's racer out: the two duelists wait in separate grid slots, but their karts drive
+  through each other on their own lines. It leaves the fork sign names out too
+  (`SteerMarks.SIGN_LAYER`: they draw through everything); the chase keeps them.
 - **HUD** (`ui/duel_hud.gd`): per half a live face cam of the racer (`ui/face_cam.gd`: a small
   camera in front of the character framing its face and hands, so its gestures show while it
   drives; the other half's racer is left out; drawn at half rate, the two halves' cams taking
