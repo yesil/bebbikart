@@ -19,6 +19,10 @@ const CameraRig = preload("res://world/camera_rig.gd")
 const SIDES := ["left", "right"]
 const IDLE_SHOT_S := 7.0     # an idle half moves to the next fork shot this often
 const DIVIDER_W := 6.0       # the line between the halves, in 2D units
+## Each half's racer is drawn on its own render layer (main.gd tags its meshes), so the other
+## half's front shot and face cam can leave it out: in a duel both racers can wait in the same
+## grid spot.
+const SIDE_LAYER := {"left": 1 << 10, "right": 1 << 11}
 
 var split := false
 var main_camera: CameraRig
@@ -54,6 +58,7 @@ func setup(p_main_camera: CameraRig, fork_shots: Array) -> void:
 		rig.fork_shots = fork_shots
 		rig.mode = CameraRig.Mode.FORKS
 		rig.fork_idx = 0 if side == "left" else 1
+		rig.front_hide = SIDE_LAYER["right" if side == "left" else "left"]
 		sv.add_child(rig)
 		rig.make_current()
 		var tex := TextureRect.new()
@@ -136,38 +141,43 @@ func _apply_render_scale() -> void:
 
 
 ## Per frame. on_side: side -> the racer view racing (or parked on the grid, or still cheering
-## after its lap) in that half, or null when the half is idle. Returns the cameras now showing
-## the race (for the weather volumes).
-func update(delta: float, on_side: Dictionary, targets: Array) -> Array:
+## after its lap) in that half, or null when the half is idle. fronts: side -> true while that
+## half's camera should show its racer from the front (on the grid, after the lap; see
+## CameraRig.SWING_S). Returns the cameras now showing the race (for the weather volumes).
+func update(delta: float, on_side: Dictionary, targets: Array, fronts := {}) -> Array:
 	_idle_t += delta
 	var next_shot := _idle_t >= IDLE_SHOT_S
 	if next_shot:
 		_idle_t = 0.0
 	if not split:
 		var v = on_side.get("left", null) if on_side.get("left", null) != null else on_side.get("right", null)
-		_aim(main_camera, v, next_shot)
+		_aim(main_camera, v, next_shot, bool(fronts.get("left", false)))
 		main_camera.targets = targets
 		return [main_camera]
 	var mid := Vector3.ZERO
 	for side in SIDES:
 		var rig: CameraRig = panes[side]["rig"]
-		_aim(rig, on_side.get(side, null), next_shot)
+		_aim(rig, on_side.get(side, null), next_shot, bool(fronts.get(side, false)))
 		rig.targets = targets
 		mid += rig.global_position * 0.5
 	# The main camera draws nothing now; it marks the middle for the terrain's detail and the audio.
 	main_camera.mode = CameraRig.Mode.FOLLOW
 	main_camera.target = null
+	main_camera.front = false
 	main_camera.global_position = mid
 	return [panes["left"]["rig"], panes["right"]["rig"]]
 
 
-## Chase a racer, or show the fork shots (the next one every IDLE_SHOT_S) while the half is idle.
-func _aim(rig: CameraRig, view, next_shot: bool) -> void:
+## Chase a racer (from the front while `front`), or show the fork shots (the next one every
+## IDLE_SHOT_S) while the half is idle.
+func _aim(rig: CameraRig, view, next_shot: bool, front: bool) -> void:
 	if view != null and is_instance_valid(view):
 		rig.mode = CameraRig.Mode.FOLLOW
 		rig.target = view
+		rig.front = front
 		return
 	rig.target = null
+	rig.front = false
 	if rig.mode != CameraRig.Mode.FORKS:
 		rig.mode = CameraRig.Mode.FORKS
 	elif next_shot and not _fork_shots.is_empty():
@@ -186,3 +196,14 @@ func rect_of(side: String) -> Rect2:
 		return Rect2(Vector2.ZERO, rect)
 	var w := (rect.x - DIVIDER_W) * 0.5
 	return Rect2(Vector2(0.0 if side == "left" else w + DIVIDER_W, 0.0), Vector2(w, rect.y))
+
+
+## One line for the mock summary, over the main camera and both halves' cameras.
+func summary() -> String:
+	var sum := Vector3.ZERO
+	for rig in [main_camera, panes["left"]["rig"], panes["right"]["rig"]]:
+		sum += rig.chase_stats()
+	var out := "chase cameras %.1f m from their racers on average" % (sum.x / sum.y) if sum.y > 0.0 else "no chase camera settled on a racer"
+	if main_camera.blockers != null or panes["left"]["rig"].blockers != null:
+		out += "; pulled in front of a house or roof for %.1f s" % sum.z
+	return out

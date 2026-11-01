@@ -230,8 +230,17 @@ through each other and the autopilot ignores the other kart.
   with its own `CameraRig` chasing its racer (an idle half shows the fork shots and who is next).
   The main viewport stops drawing 3D; its camera sits between the two halves' cameras, where the
   terrain's detail and the audio centre.
-- **HUD** (`ui/duel_hud.gd`): per half the name, lap time, best lap, record, BOOST! while a boost
-  arrow's boost lasts, its own start lights and the lap's verdict for
+- **Front shots:** while a racer waits on the grid for its lights, and while it cheers (or slumps)
+  after its lap, its camera swings round in front of it, a little to one side, and the
+  character looks into that camera; the racer sits low in the picture, under the lights and the
+  verdict. At GO the camera swings back behind in 0.9 s. Never while racing: the kid steering
+  needs the road ahead (`world/camera_rig.gd` `front`, set per half by `main.gd`). Each half's
+  racer is on its own render layer (`DuelScreen.SIDE_LAYER`), and the front shot leaves the
+  other half's racer out: two duelists can wait in the same grid spot.
+- **HUD** (`ui/duel_hud.gd`): per half a live face cam of the racer (`ui/face_cam.gd`: a small
+  camera in front of the character framing its face and hands, so its gestures show while it
+  drives; the other half's racer is left out), name, lap time, best lap, record, BOOST! while a
+  boost arrow's boost lasts, its own start lights and the lap's verdict for
   `duelResultMs`; the crown and the line top centre. `ui/race_hud.gd` adds problems and the
   podium on top.
 - **Performance (Mac M3):** each half has half the pixels, so the 3D pixel count is the same as

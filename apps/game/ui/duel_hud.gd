@@ -1,9 +1,10 @@
 extends CanvasLayer
 ## The halves' HUD (contracts §2i), over world/duel_screen.gd's halves (or the full screen):
 ##  - Each racing half, in its outer top corner (left half top left, right half top right, so the
-##    crown fits between them): the racer's name on its side's colour (left red, right blue), the
-##    lap time, their own best lap, the record to beat (once there is one), and under it BOOST!
-##    while a boost arrow the kid steered onto surges the kart (contracts §2g).
+##    crown fits between them): a live face cam of the racer (face and hands, ui/face_cam.gd, on
+##    the outer edge) beside its name on its side's colour (left red, right blue), the lap time,
+##    their own best lap, the record to beat (once there is one), and under it BOOST! while a
+##    boost arrow the kid steered onto surges the kart (contracts §2g).
 ##  - Each half's own start lights (a duel run never shares a countdown), then GO!.
 ##  - A finished lap's verdict in its half for duelResultMs: NEW CHAMPION!, or how far short of
 ##    whose record; a failed lap says oops and why.
@@ -13,6 +14,8 @@ extends CanvasLayer
 ## lap ended), update (per frame, with the sim and which run races in which half).
 
 const I18n = preload("res://ui/i18n.gd")
+const FaceCam = preload("res://ui/face_cam.gd")
+const DuelScreen = preload("res://world/duel_screen.gd")
 
 const SIDE_COLOR := {"left": Color("#ff4b4b"), "right": Color("#3b8cff")}
 const FONT_NAMES := ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue", "Arial"]
@@ -20,12 +23,14 @@ const GO_S := 1.2
 const LINE_NAMES := 4        # names shown in the line at the top
 const MARGIN := 18.0
 const PLATE_W := 300.0       # the plate's least width, so a right-aligned plate doesn't jiggle
+const FACE_PX := 200.0       # the racer's face cam on its plate
+const FACE_MAX_PX := 360     # the face cam's render size cap in pixels (big screens upscale it)
 
 var result_s := 5.0          # how long a verdict stays (config.duelResultMs)
 var bests := {}              # playerId -> best lap in ms this session (main.gd keeps it)
 var _font: SystemFont
 var _queue := {}
-var _halves := {}            # side -> {root, plate, name, time, record, boost, lights, verdict, verdict_big, verdict_small, idle}
+var _halves := {}            # side -> {root, plate, face, cam, name, time, record, boost, lights, verdict, verdict_big, verdict_small, idle}
 var _crown: PanelContainer
 var _crown_label: Label
 var _line_label: Label
@@ -65,9 +70,38 @@ func _build_half(side: String) -> Dictionary:
 	plate.position = Vector2(MARGIN, MARGIN)
 	plate.custom_minimum_size = Vector2(PLATE_W, 0)
 	root.add_child(plate)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	plate.add_child(row)
+	var cam := FaceCam.new()
+	add_child(cam)
+	var face := Panel.new()
+	var fsb := StyleBoxFlat.new()
+	fsb.bg_color = Color.BLACK  # opaque: the clip multiplies the picture by this alpha
+	fsb.set_corner_radius_all(14)
+	face.add_theme_stylebox_override("panel", fsb)
+	face.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+	face.custom_minimum_size = Vector2(FACE_PX, FACE_PX)
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.visible = false
+	var pic := TextureRect.new()
+	pic.texture = cam.get_texture()
+	pic.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	pic.stretch_mode = TextureRect.STRETCH_SCALE
+	pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.add_child(pic)
 	var pbox := VBoxContainer.new()
 	pbox.add_theme_constant_override("separation", 0)
-	plate.add_child(pbox)
+	pbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	pbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# The face on the plate's outer edge: left of the text in the left half, right of it in the right.
+	if side == "right":
+		row.add_child(pbox)
+		row.add_child(face)
+	else:
+		row.add_child(face)
+		row.add_child(pbox)
 	var name_l := _label("", 30, Color.WHITE)
 	pbox.add_child(name_l)
 	var time_l := _label("", 54, Color.WHITE)
@@ -100,7 +134,7 @@ func _build_half(side: String) -> Dictionary:
 	idle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	idle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(idle)
-	return {"root": root, "plate": plate, "name": name_l, "time": time_l, "best": best_l, "record": record_l,
+	return {"root": root, "plate": plate, "face": face, "cam": cam, "name": name_l, "time": time_l, "best": best_l, "record": record_l,
 		"boost": boost, "lights": lights, "verdict": verdict,
 		"verdict_big": big, "verdict_small": small, "idle": idle}
 
@@ -137,10 +171,17 @@ func result(side: String, big: String, small: String, good: bool) -> void:
 	_verdict_until[side] = result_s
 
 
+## The village's camera blockers, once built (houses the face cams keep out of).
+func set_blockers(b) -> void:
+	for side in _halves:
+		_halves[side]["cam"].blockers = b
+
+
 ## Per frame. rects: side -> Rect2 of its half (only "left" when the screen isn't split: the
 ## whole screen). runs: side -> the Racer in that half (racing or on the grid), or null.
-## nick_of: Callable(player_id) -> nickname.
-func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Callable) -> void:
+## nick_of: Callable(player_id) -> nickname. views: side -> the racer view in that half (main.gd's
+## on_side), for its face cam.
+func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Callable, views := {}) -> void:
 	var full := not rects.has("right")
 	for side in _halves:
 		var h: Dictionary = _halves[side]
@@ -149,6 +190,8 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		var shown: bool = rects.has(side)
 		root.visible = shown
 		if not shown:
+			h["face"].visible = false
+			h["cam"].follow(null)
 			continue
 		var rect: Rect2 = rects[side]
 		root.position = rect.position
@@ -177,11 +220,18 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 				# A wrapping label shrinks to one letter wide on reset_size(): give it its width.
 				h["idle"].custom_minimum_size = Vector2(rect.size.x * 0.8, 0)
 				_place_center(h["idle"], rect.size, 0.5)
+			h["face"].visible = false
+			h["cam"].follow(null)
 			continue
 		var col: Color = SIDE_COLOR[side if not full else String(_side_of(r.run_id, side))]
 		var plate: PanelContainer = h["plate"]
 		(plate.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = col.darkened(0.3)
 		h["name"].text = nick_of.call(r.player_id)
+		h["cam"].set_hide_layers(0 if full else DuelScreen.SIDE_LAYER["right" if side == "left" else "left"])
+		var px := int(minf(FACE_PX * float(get_viewport().get_window().size.y) / get_viewport().get_visible_rect().size.y, FACE_MAX_PX))
+		if h["cam"].size != Vector2i(px, px):
+			h["cam"].size = Vector2i(px, px)
+		h["face"].visible = h["cam"].follow(views.get(side, null))
 		var ms: int = r.lap_ms() if r.looping else r.elapsed_ms()
 		h["time"].text = "%.2f" % (ms / 1000.0) if r.state == "racing" else "0.00"
 		var best := int(bests.get(r.player_id, 0))

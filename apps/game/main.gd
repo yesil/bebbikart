@@ -70,6 +70,7 @@ const FORCED := {"calm": [0.0, 0.0], "rain": [1.0, 0.0], "wind": [0.0, 0.8], "st
 ## keep their shadows closer (in two cascades) and their vegetation a little shorter than the
 ## full-screen preset. Each half has half the pixels, so the screen's pixel count stays the same.
 const SPLIT_SHADOW_M := 80.0
+const FRONT_LOOK_S := 1.6     # a racer looks into its camera this long as the front shot starts
 const SPLIT_VEG := 0.8
 
 var args := {}
@@ -119,6 +120,7 @@ var duel_hud: DuelHud                # names, times, lights, verdicts per half; 
 var duel_sides := {}                 # runId -> "left" | "right" (run.start side), newest last
 var queue_state := {}                # last queue.updated
 var bests := {}                      # playerId -> best time (on a loop, best lap) in ms this session
+var _front_was := {}                 # side -> its camera showed the racer from the front last frame
 
 
 func _ready() -> void:
@@ -639,6 +641,7 @@ func _finish_village_blockers() -> void:
 		return
 	camera.blockers = b
 	duel_screen.set_blockers(b)
+	duel_hud.set_blockers(b)
 
 
 ## A shot of each village fork from just before its split, looking down both branches.
@@ -747,6 +750,7 @@ func _handle(msg: Dictionary) -> void:
 			duel_sides.erase(pl["runId"])
 			duel_sides[pl["runId"]] = side  # newest last: the run a half shows
 			duel_hud.set_side(pl["runId"], side)
+			_tag_side_layers(v, side)
 		Messages.RUN_STEER:
 			sim.steer(pl["runId"], pl.get("x"))
 		Messages.QUEUE_UPDATED:
@@ -941,6 +945,7 @@ func _set_split(on: bool) -> void:
 func _update_duel(delta: float) -> void:
 	var on_side := {}       # side -> racer view in that half
 	var runs := {}          # side -> its Racer (on the grid or racing)
+	var fronts := {}        # side -> show its racer from the front (on the grid, after its lap)
 	for rid in duel_sides.keys():
 		var v = _view_of(rid)
 		var r = sim.by_run.get(rid)
@@ -950,14 +955,25 @@ func _update_duel(delta: float) -> void:
 		var side: String = duel_sides[rid]
 		if v != null:
 			on_side[side] = v
+			fronts[side] = _shows_front(rid, v, r)
 		runs[side] = r
 	if not duel_screen.split:
 		# One person plays: the whole screen is theirs (the server races them on the left).
-		var only = on_side.get("left", on_side.get("right", null))
+		var only_side := "left" if on_side.get("left", null) != null else "right"
+		var only = on_side.get(only_side, null)
 		on_side = {"left": only} if only != null else {}
+		fronts = {"left": bool(fronts.get(only_side, false))}
 		var only_r = runs.get("left", null) if runs.get("left", null) != null else runs.get("right", null)
 		runs = {"left": only_r}
-	var cams: Array = duel_screen.update(delta, on_side, views.values())
+	var cams: Array = duel_screen.update(delta, on_side, views.values(), fronts)
+	# As its camera comes round to the front, the character looks into it (its half's camera:
+	# in a split the main camera is only the middle of the two).
+	for side in fronts:
+		if fronts[side] and on_side.has(side) and not _front_was.get(side, false):
+			var toy = on_side[side].get("toy")
+			if toy != null:
+				toy.look_at_node(duel_screen.camera_of(side), FRONT_LOOK_S)
+	_front_was = fronts
 	fx.followers = cams if duel_screen.split else []
 	# The music and engines follow the newest racer on the track.
 	follow_run = ""
@@ -967,7 +983,27 @@ func _update_duel(delta: float) -> void:
 	var rects := {"left": duel_screen.rect_of("left")}
 	if duel_screen.split:
 		rects["right"] = duel_screen.rect_of("right")
-	duel_hud.update(delta, sim, rects, runs, func(pid: String) -> String: return String(nicks.get(pid, "?")))
+	duel_hud.update(delta, sim, rects, runs, func(pid: String) -> String: return String(nicks.get(pid, "?")), on_side)
+
+
+## Whether a half's camera shows its racer from the front: while it waits on the grid for its
+## lights, and while it cheers or slumps after its lap (a kit racer's leave()). Never while it
+## races: the kid steering needs to see the road ahead.
+func _shows_front(rid: String, v, r) -> bool:
+	var leaving_as = v.get("leaving")  # kit views only; "" while racing
+	if leaving_as != null and String(leaving_as) != "":
+		return true
+	return r != null and (sim.on_grid(rid) or r.state == "queued")
+
+
+## A racer's meshes go on its half's render layer only (DuelScreen.SIDE_LAYER), so the other
+## half's front shot and face cam can leave it out: in a duel both racers can wait in the same
+## grid spot.
+func _tag_side_layers(n: Node, side: String) -> void:
+	if n is VisualInstance3D:
+		(n as VisualInstance3D).layers = DuelScreen.SIDE_LAYER[side]
+	for c in n.get_children():
+		_tag_side_layers(c, side)
 
 
 ## A lap ended: its half shows the verdict, judged against the crown as it stood (the
@@ -1128,8 +1164,7 @@ func _quit() -> void:
 	set_physics_process(false)
 	print("mock summary: %.1f s wall, %d sim ticks, finished %d, failed %d, sent %s" % [
 		run_time, sim.tick, net.finished, net.failed, JSON.stringify(net.sent_counts)])
-	if camera.blockers != null:
-		print("camera: pulled in front of a house or roof for %.1f s of %.1f s" % [camera.blocked_s, run_time])
+	print("camera: %s (%.1f s run)" % [duel_screen.summary(), run_time])
 	if args.has("screenshot") and not shot_taken:
 		shot_taken = true
 		await _screenshot(args["screenshot"])
