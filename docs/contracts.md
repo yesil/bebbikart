@@ -254,8 +254,10 @@ shared by both halves and never equalised.
   they happened; the coach's tip for them is `loss_obstacle` ("Steer round!").
 - The big screen shows a "!" over each group and a warning on the racer's plate ("Cow on the
   road!") while one is within 80 m ahead. The phone shows nothing extra.
-- The game turns them on (`--no-obstacles` turns them off); the sim's balance tools run without
-  them, so their baselines stay the same. `tools/obstacle_check.gd` checks them.
+- The game turns them on; the game manager can switch them off in the options menu on the big
+  screen ("Surprises on the road", kept in the game's own settings; `--no-obstacles` leaves them
+  out). The sim's balance tools run without them, so their baselines stay the same.
+  `tools/obstacle_check.gd` checks them.
 
 ## 3. Enums
 

@@ -182,7 +182,7 @@ Cows wander onto the road and graze there, sheep cross it in little flocks, chee
 | `world/obstacle_views.gd` | The animals (Poly Pizza cow and sheep, animated), cheese wheels, hay bales, the "!" over each group, the "MOO!" a hit pops up |
 | `tools/obstacle_check.gd` | Hands off, kid-steered and wild-thumbed karts with and without them: met and hit per lap, the time a hit and a careful pass cost, no new fails |
 
-`--no-obstacles` turns them off for a game run. The balance tools (sweep, village_laps, start_crowd_check) build their sims without them, so their baselines mean the same.
+The game manager switches them on or off in the options menu ("Surprises on the road", kept for the next start); `--no-obstacles` leaves them out of a game run. The balance tools (sweep, village_laps, start_crowd_check) build their sims without them, so their baselines mean the same.
 
 ```sh
 godot --headless --path . --script res://tools/obstacle_check.gd

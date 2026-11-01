@@ -1,5 +1,5 @@
 # In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, sound, language, track,
-# the session, the phone address with its QR code, and quit.
+# the village surprises, the session, the phone address with its QR code, and quit.
 # The game manager sets the game options here, on the big screen; phones only join and quit.
 # It does not pause the sim: in server mode phones keep racing while it is open.
 # In server mode picking a track starts a new session on it right away, and "New session" starts
@@ -20,6 +20,7 @@ signal new_session_pressed
 signal quit_pressed
 signal quality_chosen(id: String)
 signal language_chosen(id: String)
+signal surprises_toggled(on: bool)
 
 const MAC := "macOS"
 const COL_W := 440.0         # a column's width for the wrapping notes
@@ -35,6 +36,8 @@ var _tracks := {}            # TrackId -> Button
 var _qualities := {}         # preset id -> Button
 var _volumes := {}           # audio bus -> HSlider
 var _track_note: Label
+var _surprises: CheckButton  # village surprises on the road (sim/obstacles.gd)
+var _surprises_note: Label
 var _session_btn: Button     # New session
 var _session_note: Label
 var _resume: Button
@@ -174,6 +177,16 @@ func setup(current_track: String, server_mode: bool) -> void:
 	right.add_child(_track_note)
 	_set_track_note()
 
+	_surprises = CheckButton.new()
+	_surprises.text = I18n.t("menu.surprises")
+	_surprises.add_theme_font_size_override("font_size", 18)
+	_surprises.toggled.connect(func(on: bool): surprises_toggled.emit(on))
+	right.add_child(_surprises)
+	_surprises_note = _label(I18n.t("menu.surprises_note"), 15)
+	_surprises_note.modulate = Color(1, 1, 1, 0.75)
+	_wrap(_surprises_note)
+	right.add_child(_surprises_note)
+
 	right.add_child(_label(I18n.t("menu.session"), 20))
 	_session_btn = Button.new()
 	_session_btn.custom_minimum_size = Vector2(310, 44)
@@ -225,6 +238,13 @@ func set_session(status: String) -> void:
 ## Server mode: the server's HTTP base, where the menu asks for the phone address on opening.
 func set_join_server(http_base: String) -> void:
 	_join_base = http_base.trim_suffix("/")
+
+
+## The village surprises switch: on or off, and whether this track (and run) has them at all.
+func set_surprises(on: bool, available: bool) -> void:
+	_surprises.set_pressed_no_signal(on and available)
+	_surprises.disabled = not available
+	_surprises_note.text = I18n.t("menu.surprises_note" if available else "menu.surprises_none")
 
 
 func set_quality(id: String) -> void:

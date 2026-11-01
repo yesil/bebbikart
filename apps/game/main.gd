@@ -169,7 +169,8 @@ func _ready() -> void:
 		return
 	sim = Sim.new(course, config, seed_)
 	sim.solo = true  # every run has its own start lights in its half; karts pass through each other
-	# Village surprises: cows, sheep, cheese wheels and hay bales turn up on the road at random.
+	# Village surprises: cows, sheep, cheese wheels and hay bales turn up on the road at random
+	# (the game manager can switch them off in the options menu; --no-obstacles leaves them out).
 	if course.get("obstacle_spots") != null and not args.has("no-obstacles"):
 		sim.obstacles = Obstacles.new(course, seed_ * 13 + 5)
 		var bad: String = sim.obstacles.check()
@@ -177,6 +178,7 @@ func _ready() -> void:
 			push_error("village surprises: " + bad)
 			get_tree().quit(1)
 			return
+		sim.obstacles.enabled = bool(_saved_setting("game", "surprises", true))
 	if args.has("weather"):
 		var w: Array = FORCED.get(args["weather"], [0.0, 0.0])
 		sim.weather.force(w[0], w[1], 30.0)
@@ -323,11 +325,23 @@ func _make_menu() -> void:
 	menu.quit_pressed.connect(_quit)
 	menu.quality_chosen.connect(func(id: String): apply_quality(id); _save_setting("graphics", "quality", id))
 	menu.language_chosen.connect(_choose_language)
+	menu.surprises_toggled.connect(_toggle_surprises)
+	menu.set_surprises(sim.obstacles != null and sim.obstacles.enabled, sim.obstacles != null)
 	if quality != "":
 		menu.set_quality(quality)
 	if assets != null:
 		menu.set_session(net.session_status)
 		menu.set_join_server(net.http_base())  # the phone address and QR code (GET /api/join)
+
+
+## Options menu: the village surprises on or off (kept for the next start). Off, no new ones turn
+## up; the ones on the road leave in their own time.
+func _toggle_surprises(on: bool) -> void:
+	if sim.obstacles == null:
+		return
+	sim.obstacles.enabled = on
+	_save_setting("game", "surprises", on)
+	print("village surprises: %s" % ("on" if on else "off"))
 
 
 ## --kit: every sample RacerSpec in res://racer_kit/samples, validated. False (and quits with the
