@@ -516,9 +516,7 @@ func _cheer_together(a, b) -> void:
 ## signature gesture while there is time; lean in (and the ride crouches) for the last
 ## GRID_LEAN_S, with a nod on each second of the lights.
 func _grid(v, delta: float) -> void:
-	var sim = main.sim
-	var id: String = v.racer.run_id
-	var go_in := float(int(sim.go_tick.get(id, sim.tick)) - sim.tick) / Tuning.HZ
+	var go_in := _go_in(v)
 	var toy: ToyRacer = v.toy
 	var g: Gestures = toy.gestures
 	if v.grid_t < 0.0:
@@ -585,11 +583,13 @@ func _watch_lights(v, secs: float) -> void:
 
 
 ## A fist bump with the nearest grid neighbour (both waiting a moment, neither bumped yet) whose
-## fist it can reach; they look at each other first.
+## fist it can reach; they look at each other first. The neighbour needs the same time to green as
+## `v`: one closer to green is settling for the start and would drive off before the fists meet.
 func _fist_bump(v) -> void:
 	for k in main.views:
 		var o = main.views[k]
-		if o == v or o.get("toy") == null or not o.parked or o.grid_bumped or o.grid_t < 0.1:
+		if o == v or o.get("toy") == null or not o.parked or o.grid_bumped or o.grid_t < 0.1 \
+				or _go_in(o) <= GRID_CALM_S + 0.5:
 			continue
 		var d: Vector3 = o.global_position - v.global_position
 		var fwd: Vector3 = v.forward()
@@ -607,6 +607,12 @@ func _fist_bump(v) -> void:
 			p[0].toy.gestures.fist_bump(_meet(p[0], p[1], -0.05), _side_of(p[0], p[1]))
 		events.append({"type": "fist_bump", "views": [v, o]})
 		return
+
+
+## Seconds (sim) until a waiting racer's lights go green; 0 for a racer not on the grid.
+func _go_in(v) -> float:
+	var sim = main.sim
+	return float(int(sim.go_tick.get(v.racer.run_id, sim.tick)) - sim.tick) / Tuning.HZ
 
 
 ## Green: hands up and a whoop, the ride leaps off.
