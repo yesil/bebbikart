@@ -205,6 +205,16 @@ The coin's "bling" is made in `audio/audio_director.gd` (`_coin_sound`), no file
 godot --headless --path . --script res://tools/coin_check.gd
 ```
 
+### Village life
+
+`world/village_life.gd` makes the village busy without touching the race: a crowd of toy racers parked along the start line, the main street, the church hill, the mill, the dairy and the square, facing the oncoming karts, turning their heads to each kart and cheering, waving or clapping as it passes (the crowd's cheer plays for the kart the music follows); red, white and yellow bunting across the main street, the start line, the cobbles and the square, fluttering harder in the wind; pigeons on the roundabout's island that take off as a kart comes round, circle the fountain and settle again; two hot-air balloons drifting over the valley; and cow bells while the followed kart is out on the alp.
+
+The crowd is the session's own racers in server mode (each ready racer stands in up to three places, different groups first; a racer leaving the session leaves the crowd) and the kit's sample racers in mock mode. The places are found once the village plan is laid out (clear of houses, water and every road's corridor, on flat ground, 15 m apart). `--no-life` leaves it all out.
+
+```sh
+godot --path . --resolution 1280x720 --script res://tools/village_life_shots.gd -- --kit --out=/tmp/life
+```
+
 Look: the Kenney kit's colour map is recoloured to a Swiss palette at every bake (`village_kit.gd` `_recolour`; the roof modules get a copy with wooden eaves). Trees and flowers are the countryside's prepared plant meshes (`world/vegetation/meshes/`, from `tools/bake_world.gd`), so they sway with the wind. The village roads use their own calmer asphalt (`world/village/materials/road_asphalt.tres`, `VILLAGE_ROAD` in the bake): the shared texture's stones and red flecks stood out in the village sun. Animals are skinned models posed on their rest pose for the MultiMesh (`instanced_model.gd`).
 
 ## Balance snapshot

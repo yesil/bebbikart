@@ -36,9 +36,11 @@ const SFX := {
 	"splash": "sfx/splash.ogg",
 	"thunder": "ambience/thunder.ogg",
 	# Village surprises (sim/obstacles.gd): a kart hits a cow, a sheep or a cheese wheel; a cow
-	# bell when a cow turns up.
+	# bell when a cow turns up. Village life (world/village_life.gd): the roadside crowd's cheer,
+	# cow bells on the alp.
 	"moo": "racers/horn_moo.wav",
 	"boing": "racers/horn_boing.wav",
+	"crowd": "sfx/cheer.wav",
 	"cowbell": "racers/horn_bell.wav",
 }
 const AMBIENCE := {
@@ -50,10 +52,10 @@ const AMBIENCE := {
 # Per-sound level (dB) and minimum gap between plays (s).
 const LEVEL := {"start": -10.0, "lap": -8.0, "best_lap": -4.0, "finish": -2.0, "cheer": -6.0,
 	"failed": -6.0, "boost": -6.0, "bump": -8.0, "land": -8.0, "splash": -4.0, "thunder": -3.0,
-	"moo": -3.0, "boing": -5.0, "cowbell": -14.0, "coin": -9.0}
+	"moo": -3.0, "boing": -5.0, "cowbell": -15.0, "coin": -9.0, "crowd": -15.0}
 const GAP := {"start": 0.5, "lap": 0.3, "best_lap": 3.0, "finish": 3.0, "cheer": 3.0,
 	"failed": 2.0, "boost": 0.15, "bump": 0.4, "land": 0.3, "splash": 0.5, "thunder": 0.0,
-	"moo": 0.8, "boing": 0.3, "cowbell": 2.0, "coin": 0.05}
+	"moo": 0.8, "boing": 0.3, "cowbell": 0.8, "coin": 0.05, "crowd": 2.5}
 
 const RACERS_DIR := "racers/"   # engine_<name>.wav loops and horn_<name>.wav one-shots
 const HORN_DB := -4.0
@@ -68,6 +70,8 @@ const PADDOCK_DB := -4.5        # paddock music sits lower (about 60%)
 const DUCK_DB := -6.0           # music under a finish
 const DUCK_S := 2.0
 const VOICES := 12
+const ALP_SEGS := ["farm", "cobbles", "ridge", "alpbach"]   # village: where cow bells ring
+const COWBELL_EVERY := Vector2(2.0, 5.5)
 const ENGINES := 3
 const ENGINE_RANGE := 45.0      # metres from the camera where an engine fades out
 const DRY_CUTOFF := 20000.0
@@ -97,6 +101,7 @@ var _thunder_t := 20.0
 var _was_air := false
 var _was_water := false
 var _rng := RandomNumberGenerator.new()
+var _cowbell_at := 0.0
 var _horn_last := {}            # run_id -> time of its last horn
 var _no_sound := {}             # player_id -> true once its missing sound was logged
 var _music_bus := -1
@@ -252,6 +257,26 @@ func _process(delta: float) -> void:
 	_decide_music()
 	_update_engines()
 	_update_weather()
+	_update_alp()
+
+
+# ---------------------------------------------------------------- village life
+
+## The roadside crowd cheers the kart the music follows (world/village_life.gd).
+func crowd_cheer() -> void:
+	if not _music.is_empty():
+		_play("crowd", _rng.randf_range(0.95, 1.1))
+
+
+## Cow bells now and then while the followed kart is out on the alp (village).
+func _update_alp() -> void:
+	if track != "village" or _now < _cowbell_at:
+		return
+	var r: Racer = sim.by_run.get(follow_run)
+	if r == null or not r.seg_id in ALP_SEGS:
+		return
+	_play("cowbell", _rng.randf_range(0.85, 1.2))
+	_cowbell_at = _now + _rng.randf_range(COWBELL_EVERY.x, COWBELL_EVERY.y)
 
 
 # ---------------------------------------------------------------- music
