@@ -99,7 +99,10 @@ func _take(e: Dictionary) -> void:
 	if av_url != "" and _avatar_urls.get(pid, "") != av_url and not _rendered.has(pkg):
 		_avatar_urls[pid] = av_url
 		_download_avatar(pid, av_url)
-	if not renders.has("hero") and not _rendered.has(pkg):
+	# Renders carried over from an earlier version (review rounds) point at the old package:
+	# this package still needs its own.
+	var own_hero := String(renders.get("hero", "")).contains("/assets/%s/" % pkg)
+	if not own_hero and not _rendered.has(pkg):
 		_rendered[pkg] = true
 		_queue.append(pid)
 		_pump()

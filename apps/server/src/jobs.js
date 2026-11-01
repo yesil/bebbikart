@@ -89,6 +89,10 @@ export function createJobs({ game, settings, log = console.log, logError = conso
         return;
       }
       const manifest = await writePackage(job, { spec });
+      // Keep showing the previous version's pictures until the game uploads this one's, so the
+      // phone doesn't flicker back to the drawing. The game re-renders because these URLs point at
+      // the old package.
+      manifest.renders = { ...(game.manifests.get(job.playerId)?.renders ?? {}) };
       game.improveManifest(job.playerId, manifest);
       log(`[job] ${job.id} improved (round ${round}): ${JSON.stringify(critique?.scores ?? {})}`);
     };
