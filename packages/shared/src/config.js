@@ -8,7 +8,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   maxConcurrentRuns: 20,
   starsTotal: 20,
   starsMaxPerAbility: 10,
-  runTimeCapMs: 90_000,
+  runTimeCapMs: 100_000,
   stuckTimeoutMs: 3_000,
   startCountdownMs: 3_000, // race start: Go opens a countdown; everyone who presses Go in it starts together (0 = instant)
   track: "village", // TrackId; changes only while no session is running

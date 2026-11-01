@@ -145,7 +145,7 @@ Current results (2026-10-31, M4 Max, 1920×1080, 20 racers, vsync off): about 10
 
 ## Village circuit (second track)
 
-A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, up the main street to the church hill (fork: ski-jump kicker or round the churchyard), down to the brook (ford through the duck pond or the covered wooden bridge), past the mill, along the south edge (open causeway over the windy meadow or the sheltered Laubengasse), then round the fountain to the line. Same sections and forks as the countryside, so builds, splits and coach tips carry over. A run on the big screen is one lap (contracts §2i) and the best lap ranks; the sim and the tools can race more laps (`lapsPerRun`). It is the default track (`config.track`), so a fresh `bun run play` starts on it; the game manager switches track in the options menu, and in mock mode `--track=countryside` races the countryside instead.
+A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, up the main street to the church hill (fork: ski-jump kicker or round the churchyard), down to the brook (ford through the duck pond or the covered wooden bridge), past the mill, out onto the alp (muddy farm track, cobbles by the dairy, the alp pass: a long climb with a kink to a wide hairpin and back down, a mountain stream), along the south edge (open causeway over the windy meadow or the sheltered Laubengasse), then round the fountain to the line. A lap is about 890 to 930 m (about a minute); the alp pass alone is 188 m. Same sections and forks as the countryside, so builds, splits and coach tips carry over. A run on the big screen is one lap (contracts §2i) and the best lap ranks; the sim and the tools can race more laps (`lapsPerRun`). It is the default track (`config.track`), so a fresh `bun run play` starts on it; the game manager switches track in the options menu, and in mock mode `--track=countryside` races the countryside instead.
 
 | File | What |
 |---|---|
@@ -171,6 +171,8 @@ godot --headless --path . --script res://tools/village_world_check.gd
 ```
 
 `world/village/village_decor.tscn` (optional) is loaded on top for hand-placed extras; the bake never touches it.
+
+The alp pass (`ridge`) is the longer road: `VillageCourse.PASS_*` add a straight and a kink to the way up to the hairpin and the same to the way down. The two kinks move the road sideways and back, so the pass ends exactly where a bare hairpin would and nothing else on the loop moves; the plan, terrain and props follow it at the next bake. Lengthening it means: edit `PASS_*`, then `village_map.gd` (its `LAP_RANGE` bounds the lap), `village_laps.gd`, `bun run maps:export`, `bake_village.gd`, `village_world_check.gd` and the windowed `collision_probe.gd -- --track=village`. With the longer lap the per-lap time cap is 100 s (`runTimeCapMs`): slow builds in a storm ran past 90 s.
 
 Look: the Kenney kit's colour map is recoloured to a Swiss palette at every bake (`village_kit.gd` `_recolour`; the roof modules get a copy with wooden eaves). Trees and flowers are the countryside's prepared plant meshes (`world/vegetation/meshes/`, from `tools/bake_world.gd`), so they sway with the wind. The village roads use their own calmer asphalt (`world/village/materials/road_asphalt.tres`, `VILLAGE_ROAD` in the bake): the shared texture's stones and red flecks stood out in the village sun. Animals are skinned models posed on their rest pose for the MultiMesh (`instanced_model.gd`).
 

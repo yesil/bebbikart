@@ -37,6 +37,13 @@ const ROUNDABOUT_TURN := 120.0
 const MISS_EXIT_CHANCE := 0.07
 const MISS_BEFORE_EXIT := 3.0
 const RIDGE_R := 24.0              # hairpin round the alp top      # metres before the exit where the racer commits or not
+## The alp pass (the ridge stretch): a long climb with a kink up to the hairpin and the same kink on
+## the way down. Each kink moves the road sideways and back, and the two cancel, so the pass ends
+## where a bare hairpin would: nothing else on the loop moves.
+const PASS_EXTRA := 25.0           # straight added to the way up and to the way down
+const PASS_KINK_R := 30.0
+const PASS_KINK_DEG := 22.0
+const PASS_TOP := 8.5              # road height at the hairpin
 
 var segments := {}
 var ordered_ids: Array[String] = []
@@ -141,10 +148,15 @@ func _build(hill: float, north: float) -> void:
 	# Cobbled lane (bounce): straight on over cobbles and humps, still climbing.
 	p = _draw_ops(_end("farm"), _heading("farm"), [["S", 28.0]], [[0.0, 2.2], [28.0, 4.0]])
 	_add("cobbles", "crossing", "", "", p, 3.5, {"exposure": 0.3, "bumps": [5.0, 11.0, 17.0, 23.0], "stretch": "cobbles"})
-	# Ridge (stability): a wide hairpin round the alp top and back down, open to the wind.
-	var ridge_l := deg_to_rad(180.0) * RIDGE_R + 16.0
-	p = _draw_ops(_end("cobbles"), _heading("cobbles"), [["A", RIDGE_R, 180.0], ["S", 16.0]],
-		[[0.0, 4.0], [ridge_l * 0.45, 6.5], [ridge_l, 3.4]])
+	# Ridge (stability): up the alp pass, a wide hairpin round the top and back down, open to the
+	# wind (PASS_*: the kinks up and down cancel, so it ends where a bare hairpin would).
+	var kink := [["A", PASS_KINK_R, PASS_KINK_DEG], ["A", PASS_KINK_R, -PASS_KINK_DEG]]
+	var kink_l := deg_to_rad(PASS_KINK_DEG * 2.0) * PASS_KINK_R
+	var climb := PASS_EXTRA + kink_l
+	var hairpin := deg_to_rad(180.0) * RIDGE_R
+	var ridge_l := climb + hairpin + kink_l + PASS_EXTRA + 16.0
+	p = _draw_ops(_end("cobbles"), _heading("cobbles"), [["S", PASS_EXTRA]] + kink + [["A", RIDGE_R, 180.0]] + kink + [["S", PASS_EXTRA + 16.0]],
+		[[0.0, 4.0], [climb + hairpin * 0.5, PASS_TOP], [ridge_l, 3.4]])
 	# Mandatory for everyone, so open but not as wild as the optional causeway.
 	_add("ridge", "crossing", "", "", p, 3.8, {"exposure": 0.7, "stretch": "ridge"})
 	# Alpbach (water): down through a stream, then left back into the village.

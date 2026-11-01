@@ -337,7 +337,7 @@ const DEFAULT_CONFIG = {
 	"maxConcurrentRuns": 20,
 	"starsTotal": 20,
 	"starsMaxPerAbility": 10,
-	"runTimeCapMs": 90000,
+	"runTimeCapMs": 100000,
 	"stuckTimeoutMs": 3000,
 	"startCountdownMs": 3000,
 	"track": "village",
