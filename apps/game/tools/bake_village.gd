@@ -249,9 +249,9 @@ const ROAD_PIECES := [
 	["cross_exposed", "cross_exposed", "causeway_in", "causeway_out", "road_planks", 0.35],
 	["cross_exposed_out", "cross_exposed", "causeway_out", "jout", "road_planks", -1.0],
 	["cross_sheltered", "cross_sheltered", "jin", "jout", "road_ford", -1.0],
-	# The roundabout's circulating stretch is the ring itself (_roundabout), one surface.
-	["bends_in", "bends", -1, "ring_in", "road_asphalt", -1.0],
-	["bends_out", "bends", "ring_out", -1, "road_asphalt", -1.0],
+	# One road straight through the roundabout: no join where the race enters or leaves the
+	# ring. The ring (_roundabout) draws only the part of the circle the race doesn't drive.
+	["bends", "bends", -1, -1, "road_asphalt", -1.0],
 ]
 
 
@@ -394,10 +394,6 @@ func _piece_s(seg: Dictionary, key: String) -> float:
 			return 18.0
 		"causeway_out":
 			return (seg["route"] as Route).length - 18.0
-		"ring_in":
-			return float(course.roundabout["s0"]) + 1.0
-		"ring_out":
-			return float(course.roundabout["s1"]) - 1.0
 	_fail("unknown road piece split '%s'" % key)
 	return 0.0
 
@@ -422,8 +418,11 @@ func _bake_roads() -> void:
 			var s := s0 + i * step
 			var dir := (r.pos_at(minf(s + 0.5, r.length)) - r.pos_at(maxf(s - 0.5, 0.0))).normalized()
 			var sh := 0.45
-			# Blend into the roundabout ring without a shoulder step.
-			if piece[1] == "bends" and (absf(s - float(course.roundabout["s0"])) < 8.0 or absf(s - float(course.roundabout["s1"])) < 8.0):
+			# A branch leaving or joining a fork's shared stretch: no shoulder lip on the join.
+			if (str(piece[2]) == "jin" and s < s0 + 6.0) or (str(piece[3]) == "jout" and s > s1 - 6.0):
+				sh = 0.0
+			# On the roundabout the road lies in the ring: no shoulder or gutter dropping into it.
+			if piece[1] == "bends" and s > float(course.roundabout["s0"]) - 12.0 and s < float(course.roundabout["s1"]) + 12.0:
 				sh = 0.0
 			pts.append([r.pos_at(s), dir, 2.0 * road_hw(seg, s), sh])
 		_container(mgr, piece[0], piece[4], piece[5], pts)
@@ -458,21 +457,29 @@ func _roundabout() -> void:
 		st.set_normal(Vector3.UP)
 		st.set_uv(Vector2((1.0 + (r - inner) / (outer - inner)) / 8.0, 0.0))
 		st.add_vertex(Vector3(c.x + d.x * r, y, c.y + d.y * r))
-	# The raced road where it enters and leaves the ring: ring cells under it are left out, so
-	# the two never lie on top of each other.
+	# Ring cells the raced road already covers are left out, so the two never lie on top of
+	# each other: a cell goes when its centre is within the road's width, measured square to
+	# the road (not past its ends).
 	var br: Route = course.segments["bends"]["route"]
 	var road: Array = []
 	var rs := 0.0
 	while rs <= br.length:
-		if rs < float(course.roundabout["s0"]) + 1.0 or rs > float(course.roundabout["s1"]) - 1.0:
-			var q := br.pos_at(rs)
-			road.append([Vector2(q.x, q.z), road_hw(course.segments["bends"], rs)])
-		rs += 0.5
+		var q := br.pos_at(rs)
+		var t := br.tangent_at(rs)
+		road.append([Vector2(q.x, q.z), Vector2(t.x, t.z), road_hw(course.segments["bends"], rs)])
+		rs += 0.25
 	var under_road := func(q: Vector2) -> bool:
+		var best := INF
+		var hit := false
 		for e in road:
-			if q.distance_to(e[0]) < float(e[1]):
-				return true
-		return false
+			var dq: Vector2 = q - e[0]
+			var dd := dq.length_squared()
+			if dd < best:
+				best = dd
+				var along: float = absf(dq.dot(e[1]))
+				var across: float = absf(dq.dot(Vector2(-e[1].y, e[1].x)))
+				hit = along < 0.2 and across < float(e[2])
+		return hit
 	var n := 480
 	var rings := 12
 	for i in n:

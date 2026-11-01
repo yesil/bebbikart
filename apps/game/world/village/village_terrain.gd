@@ -22,7 +22,7 @@ const SNOW_LINE := 95.0
 const ROCK_LINE := 40.0
 
 const MAP_RECT := Rect2(-512, -512, 1024, 1024)  # 4 x 4 Terrain3D regions of 256 m
-const UNDER_ROAD := 0.06
+const UNDER_ROAD := 0.2
 const SHOULDER := 0.8
 const FALLOFF := 7.0
 const CORRIDOR_REACH := 24.0

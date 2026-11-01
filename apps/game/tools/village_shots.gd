@@ -42,6 +42,15 @@ func _run() -> void:
 	while t < at:
 		await process_frame
 		t += 1.0 / 60.0
+	# One full-screen view without the race HUD, whatever the duel screen is doing.
+	# Freeze the race (no queue update can split the screen again), then go full screen.
+	main.set_physics_process(false)
+	if main.has_method("_set_split"):
+		main.call("_set_split", false)
+	var hud = main.get("duel_hud")
+	if hud != null:
+		hud.visible = false
+	main.set_process(false)
 	var cam: Camera3D = main.get("camera")
 	if cam == null:
 		push_error("village_shots: the game did not start (see errors above)")
@@ -66,6 +75,34 @@ func _run() -> void:
 		img.save_png(path)
 		print("shot ", path)
 	quit(0)
+
+
+## Race-camera views (low, behind, looking along the road) of every place where two road pieces
+## meet: fork splits and merges, bridge and causeway decks, the roundabout entry and exit, fords.
+static func joins(c: VillageCourse, plan: VillagePlan) -> Array:
+	var spots := []   # [name, segment, s]
+	for f in [["ramp", "ramp_jump", "ramp_around"], ["pond", "pond_water", "pond_bridge"], ["cross", "cross_exposed", "cross_sheltered"]]:
+		var rd: Route = c.segments[f[1]]["route"]
+		var rt: Route = c.segments[f[2]]["route"]
+		spots.append(["join_%s_split" % f[0], f[1], 14.0])
+		spots.append(["join_%s_detour_in" % f[0], f[2], 18.0])
+		spots.append(["join_%s_detour_out" % f[0], f[2], rt.length - 18.0])
+		spots.append(["join_%s_merge" % f[0], f[1], rd.length - 14.0])
+	spots.append(["join_bridge_on", "pond_bridge", plan.bridge_s - VillagePlan.BRIDGE_HALF_LENGTH])
+	spots.append(["join_bridge_off", "pond_bridge", plan.bridge_s + VillagePlan.BRIDGE_HALF_LENGTH])
+	spots.append(["join_causeway_on", "cross_exposed", 18.0])
+	spots.append(["join_causeway_off", "cross_exposed", (c.segments["cross_exposed"]["route"] as Route).length - 18.0])
+	spots.append(["join_ring_in", "bends", float(c.roundabout["s0"])])
+	spots.append(["join_ring_out", "bends", float(c.roundabout["s1"])])
+	var aw: Array = c.segments["alpbach"]["water"][0]
+	spots.append(["join_alpbach_ford", "alpbach", float(aw[0])])
+	var out := []
+	for sp in spots:
+		var r: Route = c.segments[sp[1]]["route"]
+		var s: float = sp[2]
+		var back := r.pos_at(maxf(0.0, s - 9.0))
+		out.append([sp[0], back + Vector3.UP * 2.6, r.pos_at(minf(r.length, s + 8.0)) + Vector3.UP * 0.4, 70.0])
+	return out
 
 
 ## [name, camera position, look-at point, fov?]
@@ -113,6 +150,7 @@ static func viewpoints(c: VillageCourse, plan: VillagePlan) -> Array:
 		["chocolate", r.call("hills2").pos_at(r.call("hills2").length * 0.3) + up * 3.0 + r.call("hills2").normal_at(0.0) * -4.0, r.call("hills2").pos_at(r.call("hills2").length * 0.45) + r.call("hills2").normal_at(r.call("hills2").length * 0.45) * 12.0 + up * 3.0],
 		["shops", s0.pos_at(16.0) + up * 3.0 + s0.normal_at(16.0) * 0.5, s0.pos_at(0.0) + up * 1.5],
 		["overview", centre + Vector3(-60, 70, -110), centre, 55.0],
+	] + joins(c, plan) + [
 		["detour_overview", r.call("ridge").pos_at(0.0) + Vector3(-40, 80, -90), r.call("cobbles").pos_at(10.0), 55.0],
 		["mountains", centre + Vector3(0, 30, 60), centre + Vector3(0, 20, -300), 60.0],
 	]
