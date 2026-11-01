@@ -498,10 +498,12 @@ func props(course, plan, shape) -> Array:
 				s += 2.0
 				continue
 			for side: float in [-1.0, 1.0]:
-				var q: Vector3 = r.world_at(s, side * (hw + 0.9))
+				# The fence's rails stand on its model's +x edge (0.92 m out at this scale): turn
+				# it so that edge faces away from the road on both sides, rails at hw + 1.2 m.
+				var q: Vector3 = r.world_at(s, side * (hw + 0.35))
 				var p := Vector2(q.x, q.z)
 				if _free(plan, p, 0.3):
-					var yaw: float = r.heading_at(s)
+					var yaw: float = r.heading_at(s) + (PI if side > 0.0 else 0.0)
 					out.append(["fence", Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3(2.0, 2.4, 2.0)), Vector3(p.x, ground.call(p), p.y))])
 			s += 2.0
 	# Flower boxes: flower clumps under the front windows of every chalet and the inn.
