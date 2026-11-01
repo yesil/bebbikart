@@ -24,7 +24,7 @@ This starts three things:
 | Phone site (Vite, hot reload) | `http://<mac-ip>:5173` |
 | Godot game, connected with `--server` | a window on the Mac |
 
-The server prints the exact phone URLs at start-up (it detects the Mac's Wi-Fi IP; set `PUBLIC_URL` to override).
+The server prints the exact phone URLs at start-up (it detects the Mac's Wi-Fi IP; set `PUBLIC_URL` to override). The big screen shows the same address with a QR code in its options menu (Esc), for people to scan with the phone camera; it says in red when it can't (mock mode, server unreachable, no network, phone site not built).
 A session starts automatically so you can race straight away. A session lasts `sessionMinutes` (30); when it runs out the next one starts right away with a fresh leaderboard, and a server that boots on an ended session starts a new one. With `BK_AUTOSTART=0` the session stays ended until the game manager or the admin API starts the next one, and phones show "This race is over".
 
 On the phone (same Wi-Fi as the Mac), open `http://<mac-ip>:5173`:

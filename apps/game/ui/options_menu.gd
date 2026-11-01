@@ -1,10 +1,13 @@
 # In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, sound, language, track,
-# the session and quit.
+# the session, the phone address with its QR code, and quit.
 # The game manager sets the game options here, on the big screen; phones only join and quit.
 # It does not pause the sim: in server mode phones keep racing while it is open.
 # In server mode picking a track starts a new session on it right away, and "New session" starts
 # over on the same track: the karts on the track stop, the leaderboard starts empty, the racers
 # stay. Neither asks a question.
+# The phone address comes from the server (GET /api/join, asked each time the menu opens): the
+# address it prints at start-up, http://<the Mac's Wi-Fi IP>:8080. Without it (mock mode, server
+# unreachable, an old server) the menu says why in red instead of showing a code.
 # Every string comes from ui/i18n.gd; main.gd rebuilds the menu when the language changes.
 extends CanvasLayer
 
@@ -20,6 +23,11 @@ signal language_chosen(id: String)
 
 const MAC := "macOS"
 const COL_W := 440.0         # a column's width for the wrapping notes
+const JOIN_W := 330.0        # the join column's notes
+const QR_PX := 300.0         # the QR code's size on a 1080p screen, quiet zone included
+const QUIET := 4             # light modules around the code
+const RETRY_S := 3.0         # while open, ask an unreachable server again this often
+const RED := Color(1.0, 0.45, 0.4)
 
 var _panel: PanelContainer
 var _fullscreen: CheckButton
@@ -33,6 +41,13 @@ var _resume: Button
 var _current_track := ""
 var _server := false
 var _session := "?"          # server session status (server mode)
+var _join_base := ""         # server HTTP base (server mode), e.g. http://localhost:8080
+var _join_http: HTTPRequest
+var _join_busy := false
+var _join_retry := 0.0       # > 0: ask the server again when it runs out
+var _join_qr: TextureRect
+var _join_url: Label
+var _join_note: Label
 
 
 func setup(current_track: String, server_mode: bool) -> void:
@@ -77,6 +92,9 @@ func setup(current_track: String, server_mode: bool) -> void:
 	var right := VBoxContainer.new()
 	right.add_theme_constant_override("separation", 14)
 	cols.add_child(right)
+	var join := VBoxContainer.new()
+	join.add_theme_constant_override("separation", 14)
+	cols.add_child(join)
 
 	left.add_child(_label(I18n.t("menu.graphics"), 20))
 	var qrow := HBoxContainer.new()
@@ -168,6 +186,27 @@ func setup(current_track: String, server_mode: bool) -> void:
 	right.add_child(_session_note)
 	_set_session_row()
 
+	join.add_child(_label(I18n.t("menu.join"), 20))
+	_join_qr = TextureRect.new()
+	_join_qr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_join_qr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_join_qr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_join_qr.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_join_qr.visible = false
+	join.add_child(_join_qr)
+	_join_url = _label("", 26)
+	_join_url.visible = false
+	join.add_child(_join_url)
+	_join_note = _label("", 15)
+	_wrap(_join_note, JOIN_W)
+	join.add_child(_join_note)
+	_join_http = HTTPRequest.new()
+	_join_http.timeout = 4.0
+	_join_http.request_completed.connect(_on_join)
+	add_child(_join_http)
+	if not _server:
+		_join_problem(I18n.t("menu.join_mock"))
+
 	box.add_child(HSeparator.new())
 	_resume = _button(I18n.t("menu.resume") + "    Esc", func(): close())
 	box.add_child(_resume)
@@ -183,6 +222,11 @@ func set_session(status: String) -> void:
 		_set_track_note()
 
 
+## Server mode: the server's HTTP base, where the menu asks for the phone address on opening.
+func set_join_server(http_base: String) -> void:
+	_join_base = http_base.trim_suffix("/")
+
+
 func set_quality(id: String) -> void:
 	_qualities[id].set_pressed_no_signal(true)
 
@@ -196,11 +240,21 @@ func open() -> void:
 	for bus in _volumes:
 		_volumes[bus].set_value_no_signal(AudioSettings.get_volume(bus))
 	visible = true
+	_fetch_join()
 	_resume.grab_focus()
 
 
 func close() -> void:
 	visible = false
+	_join_retry = 0.0
+
+
+func _process(dt: float) -> void:
+	if not visible or _join_retry <= 0.0:
+		return
+	_join_retry -= dt
+	if _join_retry <= 0.0:
+		_fetch_join()
 
 
 ## The window mode changed outside the menu (key shortcut or the green title-bar button).
@@ -211,7 +265,7 @@ func sync_fullscreen() -> void:
 ## A track switch was refused or failed: show why, in red, until the menu is reopened.
 func show_error(text: String) -> void:
 	_track_note.text = text
-	_track_note.modulate = Color(1.0, 0.45, 0.4)
+	_track_note.modulate = RED
 	for k in _tracks:
 		_tracks[k].disabled = k == _current_track
 
@@ -251,7 +305,127 @@ func _set_session_row() -> void:
 func show_session_error(text: String) -> void:
 	_set_session_row()
 	_session_note.text = text
-	_session_note.modulate = Color(1.0, 0.45, 0.4)
+	_session_note.modulate = RED
+
+
+## Asks the server for the phone address (GET /api/join). The last code stays up meanwhile.
+func _fetch_join() -> void:
+	_join_retry = 0.0
+	if not _server:
+		return
+	if _join_base == "":
+		push_error("options menu: server mode without a server address for the phone address")
+		_join_problem(I18n.f("error.join_bad", ["?", "no server address"]))
+		return
+	if _join_busy:
+		return
+	if not _join_qr.visible:
+		_join_url.visible = false
+		_join_note.text = I18n.t("menu.join_loading")
+		_join_note.modulate = Color(1, 1, 1, 0.75)
+	var err := _join_http.request(_join_base + "/api/join")
+	if err != OK:
+		_join_unreachable(error_string(err))
+		return
+	_join_busy = true
+
+
+func _on_join(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	_join_busy = false
+	if result != HTTPRequest.RESULT_SUCCESS:
+		_join_unreachable(_result_name(result))
+		return
+	if code != 200:
+		push_error("options menu: GET %s/api/join answered %d" % [_join_base, code])
+		_join_problem(I18n.f("error.join_bad", [_join_base, "HTTP %d" % code]))
+		return
+	var j = JSON.parse_string(body.get_string_from_utf8())
+	var why := ""
+	if not (j is Dictionary):
+		why = "not JSON"
+	elif not (j.get("url") is String) or String(j.url) == "":
+		why = "no url"
+	elif not (j.get("qr") is Array) or (j.qr as Array).is_empty():
+		why = "no QR code"
+	if why == "":
+		why = show_join(String(j.url), j.qr, bool(j.get("phoneSite", true)))
+	if why != "":
+		push_error("options menu: GET %s/api/join: %s" % [_join_base, why])
+		_join_problem(I18n.f("error.join_bad", [_join_base, why]))
+
+
+## The phone address, its QR code (rows of "0"/"1", 1 dark) and whether the phone site is
+## built. Returns why it can't be shown ("" when shown).
+func show_join(url: String, rows: Array, phone_site: bool) -> String:
+	var tex := qr_texture(rows)
+	if tex == null:
+		return "broken QR code"
+	_join_qr.texture = tex
+	# Whole screen pixels per module on a 1080p screen keep the modules even.
+	var side := tex.get_width() * floorf(QR_PX / tex.get_width())
+	_join_qr.custom_minimum_size = Vector2(side, side)
+	_join_url.text = url
+	_join_url.visible = true
+	var host := url.get_slice("//", 1).get_slice("/", 0).rsplit(":", true, 1)[0]
+	if host in ["localhost", "[::1]"] or host.begins_with("127."):
+		# Phones would open their own localhost: no code to scan.
+		_join_qr.visible = false
+		_join_note.text = I18n.t("menu.join_local")
+		_join_note.modulate = RED
+	else:
+		_join_qr.visible = true
+		_join_note.text = I18n.t("menu.join_note") if phone_site else I18n.t("menu.join_no_site")
+		_join_note.modulate = Color(1, 1, 1, 0.75) if phone_site else RED
+	return ""
+
+
+## A QR code as a texture, a white quiet zone around it; null if the rows aren't a square of 0/1.
+static func qr_texture(rows: Array) -> ImageTexture:
+	var n := rows.size()
+	if n < 21:
+		return null
+	var img := Image.create(n + 2 * QUIET, n + 2 * QUIET, false, Image.FORMAT_L8)
+	img.fill(Color.WHITE)
+	for y in n:
+		var r := String(rows[y])
+		if r.length() != n:
+			return null
+		for x in n:
+			if r[x] == "1":
+				img.set_pixel(x + QUIET, y + QUIET, Color.BLACK)
+			elif r[x] != "0":
+				return null
+	return ImageTexture.create_from_image(img)
+
+
+## The server can't be reached: say so in red and ask again while the menu is open.
+func _join_unreachable(why: String) -> void:
+	push_warning("options menu: can't reach %s for the phone address (%s)" % [_join_base, why])
+	_join_problem(I18n.f("error.join_unreachable", [_join_base, why]))
+	_join_retry = RETRY_S
+
+
+## No phone address: no code and no address (an old one could be wrong), the reason in red.
+func _join_problem(text: String) -> void:
+	_join_qr.visible = false
+	_join_url.visible = false
+	_join_note.text = text
+	_join_note.modulate = RED
+
+
+static func _result_name(result: int) -> String:
+	match result:
+		HTTPRequest.RESULT_CANT_CONNECT:
+			return "can't connect"
+		HTTPRequest.RESULT_CANT_RESOLVE:
+			return "unknown host"
+		HTTPRequest.RESULT_CONNECTION_ERROR:
+			return "connection error"
+		HTTPRequest.RESULT_TIMEOUT:
+			return "no answer"
+		HTTPRequest.RESULT_NO_RESPONSE:
+			return "no response"
+	return "error %d" % result
 
 
 func _set_track_note() -> void:
@@ -278,9 +452,9 @@ func _is_mac() -> bool:
 
 
 ## A note under a section: wraps at a column's width.
-func _wrap(l: Label) -> void:
+func _wrap(l: Label, width := COL_W) -> void:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.custom_minimum_size = Vector2(COL_W, 0)
+	l.custom_minimum_size = Vector2(width, 0)
 
 
 func _label(text: String, size: int) -> Label:

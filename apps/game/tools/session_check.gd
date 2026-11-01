@@ -3,7 +3,8 @@ extends SceneTree
 ## manager clicks them, and checks what the server answers:
 ##   bun apps/server/src/index.js   (another terminal)
 ##   godot --headless --path apps/game --script res://tools/session_check.gd -- --server[=URL]
-## New session (one click: the session ends and a new one runs), then a track change (one click,
+## The menu shows the phone address the server prints (GET /api/join) with its QR code. New
+## session (one click: the session ends and a new one runs), then a track change (one click,
 ## no question) and back: each must reach its state within TIMEOUT_S. Exits 1 if one doesn't.
 ## The server's side (the karts on the track stop) is in apps/server/test/flow.test.js.
 
@@ -43,22 +44,31 @@ func _wait(what: String, ok: Callable) -> bool:
 	return false
 
 
-## The server's session id, from GET /api/state next to the game's WebSocket URL.
+## The server's session id, from GET /api/state.
 func _session_id() -> String:
+	var body := await _get_json("/api/state")
+	return String(body.get("session", {}).get("id", ""))
+
+
+## GET `path` from the server next to the game's WebSocket URL; {} (and a problem) if it fails.
+func _get_json(path: String) -> Dictionary:
 	var ws := "ws://localhost:8080/ws"
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--server="):
 			ws = arg.get_slice("=", 1)
-	var url := ws.replace("ws://", "http://").replace("wss://", "https://").trim_suffix("/ws") + "/api/state"
+	var url := ws.replace("ws://", "http://").replace("wss://", "https://").trim_suffix("/ws") + path
 	var req := HTTPRequest.new()
 	root.add_child(req)
 	if req.request(url) != OK:
 		problems.append("GET %s failed" % url)
-		return ""
+		return {}
 	var res: Array = await req.request_completed
 	req.queue_free()
 	var body = JSON.parse_string((res[3] as PackedByteArray).get_string_from_utf8())
-	return String(body.get("session", {}).get("id", "")) if body is Dictionary else ""
+	if not (body is Dictionary):
+		problems.append("GET %s: no JSON object" % url)
+		return {}
+	return body
 
 
 func _run() -> void:
@@ -68,6 +78,15 @@ func _run() -> void:
 	if not await _wait("online", func(): return _main().net.status == "online" and _status() != "?"):
 		return _finish()
 	_main().open_menu()  # like Esc: the menu learns the session's status
+	# ...and asks the server for the phone address, shown with its QR code.
+	var join := await _get_json("/api/join")
+	var menu = _main().menu
+	if not await _wait("phone address shown", func(): return menu._join_url.visible or menu._join_note.modulate == menu.RED):
+		return _finish()
+	print("session_check: menu shows %s (QR %s): %s" % [menu._join_url.text, menu._join_qr.visible, menu._join_note.text])
+	var local := String(join.get("url", "")).contains("//localhost") or String(join.get("url", "")).contains("//127.")
+	if menu._join_url.text != String(join.get("url", "?")) or menu._join_qr.visible == local:
+		problems.append("phone address: the menu shows \"%s\" (QR %s), the server prints %s" % [menu._join_url.text, menu._join_qr.visible, join.get("url")])
 	if _status() != "running":
 		_main().menu._on_session()  # Start a new session
 		if not await _wait("first session running", func(): return _status() == "running"):

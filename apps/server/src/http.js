@@ -8,6 +8,7 @@ import {
   SessionStartBodySchema,
 } from "@bebbikart/shared";
 import { ApiError } from "./errors.js";
+import { qrRows } from "./qr.js";
 
 const COOKIE = "bk_device";
 
@@ -65,7 +66,18 @@ export function createHttp({ game, jobs, settings }) {
   /** [method, pattern, handler(req, params, url)] */
   const routes = [
     ["GET", "/api/health", () => json({ ok: true, gameOnline: null })],
-    ["GET", "/api/join", () => json({ url: settings.publicUrl })],
+    // The phone address and its QR code, for the big screen's options menu. phoneSite: false
+    // when the built phone site is missing (the address then only shows how to build it).
+    [
+      "GET",
+      "/api/join",
+      () =>
+        json({
+          url: settings.publicUrl,
+          qr: qrRows(settings.publicUrl),
+          phoneSite: existsSync(join(settings.webDist, "index.html")),
+        }),
+    ],
     [
       "POST",
       "/api/device",

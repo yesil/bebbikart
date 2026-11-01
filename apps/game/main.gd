@@ -290,6 +290,7 @@ func _make_menu() -> void:
 		menu.set_quality(quality)
 	if assets != null:
 		menu.set_session(net.session_status)
+		menu.set_join_server(net.http_base())  # the phone address and QR code (GET /api/join)
 
 
 ## --kit: every sample RacerSpec in res://racer_kit/samples, validated. False (and quits with the
