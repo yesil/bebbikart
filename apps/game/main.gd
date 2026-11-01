@@ -25,6 +25,7 @@ const Course = preload("res://sim/course.gd")
 const VillageCourse = preload("res://sim/village_course.gd")
 const VILLAGE_WORLD_SCENE := "res://world/village/village_world.tscn"
 const VILLAGE_DECOR_SCENE := "res://world/village/village_decor.tscn"
+const VILLAGE_LIGHTING_SCENE := "res://world/village/village_environment.tscn"
 const Sim = preload("res://sim/sim.gd")
 const Racer = preload("res://sim/racer.gd")
 const Tuning = preload("res://sim/tuning.gd")
@@ -507,11 +508,26 @@ func _load_countryside_world() -> bool:
 	add_child(world)
 	add_child((load(DECOR_SCENE) as PackedScene).instantiate())
 	# The countryside sky, sun and post-processing replace the default ones.
-	var lighting: Node = (load(LIGHTING_SCENE) as PackedScene).instantiate()
+	if not _use_lighting(LIGHTING_SCENE):
+		return false
+	var terrain := world.get_node_or_null("Terrain")
+	if terrain == null:
+		push_error("%s has no Terrain node; re-run tools/bake_world.gd" % WORLD_SCENE)
+		get_tree().quit(1)
+		return false
+	terrain.call("set_camera", camera)
+	return true
+
+
+## Swaps in a track's lighting scene (WorldEnvironment and Sun nodes) for the default sky and
+## sun. Returns false (and quits with an error) if the scene lacks either node.
+func _use_lighting(path: String) -> bool:
+	var lighting: Node = (load(path) as PackedScene).instantiate()
 	var we: WorldEnvironment = lighting.get_node_or_null("WorldEnvironment")
 	var lit_sun: DirectionalLight3D = lighting.get_node_or_null("Sun")
 	if we == null or lit_sun == null:
-		push_error("%s needs WorldEnvironment and Sun nodes" % LIGHTING_SCENE)
+		push_error("%s needs WorldEnvironment and Sun nodes" % path)
+		lighting.free()
 		get_tree().quit(1)
 		return false
 	world_env.queue_free()
@@ -520,12 +536,6 @@ func _load_countryside_world() -> bool:
 	world_env = we
 	env = we.environment
 	sun = lit_sun
-	var terrain := world.get_node_or_null("Terrain")
-	if terrain == null:
-		push_error("%s has no Terrain node; re-run tools/bake_world.gd" % WORLD_SCENE)
-		get_tree().quit(1)
-		return false
-	terrain.call("set_camera", camera)
 	return true
 
 
@@ -580,6 +590,13 @@ func _load_village_world() -> bool:
 	add_child(world)
 	if ResourceLoader.exists(VILLAGE_DECOR_SCENE):
 		add_child((load(VILLAGE_DECOR_SCENE) as PackedScene).instantiate())
+	# The village's alpine sky, sun and fog replace the default ones.
+	if not ResourceLoader.exists(VILLAGE_LIGHTING_SCENE):
+		push_error("%s is missing; run tools/seed_village_environment.gd" % VILLAGE_LIGHTING_SCENE)
+		get_tree().quit(1)
+		return false
+	if not _use_lighting(VILLAGE_LIGHTING_SCENE):
+		return false
 	var terrain := world.get_node_or_null("Terrain")
 	if terrain == null:
 		push_error("%s has no Terrain node; re-run tools/bake_village.gd" % VILLAGE_WORLD_SCENE)
