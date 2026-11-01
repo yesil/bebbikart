@@ -37,7 +37,21 @@ On the phone (same Wi-Fi as the Mac), open `http://<mac-ip>:5173`:
 
 macOS may ask whether `bun` may accept incoming connections: allow it, or phones can't reach the Mac.
 
-### Without Vite
+### Real play (release build)
+
+`bun run dev` runs the game on Godot's debug runtime: "(DEBUG)" in the window title, slower scripts and the test keys (R, W, K, B) live. For real play on the big screen:
+
+```bash
+bun run play
+```
+
+This builds the phone site, starts the server without watching files (phones open `http://<mac-ip>:8080`, no Vite) and launches the game's **release build** connected to it. Quitting the game (⌘Q) or Ctrl+C stops both; if either one stops, so does the other. Extra arguments go to the game (`bun run play -- --quality=high`).
+
+The release build is `apps/game/export/BebbiKart.app` (git-ignored), exported with the `macOS` preset in `apps/game/export_presets.cfg`. `bun run play` exports it first when it is missing or older than any file in `apps/game`; `bun run game:export` exports it on demand. In the release build H still shows the status overlay and Esc the options menu; the test keys do nothing.
+
+One-time setup: Godot's export templates for your Godot version (Godot editor → Editor → Manage Export Templates → Download and Install). Without them the export fails and says which template file is missing.
+
+### Without Vite (debug game)
 
 `bun run start` builds the phone site and serves everything from the server on `http://<mac-ip>:8080`. Start the game separately with `bun run dev:game`.
 

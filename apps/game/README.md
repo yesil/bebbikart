@@ -14,6 +14,10 @@ godot --headless --path . -- --duration=40 --speed=8 --seed=5 --log=summary
 godot --headless --script res://tools/sweep.gd -- --builds=60 --seeds=2
 ```
 
+These run on Godot's debug runtime. For real play, `bun run play` (repo root) runs the release
+build `export/BebbiKart.app`, exported with the `macOS` preset in `export_presets.cfg` (needs
+Godot's export templates; see [docs/local-testing.md](../../docs/local-testing.md#real-play-release-build)).
+
 Game flags (after `--`):
 
 | Flag | Meaning |
@@ -39,7 +43,7 @@ Keys:
 
 | Key | Action |
 |---|---|
-| B | Boost the newest racer |
+| B | Boost the newest racer (debug runs only, like R, W and K: off in the release build) |
 | R / W | Advance the rain / wind phase |
 | K | Toggle forced calm |
 | H | Show / hide the debug overlay (hidden at start) |

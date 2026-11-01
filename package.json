@@ -21,6 +21,8 @@
     "game:mock": "godot --path apps/game",
     "build:web": "bun run --cwd apps/web build",
     "start": "bun run build:web && bun run --cwd apps/server start",
+    "play": "bun scripts/play.js",
+    "game:export": "bun scripts/game-export.js",
     "fake-game": "bun apps/server/scripts/fake-game.js",
     "sim-players": "bun apps/server/scripts/sim-players.js"
   },
