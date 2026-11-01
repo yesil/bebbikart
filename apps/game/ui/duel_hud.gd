@@ -35,6 +35,7 @@ var _queue := {}
 var _halves := {}            # side -> {root, plate, face, cam, name, time, record, coins, coins_label, boost, lights, verdict, verdict_big, verdict_small, idle}
 var _coins_was := {}         # side -> coins taken last frame (the counter bounces on a new one)
 var _coin_pop := {}          # side -> seconds left of its bounce
+var _coins_said := {}        # side -> coins_result came for the verdict about to show
 var _crown: PanelContainer
 var _crown_label: Label
 var _line_label: Label
@@ -152,6 +153,10 @@ func _build_half(side: String) -> Dictionary:
 	var small := _label("", 30, Color.WHITE)
 	small.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(small)
+	var coins_won := _label("", 28, Color("#ffd23a"))
+	coins_won.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	coins_won.visible = false
+	vbox.add_child(coins_won)
 	root.add_child(verdict)
 	var idle := _label("", 44, Color.WHITE)
 	idle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -159,7 +164,7 @@ func _build_half(side: String) -> Dictionary:
 	root.add_child(idle)
 	return {"root": root, "plate": plate, "face": face, "cam": cam, "name": name_l, "time": time_l, "best": best_l, "record": record_l,
 		"coins": coins, "coins_label": coins_l, "boost": boost, "lights": lights, "verdict": verdict,
-		"verdict_big": big, "verdict_small": small, "idle": idle}
+		"verdict_big": big, "verdict_small": small, "verdict_coins": coins_won, "idle": idle}
 
 
 ## queue.updated: the line, who races in which half, the champion.
@@ -187,11 +192,23 @@ func _set_crown() -> void:
 ## line under it; good: a new crown (gold) rather than short of it.
 func result(side: String, big: String, small: String, good: bool) -> void:
 	var h: Dictionary = _halves[side]
+	if _coins_said.get(side, false):
+		_coins_said[side] = false  # said for this verdict: the next one starts without
+	else:
+		h["verdict_coins"].visible = false
 	h["verdict_big"].text = big
 	h["verdict_big"].add_theme_color_override("font_color", Color("#ffd23a") if good else Color.WHITE)
 	h["verdict_small"].text = small
 	h["verdict_small"].visible = small != ""
 	_verdict_until[side] = result_s
+
+
+## The chocolate coins a lap took, under its verdict (call before result()).
+func coins_result(side: String, text: String) -> void:
+	var h: Dictionary = _halves[side]
+	h["verdict_coins"].text = text
+	h["verdict_coins"].visible = true
+	_coins_said[side] = true
 
 
 ## The village's camera blockers, once built (houses the face cams keep out of).

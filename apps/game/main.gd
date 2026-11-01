@@ -1049,6 +1049,10 @@ func _tag_side_layers(n: Node, side: String) -> void:
 ## server's queue.updated with the new champion comes after it).
 func _duel_verdict(run_id: String, pid: String, ok: bool, ms: int, reason: String) -> void:
 	var side: String = duel_sides[run_id] if duel_screen.split else "left"
+	# The chocolate coins taken on the lap, under the verdict.
+	var v = views.get(run_id)
+	if v != null and not v.racer.coins.is_empty():
+		duel_hud.coins_result(side, I18n.f("duel.coins_lap", [v.racer.coins_taken, v.racer.coins.size()]))
 	if not ok:
 		duel_hud.result(side, I18n.t("hud.oops").to_upper() + "!", I18n.t("fail." + reason) if reason != "" else "", false)
 		return
