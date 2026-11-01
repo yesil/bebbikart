@@ -835,6 +835,12 @@ func look_at_camera(secs: float) -> void:
 		look_at(Vector3.ZERO, cam, secs)
 
 
+## The head is on a camera for the rest of a look_at (main.gd's front shot look, a glance into the
+## big screen): the start grid's looks (race_reactions.gd) wait until it ends.
+func looking_at_camera() -> bool:
+	return _look_t > 0.0 and is_instance_valid(_look_node) and _look_node is Camera3D
+
+
 ## Weight of a gesture (0..1), for tools and the viewer.
 func weight(g: int) -> float:
 	return _w[g]

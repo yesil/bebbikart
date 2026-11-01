@@ -5,11 +5,11 @@ extends SceneTree
 ## (lean in, a fist bump, whoop on green), overtakes or two racers finishing together never
 ## happened (MUST: seed 4 has them all), if a finisher misses its finish (its signature cheer, a
 ## wave, a look into the camera), if no half ever showed its racer from the front on the grid and
-## after its lap (main.gd turns the racer's head to that camera; what took the head before such a
-## look ended is reported), if a racer coasting after its finish leaves the road, if two finishers
-## stand inside each other (after SETTLE_S), if a rival moment fires while a group leaves the grid
-## or a finisher cheers together twice. Crashes and failed runs are rare, so flinches and slumps
-## are only counted.
+## after its lap (main.gd turns the racer's head to that camera), if on the grid anything took the
+## head off that camera before the look ended (after a lap a joint cheer may: what took it is
+## reported), if a racer coasting after its finish leaves the road, if two finishers stand inside
+## each other (after SETTLE_S), if a rival moment fires while a group leaves the grid or a finisher
+## cheers together twice. Crashes and failed runs are rare, so flinches and slumps are only counted.
 ## Alongside (a wave or taunt at a rival side by side at the same speed for SIDE_S) needs two
 ## karts in different lines: duel karts keep their own lines through each other and it never came
 ## up (0 in 1080 s of duels over five seeds; two racers seldom even hold the same speed for a
@@ -396,6 +396,8 @@ func _report() -> void:
 	for kind in front_count:
 		if front_count[kind] == 0:
 			bad.append("no front look %s" % ("on the grid" if kind == "grid" else "after a lap"))
+	if front_lost.grid > 0:
+		bad.append("%d of %d front looks on the grid lost the head before they ended" % [front_lost.grid, front_count.grid])
 	if staged == null:
 		bad.append("staged alongside never fired (%s)" % ("held side by side %.0f s without a reaction" % STAGE_MAX_S if staged_late
 			else "no two racers on the track to stage it with, %d pairs stopped racing first" % stage_tries))

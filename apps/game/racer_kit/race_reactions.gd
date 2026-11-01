@@ -11,7 +11,9 @@ extends Node
 ## On the start grid (sim countdown): fidgets, looks at the neighbours, a fist bump with a
 ## neighbour in reach, a wave to the crowd or the signature gesture, leaning in on 3-2-1 with the
 ## eyes on the start lights (the gantry's lamps where the track has a start gantry, the road
-## ahead where it has none), a whoop on green (the ride crouches and leaps too).
+## ahead where it has none), a whoop on green (the ride crouches and leaps too). While a racer
+## looks into a camera (main.gd turns it to its half's camera as the front shot starts), the
+## grid's looks leave its head there; the eyes go to the lights once that look ends.
 ## Runs after main.gd has synced the views each frame. Placeholder views (no toy) are skipped.
 ## Finish and crash reactions themselves are the views' own (KitRacerView.leave()).
 
@@ -520,13 +522,15 @@ func _grid(v, delta: float) -> void:
 		v.grid_next = _rng.randf_range(0.35, 0.7)
 		v.grid_beat = ceili(go_in)
 		v.grid_ready = false
+		v.grid_lights = false
 		_look_around(v, 1.0)
 	v.grid_t += delta
 	if v.grid_t >= v.grid_next and go_in > GRID_CALM_S + 0.5:
 		v.grid_next = v.grid_t + _rng.randf_range(1.2, 2.0)
 		var pose := g.fidget_gesture()
 		if pose == Gestures.G.WAVE:
-			g.look_at_camera(1.4)  # a wave to the crowd and the big screen
+			if not g.looking_at_camera():
+				g.look_at_camera(1.4)  # a wave to the crowd and the big screen
 			g.play(pose, 1, 1.2)
 		else:
 			g.play(pose)
@@ -541,6 +545,8 @@ func _grid(v, delta: float) -> void:
 		if not v.grid_ready:
 			v.grid_ready = true
 			g.hold(Gestures.G.READY, true)
+		if not v.grid_lights and not g.looking_at_camera():
+			v.grid_lights = true
 			_watch_lights(v, go_in + 0.3)
 	if go_in < GRID_CALM_S:
 		for f in [Gestures.G.SCRATCH, Gestures.G.TAP, Gestures.G.STRETCH, Gestures.G.WAVE, g.sig_pose]:
@@ -591,7 +597,8 @@ func _fist_bump(v) -> void:
 		v.grid_bumped = true
 		o.grid_bumped = true
 		for p in [[v, o], [o, v]]:
-			p[0].toy.look_at_node(p[1].toy.head_pivot, 0.9)
+			if not p[0].toy.gestures.looking_at_camera():
+				p[0].toy.look_at_node(p[1].toy.head_pivot, 0.9)
 			p[0].toy.gestures.fist_bump(_meet(p[0], p[1], -0.05), _side_of(p[0], p[1]))
 		events.append({"type": "fist_bump", "views": [v, o]})
 		return
@@ -609,8 +616,11 @@ func _go(v) -> void:
 	events.append({"type": "go", "view": v})
 
 
-## Look at the nearest other racer waiting on the grid, or at the camera when alone.
+## Look at the nearest other racer waiting on the grid, or at the camera when alone; not while
+## the head is on a camera.
 func _look_around(v, secs: float) -> void:
+	if v.toy.gestures.looking_at_camera():
+		return
 	var best = null
 	var best_d := 64.0
 	for k in main.views:
