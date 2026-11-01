@@ -28,6 +28,7 @@ var hf_t := 0.0
 var hf_go := -1.0        # hf_t the slap started at (once side by side within reach), -1 before
 ## "" while racing, else the outcome being shown ("finished" / "failed") before the view frees.
 var leaving := ""
+var leave_stay := 0.0     # seconds it stays on the track after its run (leave)
 var _leave_t := 0.0
 var _leave_v := 0.0
 var _leave_seg := {}      # where on the course the racer coasts after its run: segment, metres
@@ -140,10 +141,11 @@ func forward() -> Vector3:
 
 
 ## The run ended (main.gd on sim.removed): the racer stays FINISH_STAY s (cheer, then a wave at
-## the camera) or FAIL_STAY s (spin and slump), coasts to a stop along the road's curve (onto the
-## next lap's first stretch on a loop), pops away and frees itself. An aborted run, or a view
-## without a toy, goes at once.
-func leave(outcome: String) -> void:
+## the camera) or FAIL_STAY s (spin and slump), or `stay` s if that is longer (the duel keeps it
+## while its half shows the verdict), coasts to a stop along the road's curve (onto the next
+## lap's first stretch on a loop), pops away and frees itself. An aborted run, or a view without
+## a toy, goes at once.
+func leave(outcome: String, stay := 0.0) -> void:
 	if toy == null or outcome not in ["finished", "failed"]:
 		queue_free()
 		return
@@ -157,11 +159,12 @@ func leave(outcome: String) -> void:
 	toy.slipping = false
 	toy.airborne = false
 	if outcome == "finished":
-		_leave_t = FINISH_STAY
+		leave_stay = maxf(FINISH_STAY, stay)
 		toy.finish()
 	else:
-		_leave_t = FAIL_STAY
+		leave_stay = maxf(FAIL_STAY, stay)
 		toy.fail()
+	_leave_t = leave_stay
 	set_process(true)
 
 

@@ -352,7 +352,7 @@ func _apart(a, b, both: bool, delta: float) -> void:
 			var behind: bool = (along < 0.0) if mover == b else (along > 0.0)
 			mover.nudge(dir * minf(step, -gap_lat), minf(step, -gap_along) * (1.0 if behind else -1.0))
 			mover._leave_v = 0.0
-			if _squeeze(a, b, delta) > SQUEEZE_S and mover._leave_t > mover.POP:
+			if _squeeze(a, b, delta) > SQUEEZE_S and mover._leave_t > mover.POP and _may_pop():
 				mover._leave_t = mover.POP
 		return
 	var back = a if along > 0.0 else b
@@ -361,10 +361,9 @@ func _apart(a, b, both: bool, delta: float) -> void:
 		# A crowd at the line: one that has had its moment pops away now instead of standing inside
 		# the newcomer.
 		var older = a if a._leave_t < b._leave_t else b
-		var stay: float = older.FINISH_STAY if older.leaving == "finished" else older.FAIL_STAY
 		# Squeezed together in a crowd for a moment, or one has had its cheer already: it pops.
-		var had: float = stay - older._leave_t
-		if (had > OLD_S or (_squeeze(a, b, delta) > SQUEEZE_S and had > 0.6)) and older._leave_t > older.POP:
+		var had: float = older.leave_stay - older._leave_t
+		if (had > OLD_S or (_squeeze(a, b, delta) > SQUEEZE_S and had > 0.6)) and older._leave_t > older.POP and _may_pop():
 			older._leave_t = older.POP
 			return
 		a.nudge(away * minf(step, -gap_lat) * 0.5, 0.0)
@@ -373,6 +372,12 @@ func _apart(a, b, both: bool, delta: float) -> void:
 		back.nudge(0.0, minf(step, -gap_along))
 	elif back._leave_v > front._leave_v and gap_along < (back._leave_v - front._leave_v) * 0.5:
 		back._leave_v = front._leave_v + gap_along / 0.5  # ease in behind it
+
+
+## A crowded finisher may pop away early, except in solo runs (the duel's halves): there it
+## stays until its half's verdict goes away (the karts pass through each other anyway).
+func _may_pop() -> bool:
+	return not main.sim.solo
 
 
 ## Side by side (HF_SIDE) and their arms can bridge the gap they must keep (LINGER_GAP).

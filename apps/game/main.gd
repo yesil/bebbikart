@@ -122,7 +122,7 @@ var duel_hud: DuelHud                # names, times, lights, verdicts per half; 
 var duel_sides := {}                 # runId -> "left" | "right" (run.start side), newest last
 var queue_state := {}                # last queue.updated
 var bests := {}                      # playerId -> best time (on a loop, best lap) in ms this session
-var _front_was := {}                 # side -> its camera showed the racer from the front last frame
+var _front_was := {}                 # side -> instance id of the racer view its camera showed from the front last frame, 0 if none
 
 
 func _ready() -> void:
@@ -854,7 +854,10 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 			var v: Node = views.get(pl["runId"])
 			if v != null:
 				if v.has_method("leave"):
-					v.leave(pl["outcome"])  # kit racers cheer or slump a moment, then free themselves
+					# Kit racers cheer or slump, then free themselves; in the duel they stay while
+					# their half shows the lap's verdict, so it never stands over an empty shot.
+					var stay: float = duel_hud.result_s if duel_hud != null and duel_sides.has(pl["runId"]) else 0.0
+					v.leave(pl["outcome"], stay)
 					if v.leaving != "":
 						leaving[pl["runId"]] = v
 				else:
@@ -980,13 +983,17 @@ func _update_duel(delta: float) -> void:
 		runs = {"left": only_r}
 	var cams: Array = duel_screen.update(delta, on_side, views.values(), fronts)
 	# As its camera comes round to the front, the character looks into it (its half's camera:
-	# in a split the main camera is only the middle of the two).
+	# in a split the main camera is only the middle of the two). A new racer in a front shot looks
+	# too: the next one on the grid while the last one still stands after its lap.
+	var front_now := {}
 	for side in fronts:
-		if fronts[side] and on_side.has(side) and not _front_was.get(side, false):
-			var toy = on_side[side].get("toy")
+		var fv = on_side.get(side, null) if fronts[side] else null
+		front_now[side] = fv.get_instance_id() if fv != null else 0
+		if fv != null and int(front_now[side]) != int(_front_was.get(side, 0)):
+			var toy = fv.get("toy")
 			if toy != null:
 				toy.look_at_node(duel_screen.camera_of(side), FRONT_LOOK_S)
-	_front_was = fronts
+	_front_was = front_now
 	fx.followers = cams if duel_screen.split else []
 	# The music and engines follow the newest racer on the track.
 	follow_run = ""
@@ -1010,8 +1017,8 @@ func _shows_front(rid: String, v, r) -> bool:
 
 
 ## A racer's meshes go on its half's render layer only (DuelScreen.SIDE_LAYER), so the other
-## half's front shot and face cam can leave it out: in a duel both racers can wait in the same
-## grid spot.
+## half's front shot and face cam can leave it out: in a duel the other half's racer can wait
+## right beside it on the grid, or drive through it.
 func _tag_side_layers(n: Node, side: String) -> void:
 	if n is VisualInstance3D:
 		(n as VisualInstance3D).layers = DuelScreen.SIDE_LAYER[side]

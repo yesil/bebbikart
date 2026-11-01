@@ -10,6 +10,8 @@ extends SceneTree
 ## reported), if a racer coasting after its finish leaves the road, if two finishers stand inside
 ## each other (after SETTLE_S), if a rival moment fires while a group leaves the grid or a finisher
 ## cheers together twice. Crashes and failed runs are rare, so flinches and slumps are only counted.
+## It races the countryside unless --track says otherwise: seed 4's MUST list was set there (the
+## village, the game's default track, has no overtake on seed 4).
 ## Alongside (a wave or taunt at a rival side by side at the same speed for SIDE_S) needs two
 ## karts in different lines: duel karts keep their own lines through each other and it never came
 ## up (0 in 1080 s of duels over five seeds; two racers seldom even hold the same speed for a
@@ -19,6 +21,11 @@ extends SceneTree
 ## main.gd's next sync puts the racer back on its line, and its speed is put back before the sim's
 ## next tick (the reaction keeps its own cooldown and rivalry memory). Alongside in the race
 ## itself is counted and reported.
+## A grid fist bump needs two racers waiting for green at once in neighbouring slots, within reach
+## and with time left; duel racers wait in slots of their own and that seldom comes up. The check
+## stages it too: the first time two racers wait with time to green, a GridStager holds the later
+## one in the slot next to the other (closer if their fists can't reach across), and the check
+## fails unless the two bump within BUMP_STAGE_MAX_S (the fists must meet, as for every fist bump).
 ## main.gd reads the same user args (pass --kit).
 ##
 ## High fives must bring the two hands together (HF_TOUCH); every pair of a high five is listed.
@@ -28,12 +35,18 @@ extends SceneTree
 const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
 const RaceReactions = preload("res://racer_kit/race_reactions.gd")
 const Gestures = preload("res://racer_kit/racer_gestures.gd")
+const Tuning = preload("res://sim/tuning.gd")
 const MUST := ["go", "overtake", "finish_together", "fist_bump"]
 const SETTLE_S := 0.5
 const MAX_PAIR_FRAMES := 15
 const HF_TOUCH := 0.2        # m: the two slapping hands (centres) must come this close
 const STAGE_LAT := 2.0       # m: the staged racer drives this far beside the other (in RaceReactions.SIDE_LANE, past BRACE_DIST)
 const STAGE_MAX_S := 3.0     # s: the staged pair must react within this
+const BUMP_STAGE_MAX_S := 1.5  # s: the staged grid pair must fist-bump within this
+const BUMP_A_GO_S := 1.2     # s to green the earlier racer of the grid pair needs left (bump, then the fists meet)
+const BUMP_B_GO_S := 2.3     # s to green the later one needs left (RaceReactions bumps above GRID_CALM_S + 0.5)
+const BUMP_HOLD_S := 0.6     # s the staged pair stays together after the bump (the fists meet 0.28-0.5 s in)
+const BUMP_REACH_K := 0.9    # of the two arms' fist-bump reach: the staged pair waits a little inside what RaceReactions bumps at (0.97)
 
 
 ## Holds `b` beside `a` as race_reactions.gd sees them: the same heading, STAGE_LAT to its left, at
@@ -65,6 +78,28 @@ class Restorer extends Node:
 		if stager.staging():
 			stager.b.racer.v = stager.own_v
 
+
+## Holds `b` (the later of two racers waiting for green) `lat` metres across the road from `a`
+## (+: a's +d side, Route.normal_at), facing the same way, as race_reactions.gd reads them. It sits
+## under main.gd just before RaceReactions like Stager; main.gd's next sync puts `b` back in its
+## own slot.
+class GridStager extends Node:
+	var a = null
+	var b = null
+	var lat := 0.0
+
+	func _process(_delta: float) -> void:
+		if not staging():
+			return
+		var fwd: Vector3 = a.forward()
+		fwd.y = 0.0
+		fwd = fwd.normalized()
+		b.global_position = a.global_position + Vector3(-fwd.z, 0.0, fwd.x) * lat
+		b._body.rotation = a._body.rotation
+
+	func staging() -> bool:
+		return a != null and is_instance_valid(a) and is_instance_valid(b)
+
 var main: Node
 var limit := 120.0
 var done := false
@@ -83,7 +118,7 @@ var arrived := {}      # finisher -> seen
 var arrived_inside := 0  # finishers already inside another racer on their first frame after the line
 var finishes := {}     # finisher instance id -> {sig, wave, joint, cam: seen its signature, wave, joint cheer, camera look; left: _leave_t}
 var slumps := {}       # failed racer instance id -> slumped (Gestures.G.SLUMP seen)
-var front_was := {}    # side -> main.gd showed that half's racer from the front last frame
+var front_was := {}    # side -> instance id of the view main.gd showed from the front in that half last frame (0: none)
 var front_looks := {}  # view instance id -> {view, cam, kind, left}: a front look under way
 var front_count := {"grid": 0, "finish": 0}  # front looks main.gd started
 var front_lost := {"grid": 0, "finish": 0}   # of those, the head turned elsewhere before the look ended
@@ -94,6 +129,13 @@ var stage_tries := 0   # staged pairs that stopped racing before the reaction
 var staged = null      # the staged alongside reaction once it fired: {by, to, gesture, after}
 var staged_looks := false  # and the two looked at each other
 var staged_late := false   # the pair held side by side STAGE_MAX_S without a reaction
+var grid_stager: GridStager = null
+var bump_t := 0.0
+var bump_go := -1.0    # bump_t the staged fist bump fired at, -1 before
+var bump_tries := 0    # staged grid pairs that left the grid before the bump
+var bump_skip := {}    # "id-id" -> true: grid pairs whose fists can't reach across without sitting inside each other
+var bump_staged = null # the staged fist bump once it fired: {a, b, lat, after}
+var bump_late := false # the pair held in reach BUMP_STAGE_MAX_S without a bump
 
 
 func _initialize() -> void:
@@ -105,6 +147,7 @@ func _initialize() -> void:
 		quit(1)
 		return
 	main = (load("res://main.tscn") as PackedScene).instantiate()
+	main.args["track"] = "countryside"  # main.gd's _ready adds the user args on top: --track wins
 	root.add_child(main)
 
 
@@ -121,6 +164,9 @@ func _process(delta: float) -> bool:
 		restorer.stager = stager
 		main.add_child(restorer)
 		main.move_child(restorer, rr.get_index() + 1)
+		grid_stager = GridStager.new()
+		main.add_child(grid_stager)
+		main.move_child(grid_stager, rr.get_index())
 	if rr != null:
 		for e in rr.events:
 			if e.type == "alongside" and stager.a != null and [e.by, e.to].has(stager.a) and [e.by, e.to].has(stager.b):
@@ -138,6 +184,9 @@ func _process(delta: float) -> bool:
 				hf_pairs[e.views] = INF
 			if e.type == "fist_bump":
 				fb_pairs[e.views] = [t, INF]
+				if grid_stager.a != null and bump_go < 0.0 and [grid_stager.a, grid_stager.b].all(func(v): return e.views.has(v)):
+					bump_go = bump_t
+					bump_staged = {"a": grid_stager.a.nickname, "b": grid_stager.b.nickname, "lat": absf(grid_stager.lat), "after": bump_t}
 	for pair in fb_pairs:
 		var fa = pair[0]
 		var fb = pair[1]
@@ -159,6 +208,7 @@ func _process(delta: float) -> bool:
 					a.global_position.distance_to(b.global_position), ga.high_five_reach(_toward(a, b)), gb.high_five_reach(_toward(b, a)),
 					ga.hand_world(_toward(a, b)).distance_to(ga._hf_point), gb.hand_world(_toward(b, a)).distance_to(gb._hf_point), ga._hf_point.y - a.global_position.y])
 	_stage(delta)
+	_stage_bump(delta)
 	_front_looks()
 	_finishes()
 	for k in main.views:
@@ -227,19 +277,81 @@ func _stage(delta: float) -> void:
 		stage_t = 0.0
 
 
+## Staging a grid fist bump: the first two racers waiting for green at once with time left (the
+## earlier one BUMP_A_GO_S, the later BUMP_B_GO_S), neither bumped yet: the later one waits in
+## the slot next to the earlier one, or closer if their fists can't reach that far, until they
+## bump and their fists have met (or one leaves the grid first: try again with the next pair).
+func _stage_bump(delta: float) -> void:
+	if grid_stager == null or (bump_staged != null and grid_stager.a == null) or bump_late:
+		return
+	if grid_stager.a != null:
+		bump_t += delta
+		var gone: bool = not _waiting(grid_stager.a) or not _waiting(grid_stager.b)
+		if bump_go >= 0.0:
+			if gone or bump_t - bump_go > BUMP_HOLD_S:
+				grid_stager.a = null
+		elif gone:
+			grid_stager.a = null
+			bump_tries += 1
+		elif bump_t > BUMP_STAGE_MAX_S:
+			grid_stager.a = null
+			bump_late = true
+		return
+	var waiting: Array = main.views.values().filter(func(v): return _waiting(v) and not v.grid_bumped)
+	if waiting.size() < 2:
+		return
+	waiting.sort_custom(func(x, y): return x.grid_t > y.grid_t)  # longest waiting first
+	var a = waiting[0]
+	var b = waiting[1]
+	var key := "%d-%d" % [a.get_instance_id(), b.get_instance_id()]
+	if bump_skip.has(key) or _go_in(a) < BUMP_A_GO_S or _go_in(b) < BUMP_B_GO_S:
+		return
+	# Toward b's own slot; the slot next to a, closer if the two fists can't reach across.
+	var sa: float = main.sim.grid_slot[a.racer.run_id]
+	var dir := signf(float(main.sim.grid_slot[b.racer.run_id]) - sa)
+	var gap: float = Tuning.START_LANES[1] - Tuning.START_LANES[0]
+	var fwd: Vector3 = a.forward()
+	fwd.y = 0.0
+	var n := Vector3(-fwd.normalized().z, 0.0, fwd.normalized().x) * dir
+	var side := 1 if (a.toy.global_transform.affine_inverse() * (a.global_position + n)).x > 0.0 else -1
+	var reach: float = a.toy.gestures.high_five_reach(side, Gestures.FB_REACH) + b.toy.gestures.high_five_reach(-side, Gestures.FB_REACH)
+	var lat := minf(gap, reach * BUMP_REACH_K)
+	if lat < a.half_size().x + b.half_size().x + RaceReactions.LINGER_GAP:
+		bump_skip[key] = true  # this pair would have to sit inside each other
+		return
+	grid_stager.a = a
+	grid_stager.b = b
+	grid_stager.lat = lat * dir
+	bump_t = 0.0
+	bump_go = -1.0
+
+
+## Waiting on the start grid for green (a kit racer).
+func _waiting(v) -> bool:
+	return is_instance_valid(v) and v.get("toy") != null and v.racer != null and v.parked and v.leaving == "" \
+		and main.sim.on_grid(v.racer.run_id)
+
+
+## Seconds until this waiting racer's lights go green.
+func _go_in(v) -> float:
+	var sim = main.sim
+	return float(int(sim.go_tick.get(v.racer.run_id, sim.tick)) - sim.tick) / Tuning.HZ
+
+
 func _racing(v) -> bool:
 	return is_instance_valid(v) and v.get("toy") != null and v.racer != null and v.racer.state == "racing" \
 		and not v.parked and v.leaving == ""
 
 
 ## main.gd turns a racer's head to its half's camera as that camera comes round to the front (on
-## the grid, after the lap; main.gd _update_duel): follows each such look until it ends and notes
-## whether something else took the head first.
+## the grid, after the lap), or as a new racer comes into a front shot (the next one on the grid
+## while the last one stands after its lap; main.gd _update_duel): follows each such look until it
+## ends and notes whether something else took the head first.
 func _front_looks() -> void:
 	var fw: Dictionary = main._front_was
 	for side in fw:
-		if fw[side] and not front_was.get(side, false):
-			var v = _front_view(side)
+		if int(fw[side]) != 0 and int(fw[side]) != int(front_was.get(side, 0)):
+			var v = instance_from_id(int(fw[side]))
 			if v != null and v.get("toy") != null:
 				var kind := "finish" if String(v.leaving) != "" else "grid"
 				front_count[kind] += 1
@@ -263,19 +375,6 @@ func _front_looks() -> void:
 			if "--verbose" in OS.get_cmdline_user_args():
 				print("front look (%s) of %s lost to %s with %.2f s left" % [f.kind, f.view.nickname, what, f.left])
 		front_looks.erase(id)
-
-
-## The racer view main.gd turned to the half's front camera (as _update_duel picks it: the
-## newest run of the side; full screen shows the one racer whatever its side).
-func _front_view(side: String):
-	var on_side := {}
-	for rid in main.duel_sides:
-		var v = main._view_of(rid)
-		if v != null:
-			on_side[main.duel_sides[rid]] = v
-	if not main.duel_screen.split:
-		return on_side.get("left", on_side.get("right", null))
-	return on_side.get(side, null)
 
 
 func _look_name(n) -> String:
@@ -318,8 +417,7 @@ func _toward(v, other) -> int:
 
 
 func _settled(v) -> bool:
-	var stay: float = v.FINISH_STAY if v.leaving == "finished" else v.FAIL_STAY
-	return stay - v._leave_t > SETTLE_S and v._leave_t > v.POP
+	return v.leave_stay - v._leave_t > SETTLE_S and v._leave_t > v.POP
 
 
 ## Footprints (KitRacerView.half_size, in the first one's road frame) overlapping by more than 5 cm.
@@ -353,11 +451,13 @@ func _report() -> void:
 	if missed > 0:
 		bad.append("%d of %d high fives where the hands did not meet (closest %.2f m, limit %.2f)" % [missed, hf_pairs.size(), closest, HF_TOUCH])
 	var fb_missed := 0
+	var fb_closest := INF
 	for pair in fb_pairs:
+		fb_closest = minf(fb_closest, float(fb_pairs[pair][1]))
 		if float(fb_pairs[pair][1]) > HF_TOUCH + 0.04:  # two round fists
 			fb_missed += 1
 	if fb_missed > 0:
-		bad.append("%d of %d fist bumps where the fists did not meet" % [fb_missed, fb_pairs.size()])
+		bad.append("%d of %d fist bumps where the fists did not meet (closest %.2f m, limit %.2f)" % [fb_missed, fb_pairs.size(), fb_closest, HF_TOUCH + 0.04])
 	if early_rivals > 0:
 		bad.append("%d rival moments while a group was still leaving the grid" % early_rivals)
 	var twice := together.values().filter(func(n): return n > 1).size()
@@ -403,6 +503,9 @@ func _report() -> void:
 			else "no two racers on the track to stage it with, %d pairs stopped racing first" % stage_tries))
 	elif not staged_looks:
 		bad.append("staged alongside fired but the two did not look at each other")
+	if bump_staged == null:
+		bad.append("staged fist bump never fired (%s)" % ("held in reach %.1f s without a bump" % BUMP_STAGE_MAX_S if bump_late
+			else "no two racers waited on the grid with time to green to stage it with, %d pairs left the grid first, %d could not reach each other" % [bump_tries, bump_skip.size()]))
 	print("race reactions in %.0f s: %s, leaning in on the grid: %d racers, coasting finishers on the road: %d frames, finishers inside each other: %d frames (%d pairs), crossed the line inside another: %d of %d%s" % [
 		limit, JSON.stringify(counts), ready_seen.size(), coast_frames, overlaps, pair_frames.size(), arrived_inside, arrived.size(),
 		"" if counts.flinch > 0 else " (no crash near a racer this run)"])
@@ -415,6 +518,9 @@ func _report() -> void:
 		print("alongside: %d in the race itself%s; staged (%s beside %s, %d earlier pairs stopped racing first): fired after %.1f s, %s, heads turned to each other: %s" % [
 			counts.alongside, " (duel karts keep their own lines through each other, so it seldom comes up)" if counts.alongside == 0 else "",
 			staged.by, staged.to, stage_tries, staged.after, "no gesture" if staged.gesture < 0 else Gestures.G.find_key(staged.gesture), staged_looks])
+	if bump_staged != null:
+		print("fist bumps: %d in the race itself; staged (%s %.2f m beside %s; earlier pairs: %d left the grid first, %d could not reach each other): bumped after %.2f s" % [
+			counts.fist_bump - 1, bump_staged.b, bump_staged.lat, bump_staged.a, bump_tries, bump_skip.size(), bump_staged.after])
 	if not bad.is_empty():
 		push_error("race_reactions_check: " + "; ".join(bad))
 	# The game goes first, and the audio thread drops its stopped music and engines on its next mix:

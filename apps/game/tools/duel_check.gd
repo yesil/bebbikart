@@ -14,6 +14,7 @@ extends SceneTree
 ##  - the champion never launches while someone else waits;
 ##  - a duel run on a loop races one lap; nobody is bumped (karts pass through each other);
 ##  - the two halves race at the same time, started at different moments;
+##  - two racers waiting for green at once wait in different grid slots (not inside each other);
 ##  - steering reaches the racers: some forks are picked by the thumb, some boost arrows caught;
 ##  - nobody leaves the road (the one off_track left is the causeway's low wall, in the wind);
 ##  - the champion is the best lap;
@@ -84,6 +85,8 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 	var arrows := 0
 	var overlap_s := 0.0
 	var staggered := 0           # second-half starts while the other half was already racing
+	var both_parked := 0         # ticks two racers waited on the grid at once
+	var shared_slot := false
 	var last_queue := {}
 	var was_split := false
 	var split_on_at := -1.0
@@ -149,6 +152,14 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 						split_off_at = t
 					was_split = now_split
 		sim.step()
+		if sim.grid_slot.size() >= 2:
+			both_parked += 1
+			var lanes := {}
+			for id in sim.grid_slot:
+				if lanes.has(sim.grid_slot[id]) and not shared_slot:
+					shared_slot = true
+					problems.append("%s: two racers wait in the same grid slot" % track)
+				lanes[sim.grid_slot[id]] = true
 		if sim.racers.size() == 2 and t < secs:
 			overlap_s += dt
 		if sim.active_count() > 2:
@@ -224,6 +235,8 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 			problems.append("%s: the two halves raced together only %.0f s of %.0f s" % [track, overlap_s, secs])
 		if staggered == 0:
 			problems.append("%s: the halves never started at different times" % track)
+		if both_parked == 0:
+			problems.append("%s: the two halves never waited on the grid at the same time" % track)
 	laps_ms.sort()
 	print("%-11s %d player%s, %.0f s + %.0f s going home: %d runs (%d finished, %d failed), lap median %.2f s, best %.2f s · split %s · both halves racing %.0f%% of the time, %d staggered starts · %.1f steering changes per run, %d of %d forks steered, %.1f boost arrows per run · champion %s with %d tries" % [
 		track, n_players, "" if n_players == 1 else "s", secs, t - secs, runs, finished, failed,

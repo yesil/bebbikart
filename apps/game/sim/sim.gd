@@ -80,19 +80,24 @@ func add_run(run_id: String, player_id: String, build: Dictionary, size: Vector2
 
 
 ## The run waits for green in a free front-row slot near its own line, if one is left (the second
-## row waits out of sight and leaves as soon as the front row has pulled away).
+## row waits out of sight and leaves as soon as the front row has pulled away). Solo runs pass
+## through each other on the track but still wait in slots of their own; with more of them
+## waiting than slots, the extra ones share the nearest (they pass through).
 func _park_on_grid(r: Racer) -> void:
 	var home := r.lane_home * (r.half_width() - 0.7)
 	var taken := {}
-	if not solo:
-		for id in grid_slot:
-			taken[grid_slot[id]] = true
+	for id in grid_slot:
+		taken[grid_slot[id]] = true
 	var best := INF
 	for lane in Tuning.START_LANES:
 		if taken.has(lane) or _start_gap(lane, r) < Tuning.START_GAP:
 			continue
 		if absf(lane - home) < absf(best - home):
 			best = lane
+	if best == INF and solo:
+		for lane in Tuning.START_LANES:
+			if absf(lane - home) < absf(best - home):
+				best = lane
 	if best == INF:
 		return
 	grid_slot[r.run_id] = best
