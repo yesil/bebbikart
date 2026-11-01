@@ -46,6 +46,8 @@ func setup(p_main_camera: CameraRig, fork_shots: Array) -> void:
 		sv.use_taa = main_vp.use_taa
 		sv.use_debanding = main_vp.use_debanding
 		sv.mesh_lod_threshold = main_vp.mesh_lod_threshold
+		sv.use_occlusion_culling = main_vp.use_occlusion_culling
+		sv.positional_shadow_atlas_size = main_vp.positional_shadow_atlas_size
 		add_child(sv)
 		var rig := CameraRig.new()
 		rig.fork_shots = fork_shots

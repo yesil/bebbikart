@@ -69,7 +69,8 @@ const FPS_UNFOCUSED := 30    # window in the background: still smooth enough for
 
 const FORCED := {"calm": [0.0, 0.0], "rain": [1.0, 0.0], "wind": [0.0, 0.8], "storm": [1.0, 0.8]}
 ## Split screen draws the world twice (two cameras, two sets of shadow cascades), so the halves
-## keep their shadows closer and their vegetation a little shorter than the full-screen preset.
+## keep their shadows closer (in two cascades) and their vegetation a little shorter than the
+## full-screen preset. Each half has half the pixels, so the screen's pixel count stays the same.
 const SPLIT_SHADOW_M := 80.0
 const SPLIT_VEG := 0.8
 
@@ -422,6 +423,11 @@ func apply_quality(id: String) -> void:
 	RenderingServer.directional_soft_shadow_filter_set_quality(q["soft_shadows"])
 	var split := duel_screen != null and duel_screen.split
 	sun.directional_shadow_max_distance = minf(q["shadow_distance"], SPLIT_SHADOW_M) if split else q["shadow_distance"]
+	# Each half renders the sun's shadow cascades again: two cascades over the shorter distance
+	# instead of the sun's own (usually four).
+	if not sun.has_meta("shadow_mode"):
+		sun.set_meta("shadow_mode", sun.directional_shadow_mode)
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if split else sun.get_meta("shadow_mode")
 	env.ssao_enabled = q["ssao"]
 	env.glow_enabled = q["glow"]
 	_scale_visibility(self, q["veg"] * (SPLIT_VEG if split else 1.0))
