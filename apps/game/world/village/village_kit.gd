@@ -39,6 +39,7 @@ static func _recolour() -> Array:
 	[256, 384, 384, 512, Color.from_hsv(0.06, 0.55, 0.4)],    # dark wood trims
 	[64, 256, 128, 384, Color.from_hsv(0.11, 0.06, 0.96)],    # lavender stone -> white plaster
 	[448, 384, 512, 512, Color.from_hsv(0.1, 0.05, 0.74)],    # grey stone -> warm grey stone
+	[0, 384, 64, 512, Color.from_hsv(0.995, 0.75, 0.58)],     # candy red -> deep Swiss red (church roof, banners)
 	]
 
 
