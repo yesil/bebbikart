@@ -7,7 +7,7 @@ extends CanvasLayer
 ##  - Each half's own start lights (a duel run never shares a countdown), then GO!.
 ##  - A finished lap's verdict in its half for duelResultMs: NEW CHAMPION!, or how far short of
 ##    whose record; a failed lap says oops and why.
-##  - An idle half: who is next, or "Press Go on your phone".
+##  - An idle half: who is next (nothing when nobody waits: the crown says to press Go).
 ##  - Top centre: the crown (champion, time, tries) and the line.
 ## Every string comes from ui/i18n.gd. main.gd feeds it: set_queue (queue.updated), result (a
 ## lap ended), update (per frame, with the sim and which run races in which half).
@@ -172,10 +172,14 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		h["push"].visible = false
 		h["lights"].visible = false
 		if r == null:
+			# Who is next; with nobody waiting the crown at the top already says to press Go.
 			var next: Array = _queue.get("line", [])
-			h["idle"].text = I18n.f("duel.next", [next[0]["nickname"]]) if not next.is_empty() else I18n.t("duel.press_go")
-			h["idle"].size = Vector2(rect.size.x * 0.8, 0)
-			_place_center(h["idle"], rect.size, 0.5)
+			h["idle"].visible = h["idle"].visible and not next.is_empty()
+			if not next.is_empty():
+				h["idle"].text = I18n.f("duel.next", [next[0]["nickname"]])
+				# A wrapping label shrinks to one letter wide on reset_size(): give it its width.
+				h["idle"].custom_minimum_size = Vector2(rect.size.x * 0.8, 0)
+				_place_center(h["idle"], rect.size, 0.5)
 			continue
 		var col: Color = SIDE_COLOR[side if not full else String(_side_of(r.run_id, side))]
 		var plate: PanelContainer = h["plate"]

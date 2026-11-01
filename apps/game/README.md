@@ -112,6 +112,7 @@ Sweep flags:
 - `tools/duel_check.gd`: headless check of the line: one player alone (full screen, left half only), then six who stop coming after a while (the split turns on once two play and off `splitHoldMs` after the last lap), the champion who rests, one-lap runs without bumps, Push reaching the racers, then the split screen and HUD driven for a few frames. Exit 1 on a broken rule: `godot --headless --path . --script res://tools/duel_check.gd`.
 - `tools/start_crowd_check.gd`: groups of 4, 6 and 8 pressing Go together on both tracks (with the start countdown), with early Boost taps: start bumps, early crashes and release spread; exits 1 if the crowd knocks racers off. `--boost=onetap` is the gameplay thread's one-tap regression mode.
 - `tools/hud_check.gd` (windowed): renders the podium from test data; exits 1 if it is missing or doesn't fit the screen.
+- `tools/menu_check.gd` (windowed): opens the options menu in English and German, mock and server mode (idle, running, confirming End session) and saves screenshots with `--out=DIR`; exits 1 if the menu doesn't fit the screen.
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
 - `world/landscape.gd`: the terrain features each fork alternative is built around (pond, inflow stream, jump dip, knoll, valley, hills), anchored to the course.
 

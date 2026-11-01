@@ -14,7 +14,9 @@ extends SceneTree
 ##  - the champion never launches while someone else waits;
 ##  - a duel run on a loop races one lap; nobody is bumped (karts pass through each other);
 ##  - the two halves race at the same time, started at different moments;
-##  - Push reaches the racers, and the champion is the best lap.
+##  - Push reaches the racers, and the champion is the best lap;
+##  - on screen: a camera per half, and an empty half says who is next across the half (not one
+##    letter per line).
 
 const Course = preload("res://sim/course.gd")
 const VillageCourse = preload("res://sim/village_course.gd")
@@ -287,7 +289,18 @@ func _process(delta: float) -> bool:
 	var runs := {}
 	for side in rects:
 		runs[side] = sim.by_run.get("run_ui_" + side)
+	if _ui_frames >= 70:  # both halves empty, someone waiting: "Next: Noah" in each, on one line
+		runs = {}
 	hud.update(delta, sim, rects, runs, func(pid: String) -> String: return pid.trim_prefix("ply_"))
+	if _ui_frames >= 72:
+		for side in rects:
+			var idle: Label = hud._halves[side]["idle"]
+			if hud._halves[side]["verdict"].visible:
+				continue  # the last lap's verdict has the half
+			if not idle.visible:
+				problems.append("ui: the empty %s half doesn't say who is next" % side)
+			elif idle.size.x < rects[side].size.x * 0.5 or idle.get_line_count() > 2:
+				problems.append("ui: the empty %s half's text is %.0f px wide on %d lines" % [side, idle.size.x, idle.get_line_count()])
 	if split and get_root().disable_3d != true:
 		problems.append("ui: the main viewport still draws 3D under the split screen")
 	if not split and get_root().disable_3d:
