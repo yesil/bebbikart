@@ -80,12 +80,28 @@ export function createJobs({ game, settings, log = console.log, logError = conso
       game.pushRoster(); // the big screen shows who is being made, and the step
       log(`[job] ${job.id} ${stage}…`);
     };
+    // Progressive: the racer is ready after the design pass; review rounds then improve it in the
+    // background and each better version becomes a new package (unless newer drawings replaced it).
+    const onImproved = async ({ spec, round, critique }) => {
+      const latestJob = game.latestJob(job.playerId);
+      if (!game.players.has(job.playerId) || latestJob?.id !== job.id) {
+        log(`[job] ${job.id} round ${round} dropped: newer drawings replaced this racer`);
+        return;
+      }
+      const manifest = await writePackage(job, { spec });
+      game.improveManifest(job.playerId, manifest);
+      log(`[job] ${job.id} improved (round ${round}): ${JSON.stringify(critique?.scores ?? {})}`);
+    };
     let result;
     let done = false;
     let timer;
     try {
       result = await Promise.race([
-        runDesignJob(input, onStatus, { client, log: (m) => log(`[job] ${job.id} ${m}`) }),
+        runDesignJob(input, onStatus, {
+          client,
+          log: (m) => log(`[job] ${job.id} ${m}`),
+          onImproved,
+        }),
         new Promise((_, rej) => {
           timer = setTimeout(
             () => rej(new Error(`timed out after ${settings.jobTimeoutMs / 1000} s`)),
@@ -123,7 +139,15 @@ export function createJobs({ game, settings, log = console.log, logError = conso
       game.setPlayerStatus(job.playerId, game.manifests.has(job.playerId) ? "ready" : "draft");
       logError(`[job] ${job.id} FAILED after ${secs} s: ${result.error}`);
     }
-    await rm(input.outDir, { recursive: true, force: true }).catch(() => {});
+    const cleanUp = () => rm(input.outDir, { recursive: true, force: true }).catch(() => {});
+    if (result.refining) {
+      // Not awaited: the design slot is free for the next kid while this racer keeps improving.
+      result.refining.then(({ rounds, error }) => {
+        if (error) logError(`[job] ${job.id} refining stopped after ${rounds} round(s): ${error}`);
+        else log(`[job] ${job.id} refined in ${rounds} round(s)`);
+        return cleanUp();
+      });
+    } else await cleanUp();
   }
 
   async function writePackage(job, result) {

@@ -44,8 +44,10 @@ function effortFromEnv(v) {
   return { design, review };
 }
 
-/** Review rounds (render → review → patch). BK_REVIEW_ROUNDS overrides; see the timings above. */
+/** Review rounds (render → review → patch) before the racer is ready, without onImproved. */
 const REVIEW_ROUNDS = Number(process.env.BK_REVIEW_ROUNDS ?? 1);
+/** Background review rounds after the first racer, with onImproved (each ~20 s). */
+const REFINE_ROUNDS = Number(process.env.BK_REFINE_ROUNDS ?? 3);
 
 /** Tries per pass; each retry carries the validation errors. */
 const ATTEMPTS = 3;
@@ -57,7 +59,10 @@ class StageFailed extends Error {}
  * @param {{ jobId: string, playerId: string, characterPath: string, vehiclePath: string, outDir: string,
  *           skipCheck?: boolean, reroll?: boolean, name?: string }} input
  * @param {(s: string) => void} [onStatus] called with each of STAGES, then "ready" or "rejected"
- * @param {{ client?: DesignClient, log?: (msg: string) => void, renderer?: { name: string, render: Function } | null }} [deps]
+ * @param {{ client?: DesignClient, log?: (msg: string) => void, renderer?: { name: string, render: Function } | null,
+ *           onImproved?: (r: { spec: object, round: number, critique: object }) => Promise<void> | void }} [deps]
+ *   onImproved switches to progressive mode: the result is ready after the design pass, and review
+ *   rounds keep improving the racer in the background (result.refining settles when they end).
  *   client defaults to Claude from env (ANTHROPIC_API_KEY). renderer builds the first design in Godot so the critique
  *   sees the real racer; it defaults to the Godot renderer, except with an injected client (tests,
  *   --mock), where the default is none. A failing render fails the job.
@@ -158,71 +163,128 @@ export async function runDesignJob(input, onStatus = () => {}, deps = {}) {
     if (design.rejected)
       return reject(design.rejected.reason, design.rejected.image, design.rejected.seen);
 
-    // 3 · Review: render the racer, show it next to the drawings, apply the reviewer's patch.
-    // REVIEW_ROUNDS > 1 renders the patched racer and reviews it again.
+    // 3 · Review rounds: render the racer, show it next to the drawings, apply the reviewer's patch.
     let current = design.spec;
-    let review = null;
     const fixes = [...design.fixes];
-    for (let round = 1; round <= REVIEW_ROUNDS; round++) {
+    const meta = {
+      jobId: input.jobId,
+      playerId: input.playerId,
+      model: client.name,
+      promptVersion: PROMPT_VERSION,
+      reroll: !!input.reroll,
+      fixes,
+      timingsMs: timings,
+      observations: design.observations,
+      featureMap: design.featureMap,
+      firstDesign: design.spec,
+    };
+    /** One round on `current`; returns the review (patch may be empty). */
+    async function reviewRound(round, reportStages) {
       const tag = round === 1 ? "" : `${round}`;
-      onStatus("critiquing");
+      if (reportStages) onStatus("critiquing");
       let renders = null;
       if (renderer) {
         const started = Date.now();
         try {
           renders = await renderer.render(current);
         } catch (err) {
-          throw new StageFailed(`render for the review failed: ${err.message}`);
+          throw new StageFailed(`render for review ${round} failed: ${err.message}`);
         }
         timings[`render${tag}`] = Date.now() - started;
         log(`render${tag}: ok in ${((Date.now() - started) / 1000).toFixed(1)} s`);
       }
-      const shown = {
-        observations: design.observations,
-        featureMap: design.featureMap,
-        spec: current,
-      };
       const spec = current;
-      review = await pass(
+      const review = await pass(
         `review${tag}`,
         (errors) =>
           buildReviewMessages({
             characterDataUrl: imgs.character.dataUrl,
             vehicleDataUrl: imgs.vehicle.dataUrl,
-            design: shown,
+            design: { observations: design.observations, featureMap: design.featureMap, spec },
             renders,
             previousErrors: errors,
           }),
-        { vision: true, effort: DESIGN_EFFORT.review, onText: () => onStatus("refining") },
+        {
+          vision: true,
+          effort: DESIGN_EFFORT.review,
+          ...(reportStages ? { onText: () => onStatus("refining") } : {}),
+        },
         (v) => validateReview(v, spec),
       );
       current = review.spec;
       fixes.push(...review.fixes);
-      if (review.patch.length === 0) break;
+      return review;
     }
 
-    const file = await writeSpec(input.outDir, name, review.spec, {
-      jobId: input.jobId,
-      playerId: input.playerId,
-      model: client.name,
-      promptVersion: PROMPT_VERSION,
-      reroll: !!input.reroll,
+    // Progressive (deps.onImproved): the first design is the racer, ready now; review rounds run in
+    // the background and hand each better version to onImproved. `refining` settles when they end.
+    if (deps.onImproved) {
+      const file = await writeSpec(input.outDir, name, current, { ...meta, notes: design.notes });
+      onStatus("ready");
+      const refining = (async () => {
+        let rounds = 0;
+        try {
+          for (let round = 1; round <= REFINE_ROUNDS; round++) {
+            const review = await reviewRound(round, false);
+            if (review.patch.length === 0) {
+              log(`review ${round}: nothing left to fix`);
+              break;
+            }
+            rounds = round;
+            const roundMeta = {
+              ...meta,
+              notes: review.notes,
+              critique: { scores: review.scores, issues: review.issues },
+              patch: review.patch,
+            };
+            await writeSpec(input.outDir, name, current, roundMeta);
+            await writeSpec(
+              join(input.outDir, "_meta"),
+              `${name}.round${round}`,
+              current,
+              roundMeta,
+            );
+            await deps.onImproved({ spec: current, round, critique: roundMeta.critique });
+          }
+          return { rounds };
+        } catch (err) {
+          // The racer from the earlier round stays; the failure is reported, not hidden.
+          const error = err instanceof StageFailed ? err.message : String(err?.message ?? err);
+          log(`refining stopped after ${rounds} round(s): ${error}`);
+          return { rounds, error };
+        }
+      })();
+      return {
+        status: "ready",
+        spec: design.spec,
+        fixes: design.fixes,
+        notes: design.notes,
+        timingsMs: timings,
+        file,
+        refining,
+      };
+    }
+
+    // One go (CLI default): REVIEW_ROUNDS rounds before the racer is ready.
+    let review = null;
+    for (let round = 1; round <= REVIEW_ROUNDS; round++) {
+      review = await reviewRound(round, true);
+      if (review.patch.length === 0) break;
+    }
+    const critique = { scores: review.scores, issues: review.issues };
+    const file = await writeSpec(input.outDir, name, current, {
+      ...meta,
       notes: review.notes || design.notes,
-      fixes,
-      timingsMs: timings,
-      observations: design.observations,
-      featureMap: design.featureMap,
-      firstDesign: design.spec,
-      critique: { scores: review.scores, issues: review.issues },
+      critique,
       patch: review.patch,
     });
     onStatus("ready");
     return {
       status: "ready",
-      spec: review.spec,
+      spec: current,
       fixes,
       notes: review.notes || design.notes,
-      critique: { scores: review.scores, issues: review.issues },
+      critique,
       patch: review.patch,
       timingsMs: timings,
       file,

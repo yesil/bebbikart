@@ -80,6 +80,17 @@ test("null optional fields are left out, null required fields still fail", () =>
   expect(clampRacerSpec(raw).ok).toBe(false);
 });
 
+test("a missing extra rotation is repaired to none and reported", () => {
+  const raw = structuredClone(DEFAULT_SPEC);
+  raw.ride.extras = [
+    { shape: "star", socket: "ride_top", offset: [0, 0, 0], scale: [0.3, 0.3, 0.1], color: 1 },
+  ];
+  const r = clampRacerSpec(raw);
+  expect(r.ok).toBe(true);
+  expect(r.spec.ride.extras[0].rotationDeg).toEqual([0, 0, 0]);
+  expect(r.fixes.join()).toContain("rotationDeg missing");
+});
+
 test("clamp reports structural errors it can't fix", () => {
   const raw = structuredClone(DEFAULT_SPEC);
   delete raw.ride;

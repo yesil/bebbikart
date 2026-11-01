@@ -488,6 +488,20 @@ export function createGame({ db, settings, hub, log = console.log }) {
     pushRoster();
     fillHalves(); // waiting in the line for a new look
   }
+  /**
+   * A better version of a racer from the designer's background review rounds: same player, new
+   * package. Status is left alone (the kid may be racing); the game sees the new packageId,
+   * rebuilds and re-renders the racer.
+   */
+  function improveManifest(playerId, manifest) {
+    const p = players.get(playerId);
+    if (!p) return false;
+    manifests.set(playerId, manifest);
+    savePlayer({ ...p, assetPackageId: manifest.packageId });
+    pushPlayer(playerId);
+    pushRoster();
+    return true;
+  }
   function setRender(playerId, key, url) {
     const m = manifests.get(playerId);
     if (!m) throw new ApiError("not_found", "Racer has no asset package yet", 404);
@@ -1172,6 +1186,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     pushRoster,
     setPlayerStatus,
     setManifest,
+    improveManifest,
     setRender,
     // runs
     launch,

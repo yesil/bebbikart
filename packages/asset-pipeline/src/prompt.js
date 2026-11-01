@@ -49,9 +49,6 @@ function schemaText(L = SPEC_LIMITS) {
   return `RacerSpec (all fields required unless marked optional):
 {
   "specVersion": 1,
-  "title": string, max ${L.titleMax} chars, a fun racer name like "The Purple Flash",
-  "tagline": string, max ${L.taglineMax} chars, a funny one-line bio, e.g. "Loves fish, scared of puddles",
-  "personality": ${L.personalityMin}–${L.personalityMax} single words, e.g. ["brave","bouncy"],
   "palette": ${L.paletteMin}–${L.paletteMax} hex colours "#rrggbb" taken from the drawings, most important first,
   "motion": { "style": <motion style>, "energy": ${r(L.motionEnergy)} },
   "sound": { "engine": <engine sound>, "pitch": ${r(L.soundPitch)} (small/cute higher, big/heavy lower), "horn": <horn sound> },
@@ -77,8 +74,13 @@ function schemaText(L = SPEC_LIMITS) {
     "tail": { "style": <tail style>, "color": <palette index> } (optional),
     "extras": [<extra>] max ${L.rideExtrasMax}, ride sockets only,
     "drawingSticker": bool
-  }
+  },
+  "personality": ${L.personalityMin}–${L.personalityMax} single words read from the drawing's face and pose, e.g. ["calm","proud"],
+  "title": string, max ${L.titleMax} chars, chosen LAST: a short name that says what is drawn, e.g. "Silver Braid", "Red Lightning",
+  "tagline": string, max ${L.taglineMax} chars, chosen LAST: one plain line describing this racer as drawn, e.g. "Long silver hair and a winged gold bike"
 }
+The name and tagline come after the design and describe it. They never change it: no joke, theme or story that the
+drawing does not show, and nothing is added, recoloured or reshaped to fit a name.
 <pattern> = { "type": <pattern type>, "color": <palette index>, "scale": ${r(L.patternScale)} (bigger = larger motifs) }
 <extra> = { "shape": <extra shape>, "socket": <socket>, "offset": [x,y,z] within the socket's range,
             "scale": [x,y,z] each ${r(L.extraScale)}, "rotationDeg": [x,y,z] each ${r(L.extraRotationDeg)},
@@ -173,8 +175,8 @@ const DESIGN_RULES = `HOW TO DESIGN A GREAT RACER
    The driver must always be visible.
 4. Exaggerate what the child exaggerated: a huge head = head.size 1.4+, tiny wheels = wheels.size 0.6, a long body =
    stretched scale. Bold, chunky toy proportions beat timid ones.
-5. Personality you can see. Choose eyes, brows, mouth, motion.style and energy, title, personality words and tagline
-   from the drawing's expression, pose and story. A grumpy face gets "angry" eyes, a happy one a "grin" or "tongue",
+5. Personality you can see. Choose eyes, brows, mouth, motion.style and energy and personality words from the
+   drawing's expression and pose (not from a name or a story you invent). A grumpy face gets "angry" eyes, a happy one a "grin" or "tongue",
    a dreamy unicorn "lashes" + "sparkle" + "floaty", a robot "visor" + "metallic" + "jittery".
 6. Sound to match the vehicle and the character: sound.engine from what the vehicle is (kart → putter or vroom,
    horse → hooves, dragon → flap, boat → splash, slime → squelch, rocket shoe → rocket), sound.horn from the character
@@ -182,7 +184,8 @@ const DESIGN_RULES = `HOW TO DESIGN A GREAT RACER
    bell/boing to suit the personality), pitch higher for small cute racers, lower for big heavy ones.
 7. Imagination only for sketches (rule 0): there, add 1–3 finishing touches that fit the drawing's story (a cat's
    kart gets a fish-shaped flag). Say which touches are yours in "featureMap" (feature "touch: …"). A detailed
-   drawing gets no touches: its personality comes from the face, motion, title, tagline and sound.
+   drawing gets no touches: its personality comes from the drawn face, the motion and the sound.
+   Do not invent a theme, character or joke and then design towards it (a "moon princess" does not get moons).
 8. Unique: the drawing makes it unique. Pick parts from what is drawn, not the bland defaults (bean body, round head,
    big_round eyes, smile, toy wheels) unless the drawing really shows them.
 9. Readable from the race camera: fewer, bigger, well-placed extras beat many tiny ones. Use "mirror": true for pairs.
@@ -292,7 +295,9 @@ Check, one by one:
   (ears on the head side, horns on top), not floating, buried or hiding the driver? A side-view drawing shows one
   side only: two drawn wheels on a car mean four wheels.
 - additions: anything on the racer that is not in the drawing; on a detailed drawing remove each one.
-- personality: do face, motion, title, tagline and sound fit the drawing?
+- names: the title and tagline must plainly describe what is drawn. Flag jokes, themes or stories the drawing does not
+  show, and remove anything on the racer that was added to fit the name (moons for a "moon" name, flames for "blaze").
+- personality: do face, motion and sound fit the drawing?
 
 Then write a PATCH: the smallest set of edits that fixes every real problem. Keep what already works. Ops:
   { "op": "set", "path": "character.hair.style", "value": "very_long" }     replace a value (any depth; whole objects too)
@@ -393,9 +398,6 @@ export const EXAMPLES = [
       ],
       spec: {
         specVersion: 1,
-        title: "Tiger Bolt",
-        tagline: "Roars at red lights, purrs at finish lines",
-        personality: ["brave", "cheeky"],
         palette: ["#ff8a1f", "#1f1f1f", "#2f6fe0", "#3fbf4a", "#ffd23f", "#2a8a35"],
         motion: { style: "bouncy", energy: 1.2 },
         sound: { engine: "vroom", pitch: 1.0, horn: "roar" },
@@ -432,6 +434,9 @@ export const EXAMPLES = [
           ],
           drawingSticker: false,
         },
+        personality: ["brave", "cheeky"],
+        title: "Striped Tiger",
+        tagline: "Orange striped tiger in a green kart with giant wheels",
       },
       notes:
         "Stripes on body and head make the tiger read instantly; monster wheels keep the child's giant wheels.",

@@ -306,3 +306,77 @@ describe("applyPatch", () => {
     expect(r.errors).toHaveLength(3);
   });
 });
+
+describe("progressive refinement", () => {
+  test("ready after the design pass, then each better version goes to onImproved", async () => {
+    const out = await mkdtemp(join(tmpdir(), "bk-specs-"));
+    const mock = createMockClient();
+    let reviews = 0;
+    const client = {
+      name: "fake",
+      async complete(messages, opts, ctx) {
+        if (ctx.stage.startsWith("review")) {
+          reviews++;
+          const patch = reviews === 1 ? [{ op: "set", path: "ride.color", value: 0 }] : [];
+          return JSON.stringify({ scores: {}, issues: [], patch, notes: "" });
+        }
+        return mock.complete(messages, opts, ctx);
+      },
+    };
+    const statuses = [];
+    const improved = [];
+    try {
+      const r = await runDesignJob(
+        {
+          jobId: "p",
+          playerId: "t",
+          characterPath: join(SAMPLES, "pair01-character-cat.jpg"),
+          vehiclePath: join(SAMPLES, "pair01-vehicle-kart.jpg"),
+          outDir: out,
+        },
+        (s) => statuses.push(s),
+        { client, onImproved: (x) => improved.push(x) },
+      );
+      expect(r.status).toBe("ready");
+      expect(statuses).toEqual(["looking", "designing", "ready"]);
+      expect(r.spec.ride.color).toBe(MOCK_DESIGNS.pair01.spec.ride.color);
+      expect(await r.refining).toEqual({ rounds: 1 });
+      expect(improved).toHaveLength(1);
+      expect(improved[0].spec.ride.color).toBe(0);
+      expect(reviews).toBe(2); // round 2 found nothing left to fix
+    } finally {
+      await rm(out, { recursive: true, force: true });
+    }
+  });
+
+  test("a failing round stops refining with the reason; the earlier racer stays", async () => {
+    const out = await mkdtemp(join(tmpdir(), "bk-specs-"));
+    const mock = createMockClient();
+    const client = {
+      name: "fake",
+      async complete(messages, opts, ctx) {
+        if (ctx.stage.startsWith("review")) throw new Error("HTTP 529 overloaded");
+        return mock.complete(messages, opts, ctx);
+      },
+    };
+    try {
+      const r = await runDesignJob(
+        {
+          jobId: "q",
+          playerId: "t",
+          characterPath: join(SAMPLES, "pair01-character-cat.jpg"),
+          vehiclePath: join(SAMPLES, "pair01-vehicle-kart.jpg"),
+          outDir: out,
+        },
+        undefined,
+        { client, onImproved: () => {} },
+      );
+      expect(r.status).toBe("ready");
+      const done = await r.refining;
+      expect(done.rounds).toBe(0);
+      expect(done.error).toContain("HTTP 529");
+    } finally {
+      await rm(out, { recursive: true, force: true });
+    }
+  });
+});

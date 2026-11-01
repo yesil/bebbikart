@@ -209,7 +209,9 @@ export const RacerSpecSchema = specSchema("strict", []).superRefine((spec, ctx) 
  */
 export function clampRacerSpec(raw) {
   const fixes = [];
-  const parsed = specSchema("repair", fixes).safeParse(dropNulls(raw, "", fixes));
+  const parsed = specSchema("repair", fixes).safeParse(
+    fillRotations(dropNulls(raw, "", fixes), fixes),
+  );
   if (!parsed.success) {
     return {
       ok: false,
@@ -249,6 +251,21 @@ function dropNulls(v, path, fixes) {
     else out[k] = dropNulls(x, p, fixes);
   }
   return out;
+}
+
+/** A missing extra rotation means "not rotated": filled with [0,0,0] and reported as a fix. */
+function fillRotations(spec, fixes) {
+  for (const part of ["character", "ride"]) {
+    const extras = spec?.[part]?.extras;
+    if (!Array.isArray(extras)) continue;
+    extras.forEach((e, i) => {
+      if (e && typeof e === "object" && e.rotationDeg === undefined) {
+        e.rotationDeg = [0, 0, 0];
+        fixes.push(`${part}.extras.${i}.rotationDeg missing → [0,0,0]`);
+      }
+    });
+  }
+  return spec;
 }
 
 /** Yields [path, ref, setter] for every palette reference in a spec. */

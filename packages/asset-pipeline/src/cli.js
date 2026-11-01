@@ -22,6 +22,8 @@ Options:
   --skip-check    facilitator approved the photos: never reject
   --quiet         don't print the spec JSON
   --jobs <n>      design n racers at the same time (default 1)
+  --progressive   like the server: ready after the design pass, then improve in the background
+                  (each round also saved as _meta/<name>.round<n>.spec.json)
 
 Env: ANTHROPIC_API_KEY (required without --mock), CLAUDE_DESIGN_MODEL (default claude-sonnet-5-5),
      CLAUDE_EFFORT, CLAUDE_PASS_EFFORT (design,review), BK_REVIEW_ROUNDS, BK_GODOT_BIN`;
@@ -41,6 +43,7 @@ async function main(argv) {
       samples: { type: "boolean", default: false },
       quiet: { type: "boolean", default: false },
       jobs: { type: "string", default: "1" },
+      progressive: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
   });
@@ -89,9 +92,27 @@ async function main(argv) {
         skipCheck: values["skip-check"],
       },
       undefined,
-      { client, log: (m) => console.error(`  … ${r.name} ${m}`) },
+      {
+        client,
+        log: (m) => console.error(`  … ${r.name} ${m}`),
+        ...(values.progressive
+          ? {
+              onImproved: ({ round, critique }) =>
+                console.log(
+                  `  ↻ ${r.name}: improved in round ${round} after ${((Date.now() - started) / 1000).toFixed(1)}s (${JSON.stringify(critique.scores)})`,
+                ),
+            }
+          : {}),
+      },
     );
     report(r, result, ((Date.now() - started) / 1000).toFixed(1));
+    if (result.refining) {
+      const { rounds, error } = await result.refining;
+      console.log(
+        `  ${error ? "!" : "✔"} ${r.name}: ${rounds} improvement round(s) in ${((Date.now() - started) / 1000).toFixed(1)}s${error ? ` — stopped: ${error}` : ""}`,
+      );
+      if (error) summary.other++;
+    }
   };
   const report = (r, result, secs) => {
     if (result.status === "ready") {
