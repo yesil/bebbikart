@@ -7,7 +7,7 @@
 #   godot --path apps/game -- --server=ws://host:8080/ws --game-key=KEY   (or env BK_GAME_KEY)
 # Options (after --): --mock (default), --server[=URL], --game-key=KEY, --racers=N, --seed=N,
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
-#   --track=countryside|village (mock mode; with --server the session config picks the track),
+#   --track=countryside|village (mock mode, default village; with --server the session config picks the track),
 #   --screenshot=path.png [--shot-at=SEC], --log=none|summary|full,
 #   --kit (mock mode: fake racers built with the racer kit from res://racer_kit/samples, in turn),
 #   --quality=low|medium|high (default: last pick in the options menu, else medium),

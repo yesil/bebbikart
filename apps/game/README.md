@@ -35,7 +35,7 @@ Game flags (after `--`):
 | `--screenshot=PATH [--shot-at=SEC]` | Save a screenshot (windowed only: headless refuses it; one that can't be saved makes the run exit 1) |
 | `--shots=DIR [--shot-every=SEC]` | A screenshot every SEC seconds (2) while racers are on the track, named by time and racer count, into DIR (made if missing); a frame that can't be saved makes the run exit 1 (windowed only: headless refuses it; the multiplayer harness uses it) |
 | `--overlay` | Start with the debug text overlay shown (H toggles it); by default the halves' HUD is all you see |
-| `--track=countryside\|village` | Mock mode: the course (with `--server` the session config picks it) |
+| `--track=countryside\|village` | Mock mode: the course (default: `village`, the config's default track; with `--server` the session config picks it) |
 | `--quality=low\|medium\|high` | Graphics preset (default: the options menu's last pick, else medium) |
 | `--language=en\|de` | Big-screen language (default: the options menu's last pick, else the config's) |
 
@@ -144,7 +144,7 @@ Current results (2026-10-31, M4 Max, 1920×1080, 20 racers, vsync off): about 10
 
 ## Village circuit (second track)
 
-A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, up the main street to the church hill (fork: ski-jump kicker or round the churchyard), down to the brook (ford through the duck pond or the covered wooden bridge), past the mill, along the south edge (open causeway over the windy meadow or the sheltered Laubengasse), then round the fountain to the line. Same sections and forks as the countryside, so builds, splits and coach tips carry over. A run on the big screen is one lap (contracts §2i) and the best lap ranks; the sim and the tools can race more laps (`lapsPerRun`). The facilitator picks the track in config (`track`); in mock mode use `--track=village`.
+A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, up the main street to the church hill (fork: ski-jump kicker or round the churchyard), down to the brook (ford through the duck pond or the covered wooden bridge), past the mill, along the south edge (open causeway over the windy meadow or the sheltered Laubengasse), then round the fountain to the line. Same sections and forks as the countryside, so builds, splits and coach tips carry over. A run on the big screen is one lap (contracts §2i) and the best lap ranks; the sim and the tools can race more laps (`lapsPerRun`). It is the default track (`config.track`), so a fresh `bun run play` starts on it; the game manager switches track in the options menu, and in mock mode `--track=countryside` races the countryside instead.
 
 | File | What |
 |---|---|

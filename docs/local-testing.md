@@ -96,15 +96,15 @@ bun run sim-players -- --players 8 --url http://localhost:8090 --races 2
 
 ## Village loop (laps)
 
-The game manager picks the track in the game's options menu on the big screen, in one click (phones never set options). Switching track ends the session, stops the karts on the track and starts a new session on the new track with an empty leaderboard; racers stay. **New session** in the same menu starts over on the same track. Scripts can do the same over the admin API (the track can't change while a session runs):
+A fresh start races the village loop: it is the default track (`DEFAULT_CONFIG.track`). The game manager picks the track in the game's options menu on the big screen, in one click (phones never set options). Switching track ends the session, stops the karts on the track and starts a new session on the new track with an empty leaderboard; racers stay. **New session** in the same menu starts over on the same track. Scripts can do the same over the admin API (the track can't change while a session runs):
 
 ```bash
 curl -X POST -H 'x-admin-pin: 1234' localhost:8080/api/admin/session/end
-curl -X PATCH -H 'x-admin-pin: 1234' -H 'content-type: application/json' -d '{"track":"village"}' localhost:8080/api/admin/config
+curl -X PATCH -H 'x-admin-pin: 1234' -H 'content-type: application/json' -d '{"track":"countryside"}' localhost:8080/api/admin/config
 curl -X POST -H 'x-admin-pin: 1234' -H 'content-type: application/json' -d '{}' localhost:8080/api/admin/session/start
 ```
 
-Or set `"track": "village"` in `bebbikart.config.json` at the repo root before starting. On the village each run is one lap: the phone shows the lap timer and the lap's time vs your best lap, and the best lap ranks. `bun run fake-game` races laps too.
+Or set `"track": "countryside"` in `bebbikart.config.json` at the repo root before starting to begin on the countryside instead. On the village each run is one lap: the phone shows the lap timer and the lap's time vs your best lap, and the best lap ranks. `bun run fake-game` races laps too.
 
 ## Claude API key (required, no fallbacks)
 

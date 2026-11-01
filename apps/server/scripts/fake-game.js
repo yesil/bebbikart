@@ -10,7 +10,7 @@ const gameKey = process.env.BK_GAME_KEY ?? "bebbikart-dev";
 const ws = new WebSocket(url);
 const send = (type, payload) => ws.send(JSON.stringify(makeMsg("gameToServer", type, payload)));
 const runs = new Map();
-let config = { track: "countryside" };
+let config; // the session config: from welcome, then config.updated
 
 ws.onopen = () =>
   ws.send(JSON.stringify(makeMsg("phoneToServer", "hello", { role: "game", gameKey })));
