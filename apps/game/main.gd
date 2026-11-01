@@ -15,8 +15,8 @@
 #   sends it to the server so every phone follows it)
 # One way to race (contracts §2i, king of the hill): the racers take turns from a line, one lap
 # each against the clock, two at a time; the screen splits once two people play.
-# Keys: R/W start next rain/wind phase, K toggle forced calm, B boost the newest racer (these
-#   four only in debug runs, not in the release build of `bun run play`),
+# Keys: R/W start next rain/wind phase, K toggle forced calm (these three only in debug runs,
+#   not in the release build of `bun run play`),
 #   H hide overlay, Esc or ⌘, options menu (fullscreen, language, track, session, quit),
 #   ⌃⌘F or F11 fullscreen, ⌘Q quit.
 extends Node3D
@@ -166,7 +166,7 @@ func _ready() -> void:
 		if args.has("kit") and not _load_kit_samples():
 			return
 		net = MockNet.new(config, n_racers, seed_)
-		net.sim = sim  # mock players read their racer to know where pushing is safe
+		net.sim = sim  # mock players read their racer to know where to steer
 		print("BebbiKart mock mode: protocol v%d, %d fake players, seed %d, course %s" % [
 			Protocol.PROTOCOL_VERSION, n_racers, seed_, JSON.stringify(course.all_route_lengths())])
 	net.course = course
@@ -718,10 +718,8 @@ func _handle(msg: Dictionary) -> void:
 			duel_sides.erase(pl["runId"])
 			duel_sides[pl["runId"]] = side  # newest last: the run a half shows
 			duel_hud.set_side(pl["runId"], side)
-		Messages.RUN_BOOST:
-			sim.boost(pl["runId"])
-		Messages.RUN_PUSH:
-			sim.push(pl["runId"], bool(pl.get("on", false)))
+		Messages.RUN_STEER:
+			sim.steer(pl["runId"], pl.get("x"))
 		Messages.QUEUE_UPDATED:
 			queue_state = pl
 			duel_hud.set_queue(pl)
@@ -804,7 +802,7 @@ func _on_racer_ready(player_id: String) -> void:
 
 func _outgoing(type: String, pl: Dictionary) -> void:
 	match type:
-		"sim.boost", "sim.bump", "sim.push":
+		"sim.boost", "sim.bump", "sim.fork":
 			return
 		"sim.removed":
 			var v: Node = views.get(pl["runId"])
@@ -1005,7 +1003,7 @@ func _update_overlay(racing: Array) -> void:
 			timing = I18n.f("overlay.lap", [r.lap + 1, r.lap_ms() / 1000.0,
 				I18n.f("overlay.best", [r.best_lap_ms() / 1000.0]) if r.best_lap >= 0 else ""])
 		lines.append("%s%-6s %-8s %s  %3d%%  %4.1f m/s  ⚡%d%s" % [mark, _nick_of(r.run_id), I18n.t("section." + r.section), timing,
-			int(r.progress() * 100), r.v, r.boosts_left, I18n.t("overlay.boost") if r.boost_t > 0 else ""])
+			int(r.progress() * 100), r.v, r.boosts_used, I18n.t("overlay.boost") if r.boost_t > 0 else ""])
 	if not results.is_empty():
 		lines.append("")
 		lines.append(I18n.t("overlay.recent"))
@@ -1043,7 +1041,7 @@ func _unhandled_input(e: InputEvent) -> void:
 		overlay.get_parent().visible = not overlay.get_parent().visible
 		return
 	if not OS.is_debug_build():
-		return  # the test keys (weather, boost) are off in the release build (bun run play)
+		return  # the test keys (weather) are off in the release build (bun run play)
 	match k.keycode:
 		KEY_R:
 			sim.weather.advance("rain")
@@ -1055,9 +1053,6 @@ func _unhandled_input(e: InputEvent) -> void:
 				sim.weather.force(0.0, 0.0)
 			else:
 				sim.weather.forced = false
-		KEY_B:
-			if follow_run != "":
-				sim.boost(follow_run)
 
 
 func _toggle_fullscreen() -> void:

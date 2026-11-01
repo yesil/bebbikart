@@ -2,8 +2,8 @@ extends CanvasLayer
 ## The halves' HUD (contracts §2i), over world/duel_screen.gd's halves (or the full screen):
 ##  - Each racing half, in its outer top corner (left half top left, right half top right, so the
 ##    crown fits between them): the racer's name on its side's colour (left red, right blue), the
-##    lap time, their own best lap, the record to beat (once there is one), boosts left, and under
-##    it PUSH! while Push is held (SLIDE! after a slide with Push, contracts §2g).
+##    lap time, their own best lap, the record to beat (once there is one), and under it BOOST!
+##    while a boost arrow the kid steered onto surges the kart (contracts §2g).
 ##  - Each half's own start lights (a duel run never shares a countdown), then GO!.
 ##  - A finished lap's verdict in its half for duelResultMs: NEW CHAMPION!, or how far short of
 ##    whose record; a failed lap says oops and why.
@@ -25,7 +25,7 @@ var result_s := 5.0          # how long a verdict stays (config.duelResultMs)
 var bests := {}              # playerId -> best lap in ms this session (main.gd keeps it)
 var _font: SystemFont
 var _queue := {}
-var _halves := {}            # side -> {root, plate, name, time, record, boosts, push, lights, verdict, verdict_big, verdict_small, idle}
+var _halves := {}            # side -> {root, plate, name, time, record, boost, lights, verdict, verdict_big, verdict_small, idle}
 var _crown: PanelContainer
 var _crown_label: Label
 var _line_label: Label
@@ -76,15 +76,12 @@ func _build_half(side: String) -> Dictionary:
 	pbox.add_child(best_l)
 	var record_l := _label("", 20, Color(1, 1, 1, 0.85))
 	pbox.add_child(record_l)
-	var boosts_l := _label("", 20, Color("#ffd23a"))
-	pbox.add_child(boosts_l)
 	if side == "right":  # its plate sits in the right corner: the text hugs the outer edge
 		for l in pbox.get_children():
 			(l as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	var push := _panel(Color("#ff6b35"), 12, Color.WHITE, 3)
-	var push_l := _label("", 34, Color.WHITE)
-	push.add_child(push_l)
-	root.add_child(push)
+	var boost := _panel(Color("#ff6b35"), 12, Color.WHITE, 3)
+	boost.add_child(_label(I18n.t("duel.boost"), 34, Color.WHITE))
+	root.add_child(boost)
 	var lights := _label("", 150, Color("#ff4b4b"))
 	lights.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(lights)
@@ -104,7 +101,7 @@ func _build_half(side: String) -> Dictionary:
 	idle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(idle)
 	return {"root": root, "plate": plate, "name": name_l, "time": time_l, "best": best_l, "record": record_l,
-		"boosts": boosts_l, "push": push, "push_label": push_l, "lights": lights, "verdict": verdict,
+		"boost": boost, "lights": lights, "verdict": verdict,
 		"verdict_big": big, "verdict_small": small, "idle": idle}
 
 
@@ -166,10 +163,10 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		if not on_grid and _was_grid.get(side, "") != "" and r != null and r.state == "racing":
 			_go_until[side] = GO_S
 		_was_grid[side] = r.run_id if r != null and on_grid else ""
-		# The plate: name in the side's colour, lap time, record, boosts.
+		# The plate: name in the side's colour, lap time, record.
 		h["plate"].visible = r != null
 		h["idle"].visible = r == null and not verdict
-		h["push"].visible = false
+		h["boost"].visible = false
 		h["lights"].visible = false
 		if r == null:
 			# Who is next; with nobody waiting the crown at the top already says to press Go.
@@ -193,19 +190,15 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		h["record"].visible = not c.is_empty()  # no record yet: the crown at the top says so
 		if not c.is_empty():
 			h["record"].text = I18n.f("duel.record", [int(c["timeMs"]) / 1000.0]) + "  ·  " + String(c["nickname"])
-		h["boosts"].text = I18n.f("duel.boosts", [r.boosts_left])
 		plate.reset_size()
 		plate.position = Vector2(MARGIN if side == "left" else rect.size.x - plate.size.x - MARGIN, MARGIN)
-		# PUSH! while held; SLIDE! while fishtailing after a slide with Push.
-		var sliding: bool = r.push_recover_t > 0.0
-		if r.pushing or sliding:
-			h["push"].visible = true
-			h["push_label"].text = I18n.t("duel.slide") if sliding else I18n.t("duel.push")
-			(h["push"].get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color("#d64545") if sliding else Color("#ff6b35")
-			var push: PanelContainer = h["push"]
-			push.reset_size()
+		# BOOST! while a boost arrow surges the kart.
+		if r.boost_t > 0.0:
+			var boost: PanelContainer = h["boost"]
+			boost.visible = true
+			boost.reset_size()
 			var y := plate.position.y + plate.size.y + 10.0
-			push.position = Vector2(MARGIN if side == "left" else rect.size.x - push.size.x - MARGIN, y)
+			boost.position = Vector2(MARGIN if side == "left" else rect.size.x - boost.size.x - MARGIN, y)
 		# The half's own start lights, then GO!.
 		var lights: Label = h["lights"]
 		if on_grid:

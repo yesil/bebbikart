@@ -5,19 +5,29 @@ extends RefCounted
 const Tuning = preload("res://sim/tuning.gd")
 const Course = preload("res://sim/course.gd")
 const Route = preload("res://sim/route.gd")
+const Forks = preload("res://sim/forks.gd")
 
 var run_id := ""
 var player_id := ""
 var build: Dictionary
-## The autopilot's manner: "balanced", or "daring" while Push is held (contracts §2g). Builds have
-## no driving style any more.
+## The autopilot's manner (the STYLE_* tables): always "balanced". Builds have no driving style.
 var style := "balanced"
-var pushing := false           # Push held on the phone
-var real_corner_f := 1.0       # this tick's real grip limit as a corner factor (push_wise)
-var push_grace := 0.0          # s left in which a slide still counts as pushed after letting go
-var push_ticks := 0            # ticks raced with Push held
-var push_recover_t := 0.0      # s left fishtailing after a slide with Push (contracts §2g)
 var st := {}  # effect level per ability: stars * Tuning.STAR_STEP (0..5)
+
+# Steering (contracts §2g): the kid's lane from the phone, x in [-1, 1] across the road (+ right),
+# or null with the thumb off the pad. Let go, the kart holds steer_last for steer_hold_t seconds,
+# or until the next fork when it was steered close to one (steer_hold_fork).
+var steer_x = null
+var steer_last := 0.0
+var steer_hold_t := 0.0
+var steer_hold_fork := false
+var steer_ticks := 0           # ticks raced with a thumb on the pad
+var scraping := false          # held at a rail this tick
+## The stars' ways: the path build.routes gives (a fork's entry is the way taken hands off).
+var star_path: Array[String] = []
+var routes_taken := {}         # this lap's ways, {fork id: choice}
+var best_routes := {}          # the best lap's
+var arrows_taken := {}         # boost arrows caught, "segment id:index" -> lap
 
 var state := "queued"  # queued | racing | finished | failed | aborted
 var fail_reason := ""
@@ -74,11 +84,9 @@ var lane := 0.0
 
 # Timers
 var ticks := 0
-var boosts_left := 3
-var boosts_used := 0
+var boosts_used := 0           # boost arrows caught
 var boost_t := 0.0
 var boost_amt := 0.0
-var weak_grip_t := 0.0
 var recover_t := 0.0
 var recover_mult := 1.0
 var bumped_t := 0.0
@@ -135,13 +143,10 @@ func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, c
 	rng.seed = seed_
 	gust_phase = rng.randf_range(0.0, TAU)
 	path = course.path_for(build.get("routes", {}))
-	offsets.resize(path.size())
-	total_len = 0.0
-	for i in path.size():
-		var sg: Dictionary = course.segments[path[i]]
-		segs.append(sg)
-		offsets[i] = total_len
-		total_len += (sg["route"] as Route).length
+	star_path = path.duplicate()
+	for id in path:
+		segs.append(course.segments[id])
+	_reoffset()
 	seg = segs[0]
 	_enter_stretch()
 	course_ref = course
@@ -150,7 +155,6 @@ func setup(p_run_id: String, p_player_id: String, p_build: Dictionary, course, c
 		if not cfg.has("lapsPerRun"):
 			push_error("racer: loop track but config has no lapsPerRun")
 		laps_max = int(cfg.get("lapsPerRun", 0))
-	boosts_left = int(cfg.get("boostsPerRun", 3))
 	top = Tuning.TOP_SPEED_BASE + Tuning.TOP_SPEED_PER_STAR * st["speed"]
 	accel = Tuning.ACCEL_BASE * (1.0 - Tuning.ACCEL_STABILITY_PENALTY * st["stability"]) \
 		* (1.0 - Tuning.ACCEL_HIGH_SPEED_PENALTY * maxf(0.0, st["speed"] - 3))
@@ -202,35 +206,128 @@ func is_active() -> bool:
 	return state == "racing"
 
 
-## Push held down or let go (run.push). Kept while the run waits on the grid.
-func set_push(on: bool) -> void:
-	if pushing and not on:
-		push_grace = Tuning.PUSH_SLIDE_GRACE_S
-	pushing = on
-	style = "daring" if on else "balanced"
+## The kid's thumb on the steering pad (run.steer): a lane x in [-1, 1] across the road, or null
+## when it lets go. Kept while the run waits on the grid.
+func set_steer(x) -> void:
+	if x == null:
+		if steer_x != null:
+			steer_hold_t = Tuning.STEER_HOLD_S
+			steer_hold_fork = fork_ahead_m() <= Tuning.FORK_APPROACH_M
+		steer_x = null
+		return
+	steer_x = clampf(float(x), -1.0, 1.0)
+	steer_last = steer_x
+	steer_hold_t = 0.0
+	steer_hold_fork = false
 
 
-## Top speed now: Push adds a little.
-func top_now() -> float:
-	return top * (1.0 + Tuning.PUSH_TOP_SPEED) if pushing else top
+## The kid has the kart: a thumb on the pad, or its lane still held after letting go.
+func kid_steering() -> bool:
+	return steer_x != null or steer_hold_t > 0.0 or steer_hold_fork
 
 
-## A slide now counts as Push's doing: held, or just let go.
-func push_slide() -> bool:
-	return pushing or push_grace > 0.0
+## How far from the middle the kart's centre can go here (the rails stop it).
+func rail_lim() -> float:
+	return Course.rail_lim(seg)
 
 
-## Bots and the sweep (a kid who knows the track): hold Push unless a bend within reach at the
-## pushed top speed (lag_s of reaction included) is tighter than the kart can really take at that
-## speed, i.e. where pushing would slide.
-func push_wise(lag_s := 0.15) -> bool:
-	if in_water:
-		return false
-	var vp := top * (1.0 + Tuning.PUSH_TOP_SPEED)
-	var decel := Tuning.PUSH_PLAN_DECEL
-	var horizon := vp * vp / (2.0 * decel) + 6.0 + vp * lag_s
-	var target: float = _plan(real_corner_f * Tuning.PUSH_WISE_MARGIN, decel, horizon)[0]
-	return target >= minf(vp, v + 3.0)
+## The lane a full-lock thumb steers to: just inside the rails (further in at a low rail).
+func steer_lim() -> float:
+	var margin := Tuning.STEER_LANE_MARGIN_LOW if bool(seg.get("low_rails", false)) else Tuning.STEER_LANE_MARGIN
+	return rail_lim() - margin
+
+
+## The kart's lane as the phone shows it, -1 (left) .. 1 (right).
+func lane_x() -> float:
+	return clampf(d / steer_lim(), -1.0, 1.0)
+
+
+## Path index of the next fork on this lap, or -1.
+func next_fork_idx() -> int:
+	for i in range(seg_idx + 1, segs.size()):
+		if String(segs[i]["fork"]) != "":
+			return i
+	return -1
+
+
+## Metres to the next fork's junction on this lap (INF when none is left).
+func fork_ahead_m() -> float:
+	var i := next_fork_idx()
+	return INF if i < 0 else offsets[i] - gs()
+
+
+## The way the kart takes at the fork at path index i: hands off, the stars' way; steered, the way
+## on the side of the road the kart is on (the stars' way when it is in the middle).
+func fork_pick(i: int) -> String:
+	var star: Dictionary = course_ref.segments[star_path[i]]
+	var ways: Dictionary = course_ref.forks[star["fork"]]
+	if kid_steering() and absf(d) > Tuning.STEER_DEADBAND:
+		return Forks.pick(ways, 1 if d > 0.0 else -1)
+	return star["choice"]
+
+
+## Take way `choice` at the fork at path index i (the rest of the path is the same either way).
+func _set_way(i: int, choice: String) -> void:
+	var ways: Dictionary = course_ref.forks[segs[i]["fork"]]
+	var id: String = ways[choice]["seg"]
+	if path[i] == id:
+		return
+	path[i] = id
+	segs[i] = course_ref.segments[id]
+	_reoffset()
+
+
+func _reoffset() -> void:
+	offsets.resize(path.size())
+	total_len = 0.0
+	for i in path.size():
+		offsets[i] = total_len
+		total_len += (segs[i]["route"] as Route).length
+
+
+## The fork the phone shows when one is near: {id, inM, left, right, way} (left / right: the way
+## steering to that side takes; way: the one the kart is heading for now), or {}.
+func fork_hint() -> Dictionary:
+	var i := next_fork_idx()
+	if i < 0:
+		return {}
+	var m := offsets[i] - gs()
+	if m > Tuning.FORK_APPROACH_M:
+		return {}
+	var fork: String = segs[i]["fork"]
+	var ways: Dictionary = course_ref.forks[fork]
+	return {"id": fork, "inM": int(round(m)), "left": Forks.pick(ways, -1), "right": Forks.pick(ways, 1),
+		"way": segs[i]["choice"]}
+
+
+## The next boost arrow strip ahead within `reach` metres on this segment or the next, or the one
+## the kart is on: [lateral centre, side], or [] when none.
+func _arrow_ahead(reach: float) -> Array:
+	if not detour.is_empty():
+		return []
+	var base := -ls  # from the kart to the start of segment j
+	for j in range(seg_idx, mini(seg_idx + 2, segs.size())):
+		var sg: Dictionary = segs[j]
+		for b in sg["boosts"]:
+			if base + float(b[1]) >= 0.0 and base + float(b[0]) <= reach:
+				return [Course.arrow_d(sg, int(b[2])), int(b[2])]
+		base += (sg["route"] as Route).length
+	return []
+
+
+## Bots (mock players, the sweep): the lane a kid who knows the track steers to, or null to leave
+## it to the autopilot: onto a boost arrow strip coming up, else towards its stars' way at a fork.
+## `arrows` / `forks`: whether it goes for each at all.
+func bot_lane(arrows := true, forks := true):
+	if arrows:
+		var ar := _arrow_ahead(maxf(12.0, v * 1.5))
+		if not ar.is_empty():
+			return clampf(float(ar[0]) / steer_lim(), -1.0, 1.0)
+	if forks and fork_ahead_m() <= Tuning.FORK_APPROACH_M * 0.7:
+		var i := next_fork_idx()
+		var star: Dictionary = course_ref.segments[star_path[i]]
+		return 0.8 * Forks.lean(course_ref.forks[star["fork"]], star["choice"])
+	return null
 
 
 # ---------------------------------------------------------------- planning
@@ -240,7 +337,7 @@ func push_wise(lag_s := 0.15) -> bool:
 func _plan(corner_f: float, decel: float, horizon := -1.0) -> Array:
 	if horizon < 0.0:
 		horizon = v * v / (2.0 * decel) + 6.0
-	var best := top_now()
+	var best := top
 	var best_ref := top
 	var base_ref := grip_f * float(Tuning.STYLE_CORNER[style])
 	var i := seg_idx
@@ -270,12 +367,24 @@ func _plan(corner_f: float, decel: float, horizon := -1.0) -> Array:
 
 func _replan_lane(sim) -> void:
 	follow_v = -1.0
+	if kid_steering():
+		pass_side = 0.0
+		return  # the thumb sets d_target (step)
 	var hw := half_width() - 0.7
 	# Fresh off the grid, keep the start slot's line: karts released side by side don't swerve
 	# across each other towards their own lines until the group has strung out.
 	var home := lane_home * hw
 	if lap == 0 and gs() < Tuning.START_HOLD_M:
 		home = lane
+	# Near a fork, lean towards the stars' way, so the big screen shows which way it is going.
+	if fork_ahead_m() <= Tuning.FORK_APPROACH_M:
+		var star: Dictionary = course_ref.segments[star_path[next_fork_idx()]]
+		home = Forks.lean(course_ref.forks[star["fork"]], star["choice"]) * Tuning.FORK_LEAN * steer_lim()
+	# Boost arrows are the steering kid's: hands off, keep clear of them.
+	var ar := _arrow_ahead(8.0 + 1.5 * v)
+	if not ar.is_empty():
+		var clear := absf(float(ar[0])) - Tuning.BOOST_ARROW_HALF - Tuning.BOOST_ARROW_CATCH - 0.3
+		home = minf(home, clear) if int(ar[1]) > 0 else maxf(home, -clear)
 	var ahead = sim.racer_ahead(self, 4.0 + 0.6 * v, 2.0)
 	if ahead == null or ahead.v >= v - 0.3:
 		pass_side = 0.0
@@ -312,10 +421,10 @@ func step(sim) -> void:
 	var dt := Tuning.DT
 	ticks += 1
 	stretch_log.back()["ticks"] += 1
-	if pushing:
-		push_ticks += 1
-	push_grace = maxf(0.0, push_grace - dt)
-	push_recover_t = maxf(0.0, push_recover_t - dt)
+	if steer_x != null:
+		steer_ticks += 1
+	else:
+		steer_hold_t = maxf(0.0, steer_hold_t - dt)
 	var weather = sim.weather
 	var rain: float = weather.rain_intensity()
 	if rain > 0.05:
@@ -336,7 +445,6 @@ func step(sim) -> void:
 	boost_t = maxf(0.0, boost_t - dt)
 	if boost_t <= 0.0:
 		boost_amt = 0.0
-	weak_grip_t = maxf(0.0, weak_grip_t - dt)
 	recover_t = maxf(0.0, recover_t - dt)
 	bumped_t = maxf(0.0, bumped_t - dt)
 	noise_t -= dt
@@ -347,6 +455,12 @@ func step(sim) -> void:
 	if replan_t <= 0.0:
 		replan_t = 0.3 * rng.randf_range(0.7, 1.3)
 		_replan_lane(sim)
+		# The way it is heading for at the next fork, so the plan looks down the right road.
+		if fork_ahead_m() <= Tuning.FORK_APPROACH_M:
+			var fi := next_fork_idx()
+			_set_way(fi, fork_pick(fi))
+	if kid_steering():
+		d_target = steer_last * steer_lim()
 
 	# ---- autopilot target speed
 	# Loose surfaces (a segment's "grip", e.g. the muddy farm track) cut grip like rain does.
@@ -357,23 +471,17 @@ func step(sim) -> void:
 	var rain_true := (1.0 - Tuning.RAIN_GRIP_LOSS * wet) * (1.0 - (1.0 - float(seg.get("grip", 1.0))) * bite)
 	# The autopilot knows its tyres: its rain estimate shrinks with grip too (wrong by style).
 	# Mud it sees (the stretch's sign); rain it misjudges.
-	var perceived: float = Tuning.PUSH_RAIN_PERCEIVED if pushing else float(Tuning.RAIN_PERCEIVED_LOSS[style])
+	var perceived: float = Tuning.RAIN_PERCEIVED_LOSS[style]
 	var rain_seen := (1.0 - perceived * wet) * (1.0 - (1.0 - float(seg.get("grip", 1.0))) * bite)
-	var boost_grip := Tuning.BOOST_WEAK_GRIP if weak_grip_t > 0.0 else 1.0
 	plan_t -= 1
 	if plan_t <= 0:
 		plan_t = 3
-		# Spinning wheels after an off-zone tap: the autopilot knows and drives to the lower grip.
-		real_corner_f = grip_f * rain_true * boost_grip * Tuning.SLIP_MARGIN
-		var style_corner: float = Tuning.PUSH_CORNER if pushing else float(Tuning.STYLE_CORNER[style])
-		var corner_f := grip_f * style_corner * rain_seen * boost_grip * noise
-		var p := _plan(corner_f, Tuning.PUSH_PLAN_DECEL if pushing else float(Tuning.STYLE_PLAN_DECEL[style]))
+		var corner_f := grip_f * float(Tuning.STYLE_CORNER[style]) * rain_seen * noise
+		var p := _plan(corner_f, float(Tuning.STYLE_PLAN_DECEL[style]))
 		target_v = p[0]
 		ref_v = p[1]
 	var tv := target_v * (1.0 + boost_amt)
-	if weak_grip_t > 0.0:
-		tv *= Tuning.BOOST_WEAK_DRIVE
-	var top_v := top_now()
+	var top_v := top
 	var cap := top_v * (1.0 + boost_amt)
 	tv = minf(tv, cap)
 	if in_water:
@@ -407,8 +515,6 @@ func step(sim) -> void:
 		tv *= 1.0 - float(Tuning.STYLE_WIND_CAUTION[style]) * minf(1.0, absf(wind_a) / Tuning.WIND_ACCEL)
 	if recover_t > 0.0:
 		tv *= recover_mult
-	if push_recover_t > 0.0:
-		tv *= Tuning.PUSH_SLIDE_RECOVER_MULT
 	if not detour.is_empty():
 		tv *= 0.85  # gone round again by mistake: the racer slows while finding the exit
 	if follow_v >= 0.0:
@@ -434,20 +540,18 @@ func step(sim) -> void:
 	wind_lat = wind_a * exp_now
 	vd += wind_lat * dt
 	if not airborne:
-		var corr_max: float = (Tuning.LAT_CORR_BASE + Tuning.LAT_CORR_PER_GRIP * st["grip"]) * rain_true * boost_grip
+		var corr_max: float = (Tuning.LAT_CORR_BASE + Tuning.LAT_CORR_PER_GRIP * st["grip"]) * rain_true
 		var ak := absf(k)
 		if ak > Tuning.CORNER_MIN_K:
-			var vlim := sqrt(Tuning.CORNER_ACCEL / ak) * grip_f * rain_true * boost_grip * Tuning.SLIP_MARGIN
+			var vlim := sqrt(Tuning.CORNER_ACCEL / ak) * grip_f * rain_true * Tuning.SLIP_MARGIN
 			if v > vlim:
 				slipping = true
-				if push_slide():
-					# Pushed into a bend too hot: the kart fishtails out of it (slower for a while).
-					push_recover_t = Tuning.PUSH_SLIDE_RECOVER_S
 				var excess := v - vlim
 				vd += signf(k) * excess * Tuning.SLIP_DRIFT * dt
 				v -= excess * Tuning.SLIP_SCRUB * dt
 				corr_max *= 0.5
-		var want := clampf((d_target - d) * Tuning.LAT_P, -Tuning.LAT_VMAX, Tuning.LAT_VMAX)
+		var vmax := Tuning.STEER_LAT_VMAX if kid_steering() else Tuning.LAT_VMAX
+		var want := clampf((d_target - d) * Tuning.LAT_P, -vmax, vmax)
 		var corr := clampf((want - vd) * Tuning.LAT_D, -corr_max, corr_max)
 		vd += corr * dt
 		# Bouncy racers wobble in tight bends.
@@ -464,21 +568,20 @@ func step(sim) -> void:
 	if not airborne:
 		wobble = maxf(0.0, wobble - (0.5 + 0.1 * st["stability"]) * dt)
 
-	if bool(seg["rails"]) or bool(seg.get("low_rails", false)):
-		var lim := hw - 0.45
-		if absf(d) > lim:
-			# A low rail (the causeway) stops a kart that reaches it slowly; one blown into it
-			# hard tips over it. Either way the kart never drives through the rail.
-			if bool(seg.get("low_rails", false)) and absf(vd) > Tuning.RAIL_TOPPLE_VD:
-				d = clampf(d, -lim, lim)
-				_fail(sim, "off_track")
-				return
+	# Rails on every road: the kart never leaves it. A low rail (the causeway) stops a kart that
+	# reaches it slowly; one blown into it hard tips over it.
+	scraping = false
+	var lim := rail_lim()
+	if absf(d) > lim:
+		if bool(seg.get("low_rails", false)) and not airborne and absf(vd) > Tuning.RAIL_TOPPLE_VD:
 			d = clampf(d, -lim, lim)
-			vd = 0.0
-			v *= 1.0 - 0.8 * dt
-	elif not airborne and absf(d) > hw + float(seg["edge"]):
-		_fail(sim, "off_track")
-		return
+			_fail(sim, "off_track")
+			return
+		d = clampf(d, -lim, lim)
+		vd = 0.0
+		if not airborne:
+			scraping = true
+			v *= 1.0 - Tuning.RAIL_SCRAPE_DRAG * dt
 
 	# ---- advance along the route
 	var prev_ls := ls
@@ -509,6 +612,14 @@ func step(sim) -> void:
 		ls -= route().length
 		prev_ls = -1.0
 		seg_idx += 1
+		var fork: String = segs[seg_idx]["fork"]
+		if fork != "":
+			# At the junction: the side the kart is on picks the way (hands off, the stars').
+			var choice := fork_pick(seg_idx)
+			_set_way(seg_idx, choice)
+			routes_taken[fork] = choice
+			steer_hold_fork = false
+			sim.emit("sim.fork", {"runId": run_id, "fork": fork, "choice": choice, "steered": kid_steering()})
 		seg = segs[seg_idx]
 		seg_id = seg["id"]
 		_enter_stretch()
@@ -516,11 +627,13 @@ func step(sim) -> void:
 		if new_section != section:
 			_close_split(sim)
 			section = new_section
-		if absf(d) > half_width() - 0.3:
-			d = signf(d) * (half_width() - 0.3)
+		if absf(d) > rail_lim():
+			d = signf(d) * rail_lim()
 	# Water entry splash
 	if not was_water and not airborne and Course.in_ranges(seg["water"], ls):
 		v *= 1.0 - maxf(0.0, Tuning.WATER_ENTRY_DRAG - 0.025 * st["water"])
+	if not airborne:
+		_catch_arrows(sim)
 
 	# ---- vertical
 	var ground: float = sim.course.surface_y(seg, ls)
@@ -579,8 +692,11 @@ func step(sim) -> void:
 		last_progress_tick = ticks
 		var pr := {
 			"runId": run_id, "progress": snappedf(progress(), 0.001), "elapsedMs": elapsed_ms(),
-			"section": section, "boostsLeft": boosts_left,
+			"section": section, "lane": snappedf(lane_x(), 0.01),
 		}
+		var hint := fork_hint()
+		if not hint.is_empty():
+			pr["fork"] = hint
 		if looping:
 			pr["lap"] = lap + 1
 			pr["lapMs"] = lap_ms()
@@ -590,9 +706,6 @@ func step(sim) -> void:
 func _land(sim) -> void:
 	airborne = false
 	vy = 0.0
-	if absf(d) > half_width() + float(seg["edge"]) and not bool(seg["rails"]) and not bool(seg.get("low_rails", false)):
-		_fail(sim, "off_track")
-		return
 	if not jump_air:
 		return
 	jump_air = false
@@ -614,33 +727,28 @@ func _land(sim) -> void:
 			_fail(sim, "flipped")
 
 
-# ---------------------------------------------------------------- boost / bumps
+# ---------------------------------------------------------------- boost arrows / bumps
 
-func boost(sim) -> void:
-	if state != "racing" or boosts_left <= 0:
-		return
-	boosts_left -= 1
-	boosts_used += 1
-	var perfect := Course.in_ranges(seg["boosts"], ls) and not airborne
-	if perfect:
+## Driving over a boost arrow strip (a segment's boosts [a, b, side]) surges the kart, once per
+## strip per lap.
+func _catch_arrows(sim) -> void:
+	var strips: Array = seg["boosts"]
+	for i in strips.size():
+		var b: Array = strips[i]
+		if ls < float(b[0]) or ls > float(b[1]):
+			continue
+		if absf(d - Course.arrow_d(seg, int(b[2]))) > Tuning.BOOST_ARROW_HALF + Tuning.BOOST_ARROW_CATCH:
+			continue
+		var key := "%s:%d" % [seg_id, i]
+		if int(arrows_taken.get(key, -1)) == lap:
+			continue
+		arrows_taken[key] = lap
+		boosts_used += 1
 		boost_amt = Tuning.BOOST_PERFECT_AMT
 		boost_t = Tuning.BOOST_PERFECT_S
 		v *= 1.06
-	else:
-		# Off a zone the wheels spin: no surge, the kart fishtails wide and loses a little time.
-		boost_amt = 0.0
-		boost_t = Tuning.BOOST_WEAK_S
-		weak_grip_t = Tuning.BOOST_WEAK_S
-		if airborne:
-			wobble += 0.4
-		else:
-			var k := route().curv_at(ls)
-			var side := signf(k) if absf(k) > Tuning.CORNER_MIN_K else (1.0 if rng.randf() < 0.5 else -1.0)
-			vd += side * Tuning.BOOST_WEAK_KICK
-			wobble += Tuning.BOOST_WEAK_WOBBLE
-	var kind := "boost_perfect" if perfect else "boost_weak"
-	_add_event({"kind": kind, "section": section, "atMs": elapsed_ms()})
-	sim.emit("sim.boost", {"runId": run_id, "kind": kind})
+		_add_event({"kind": "boost_perfect", "section": section, "atMs": elapsed_ms()})
+		sim.emit("sim.boost", {"runId": run_id, "kind": "boost_perfect"})
 
 
 func got_bumped(other_player: String) -> void:
@@ -662,11 +770,9 @@ func bumped_other(other_player: String) -> void:
 
 func _cause(k: float, exposure: float) -> String:
 	if slipping:
-		return "push_slide" if push_slide() else "slip"
-	if push_recover_t > 0.0:
-		return "push_slide"
-	if weak_grip_t > 0.0:
-		return "boost_weak"
+		return "slip"
+	if scraping:
+		return "scrape"
 	if rain_capped:
 		return "slip"
 	if wind_capped:
@@ -813,12 +919,14 @@ func _summary() -> Dictionary:
 	var p := {
 		"runId": run_id, "section": section, "elapsedMs": elapsed_ms(), "splits": splits.duplicate(),
 		"events": events.duplicate(true), "boostsUsed": boosts_used, "weatherSeen": weather_seen.keys(),
+		"routes": routes_taken.duplicate(),
 	}
 	if looping:
 		p["laps"] = laps.duplicate()
 		if best_lap >= 0:
 			p["bestLapMs"] = best_lap_ms()
 			p["splits"] = best_splits.duplicate()
+			p["routes"] = best_routes.duplicate()
 	return p
 
 
@@ -837,8 +945,10 @@ func _lap_done(sim) -> bool:
 		best_splits = splits.duplicate()
 		best_trace = trace.duplicate()
 		best_stretches = stretches
+		best_routes = routes_taken.duplicate()
 	sim.emit("game.run.lap", {"runId": run_id, "lap": lap, "lapMs": ms, "elapsedMs": elapsed_ms(),
-		"splits": splits.duplicate(), "stretches": stretches, "weatherSeen": lap_weather.keys(), "isBest": is_best})
+		"splits": splits.duplicate(), "stretches": stretches, "weatherSeen": lap_weather.keys(), "isBest": is_best,
+		"routes": routes_taken.duplicate()})
 	if pit_requested or (laps_max > 0 and lap >= laps_max):
 		return true
 	lap_start_tick = ticks
@@ -847,6 +957,7 @@ func _lap_done(sim) -> bool:
 	trace = []
 	stretch_log = []
 	lap_weather = {}
+	routes_taken = {}
 	return false
 
 

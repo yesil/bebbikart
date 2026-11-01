@@ -32,19 +32,24 @@ const STYLE_PASS_OFFSET := {"careful": 2.4, "balanced": 2.0, "daring": 1.6}
 const STYLE_MISJUDGE := {"careful": 0.08, "balanced": 0.15, "daring": 0.25}
 const STYLE_WIND_CAUTION := {"careful": 0.15, "balanced": 0.1, "daring": 0.05}
 
-# Push (contracts §2g): held on the phone, the kart drives "daring" (the STYLE_* daring entries)
-# with more top speed, brakes late and corners as if the road were dry and grippy, past the real
-# limit on tight bends (SLIP_MARGIN), so it slides wide and loses time there; let go, the
-# autopilot drives balanced. A slide up to PUSH_SLIDE_GRACE_S after letting go still counts as
-# pushed (the phone's release reaches the kart 80 to 200 ms late).
-const PUSH_TOP_SPEED := 0.08      # top speed x (1 + this)
-const PUSH_CORNER := 1.4          # corner speed vs. the calm estimate (the real limit is SLIP_MARGIN)
-const PUSH_PLAN_DECEL := 12.0     # how late it brakes for a bend
-const PUSH_RAIN_PERCEIVED := 0.0  # the wet it allows for: none
-const PUSH_SLIDE_GRACE_S := 0.5
-const PUSH_SLIDE_RECOVER_S := 1.0 # after a pushed slide the kart fishtails this long...
-const PUSH_SLIDE_RECOVER_MULT := 0.65  # ...at this share of its target speed
-const PUSH_WISE_MARGIN := 0.97    # bots push while every bend within reach is under this share of the real limit
+# Steering (contracts §2g): the kid's thumb sets the lane, x in [-1, 1] across the road (+ is
+# right, as the big screen shows it). Let go and the kart holds that lane STEER_HOLD_S, then the
+# autopilot takes over again; a thumb that steered within FORK_APPROACH_M of a fork keeps its lane
+# until the fork, and the side the kart is on there picks the way. Hands off, the autopilot
+# leans towards the way its stars like from FORK_APPROACH_M out and takes it.
+const STEER_LANE_MARGIN := 0.15   # m inside the rail limit the full-lock lane sits
+const STEER_LANE_MARGIN_LOW := 0.6  # on a low rail (the causeway), so a gust there doesn't tip it over
+const STEER_HOLD_S := 1.2
+const STEER_LAT_VMAX := 4.5       # m/s sideways towards a steered lane (the autopilot: LAT_VMAX)
+const STEER_DEADBAND := 0.25      # m from the middle at a fork: no side, the stars choose
+const FORK_APPROACH_M := 60.0
+const FORK_LEAN := 0.5            # share of the lane the autopilot leans towards its way
+
+# Rails everywhere: no road lets a kart off. On an open road the kart's centre stops this far
+# inside half_width (its body overhangs onto the shoulder); railed lanes stop it at
+# Course.RAIL_INSET. Scraping along one costs speed.
+const OPEN_RAIL_INSET := 0.2
+const RAIL_SCRAPE_DRAG := 0.8     # share of speed lost per second scraping
 
 # Rain: real grip vs. what the autopilot assumes (it under-reacts, careful less so)
 const RAIN_GRIP_LOSS := 0.22
@@ -69,8 +74,8 @@ const LAT_CORR_PER_GRIP := 0.9
 const LAT_P := 1.4
 const LAT_VMAX := 3.0
 const LAT_D := 5.0
-const OFF_TRACK_MARGIN := 0.9     # soft shoulder before off_track
-const RAIL_TOPPLE_VD := 0.9       # lateral m/s at a low rail that tips the kart over it (off_track)
+const OFF_TRACK_MARGIN := 0.9     # soft shoulder of a road's corridor (Course.corridor_half: keep props out)
+const RAIL_TOPPLE_VD := 0.9       # lateral m/s at a low rail that tips the kart over it (off_track, the one left)
 
 # Water
 # Speed in water, share of top speed: BASE + SPAN x (level / 5)^CURVE, so 10 stars wade at 0.95
@@ -107,14 +112,13 @@ const WIND_EXPOSURE_AIR := 0.7
 const WIND_GUST := 0.5           # +-50% gusting on exposed ground
 const WIND_DRAG := 0.3            # top-speed loss at strength 1, fully exposed, 0 stability
 
-# Boost
+# Boost arrows: glowing strips on one side of the road (a course's boosts, [a, b, side]). A kart
+# that drives over one surges, once per strip per lap. Hands off, the autopilot keeps clear of
+# them: they are the steering kid's.
 const BOOST_PERFECT_AMT := 0.35
 const BOOST_PERFECT_S := 1.2
-const BOOST_WEAK_S := 0.8         # off a zone: wheelspin this long
-const BOOST_WEAK_GRIP := 0.7      # grip while spinning (the autopilot drives to it)
-const BOOST_WEAK_DRIVE := 0.75    # share of its target speed the spinning kart holds
-const BOOST_WEAK_KICK := 0.8      # m/s sideways fishtail, to the outside of a bend
-const BOOST_WEAK_WOBBLE := 0.3
+const BOOST_ARROW_HALF := 1.1     # half width of a strip (m)
+const BOOST_ARROW_CATCH := 0.3    # the kart's centre may be this far outside the strip and still catch it
 
 # Collisions. Each racer is its footprint rectangle along its yaw, as wide and long as its built
 # toy (main.gd measures it). Sizes are clamped so a big hat or wings never make a racer a wall.

@@ -1,7 +1,7 @@
 extends SceneTree
 ## Line check (contracts §2i), headless: the mock players' line, the two halves and the
-## champion, raced in the solo sim (own start lights, no collisions), with Push driven by the mock
-## players (§2g). Each track is raced by one player alone, then by --players who stop coming
+## champion, raced in the solo sim (own start lights, no collisions), steered by the mock players'
+## thumbs (§2g). Each track is raced by one player alone, then by --players who stop coming
 ## after --secs. Then the split screen and HUD are built and driven for a few frames, split and
 ## full screen, so a script error there shows up here and not first on the big screen.
 ##   godot --headless --path apps/game --script res://tools/duel_check.gd [-- --players=6 --secs=420 --track=village]
@@ -14,7 +14,9 @@ extends SceneTree
 ##  - the champion never launches while someone else waits;
 ##  - a duel run on a loop races one lap; nobody is bumped (karts pass through each other);
 ##  - the two halves race at the same time, started at different moments;
-##  - Push reaches the racers, and the champion is the best lap;
+##  - steering reaches the racers: some forks are picked by the thumb, some boost arrows caught;
+##  - nobody leaves the road (the one off_track left is the causeway's low wall, in the wind);
+##  - the champion is the best lap;
 ##  - on screen: a camera per half, and an empty half says who is next across the half (not one
 ##    letter per line).
 
@@ -76,7 +78,10 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 	var finished := 0
 	var failed := 0
 	var laps_ms: Array = []
-	var pushes := 0
+	var steers := 0
+	var steered_forks := 0
+	var forks := 0
+	var arrows := 0
 	var overlap_s := 0.0
 	var staggered := 0           # second-half starts while the other half was already racing
 	var last_queue := {}
@@ -125,11 +130,9 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 						continue
 					side_of[rid] = side
 					on_side[side] = rid
-				Messages.RUN_BOOST:
-					sim.boost(pl["runId"])
-				Messages.RUN_PUSH:
-					pushes += 1
-					sim.push(pl["runId"], bool(pl["on"]))
+				Messages.RUN_STEER:
+					steers += 1
+					sim.steer(pl["runId"], pl["x"])
 				Messages.QUEUE_UPDATED:
 					last_queue = pl
 					var now_split := bool(pl["split"])
@@ -159,7 +162,15 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 					var other := String(on_side["left" if side_of.get(p["runId"]) == "right" else "right"])
 					if other != "" and start_t.has(other) and t - float(start_t[other]) > 0.5:
 						staggered += 1
+				"sim.fork":
+					forks += 1
+					if bool(p["steered"]):
+						steered_forks += 1
+				"sim.boost":
+					arrows += 1
 				Messages.GAME_RUN_FINISHED, Messages.GAME_RUN_FAILED:
+					if type == Messages.GAME_RUN_FAILED and p["reason"] == "off_track" and not String(p["stretch"]) in ["causeway"]:
+						problems.append("%s: %s left the road on %s" % [track, p["runId"], p["stretch"]])
 					for e in p.get("events", []):
 						if String(e["kind"]).begins_with("bumped"):
 							problems.append("%s: %s was bumped in a duel" % [track, p["runId"]])
@@ -190,8 +201,14 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 	var champ: Dictionary = last_queue.get("champion", {})
 	if finished > 0 and (champ.is_empty() or int(champ["timeMs"]) != best):
 		problems.append("%s: champion %s, but the best lap was %d ms" % [track, JSON.stringify(champ), best])
-	if pushes == 0:
-		problems.append("%s: no Push from the mock players" % track)
+	if steers == 0:
+		problems.append("%s: no steering from the mock players" % track)
+	if steered_forks == 0:
+		problems.append("%s: no fork was picked by steering (%d forks)" % [track, forks])
+	if steered_forks == forks:
+		problems.append("%s: every fork was picked by steering: hands off never took the stars' way" % track)
+	if arrows == 0:
+		problems.append("%s: nobody caught a boost arrow" % track)
 	if was_split or not net.line.is_empty() or sim.active_count() > 0:
 		problems.append("%s: %.0f s after everyone left the screen is still %s (%d in line, %d racing)" % [
 			track, t - secs, "split" if was_split else "whole", net.line.size(), sim.active_count()])
@@ -208,11 +225,11 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 		if staggered == 0:
 			problems.append("%s: the halves never started at different times" % track)
 	laps_ms.sort()
-	print("%-11s %d player%s, %.0f s + %.0f s going home: %d runs (%d finished, %d failed), lap median %.2f s, best %.2f s · split %s · both halves racing %.0f%% of the time, %d staggered starts · %.1f push changes per run · champion %s with %d tries" % [
+	print("%-11s %d player%s, %.0f s + %.0f s going home: %d runs (%d finished, %d failed), lap median %.2f s, best %.2f s · split %s · both halves racing %.0f%% of the time, %d staggered starts · %.1f steering changes per run, %d of %d forks steered, %.1f boost arrows per run · champion %s with %d tries" % [
 		track, n_players, "" if n_players == 1 else "s", secs, t - secs, runs, finished, failed,
 		(laps_ms[laps_ms.size() / 2] / 1000.0) if not laps_ms.is_empty() else 0.0, best / 1000.0,
 		("%.0f s to %.0f s" % [split_on_at, split_off_at]) if split_on_at >= 0.0 else "never",
-		100.0 * overlap_s / secs, staggered, float(pushes) / maxf(1.0, runs),
+		100.0 * overlap_s / secs, staggered, float(steers) / maxf(1.0, runs), steered_forks, forks, float(arrows) / maxf(1.0, runs),
 		champ.get("nickname", "-"), int(champ.get("tries", 0))])
 
 
@@ -274,7 +291,9 @@ func _process(delta: float) -> bool:
 		if r != null:
 			views[side].position = r.world_pos()
 	if _ui_frames == 10:
-		sim.push("run_ui_left", true)
+		sim.steer("run_ui_left", 0.8)
+	if _ui_frames == 25:
+		sim.steer("run_ui_left", null)
 	if _ui_frames == 30:
 		hud.result("right", I18n.t("duel.new_champion"), "51.20 s", true)
 	var on_side := {"left": views["left"], "right": views["right"]} if split else {"left": views["left"]}

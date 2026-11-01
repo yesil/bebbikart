@@ -17,6 +17,7 @@ extends RefCounted
 const Route = preload("res://sim/route.gd")
 const Tuning = preload("res://sim/tuning.gd")
 const Course = preload("res://sim/course.gd")
+const Forks = preload("res://sim/forks.gd")
 
 const LOOP := true
 const NAME := "village"
@@ -49,6 +50,8 @@ var free_hill := 0.0
 var free_north := 0.0
 ## {centre: Vector2, radius: float (racing line), s0, s1 (circulating stretch on "bends")}
 var roundabout := {}
+## The forks' ways and the side each leaves on (sim/forks.gd ways()).
+var forks := {}
 
 
 func _init() -> void:
@@ -71,6 +74,9 @@ func _init() -> void:
 		_error("loop misses the start line by %.2f m" % miss)
 	for e in Course.stretch_errors(segments, NAME):
 		_error(e)
+	forks = Forks.ways(self)
+	for e in Forks.errors(forks):
+		_error(e)
 
 
 func _error(msg: String) -> void:
@@ -81,16 +87,15 @@ func _error(msg: String) -> void:
 func _build(hill: float, north: float) -> void:
 	# Dorfplatz: the start/finish straight in front of the inn.
 	var p := _draw_ops(Vector3.ZERO, 0.0, [["S", 14.0]], [[0.0, 0.0]])
-	# Boost out of the square: a boost before the downhill corners after the church sent
-	# racers off the road.
-	_add("start", "hills", "", "", p, 5.0, {"boosts": [[3.0, 12.0]], "stretch": "main_street"})
+	_add("start", "hills", "", "", p, 5.0, {"stretch": "main_street"})
 	# Main street: a gentle S between the chalets, then right up the church hill.
 	var ops := [["S", 3.0], ["A", 22.0, 16.0], ["A", 22.0, -16.0], ["S", 2.0], ["A", 18.0, LEG_CHURCH], ["S", 4.0]]
 	var l1 := 3.0 + deg_to_rad(32.0) * 22.0 + 2.0 + deg_to_rad(LEG_CHURCH) * 18.0 + 4.0
 	p = _draw_ops(_end("start"), _heading("start"), ops, [[0.0, 0.0], [8.0, 0.3], [l1 - 6.0, 2.9], [l1, 3.0]])
 	_add("hills1", "hills", "", "", p, 4.0, {"bumps": [16.0], "stretch": "main_street"})
-	# Ramp fork. Around: a lane peeling left round the churchyard wall. Jump: straight over the
-	# wooden ski-jump kicker into the hay meadow.
+	# Ramp fork. Around: a lane peeling off round the churchyard wall (to the right as the big
+	# screen shows it: sim/forks.gd measures every fork's sides). Jump: straight over the wooden
+	# ski-jump kicker into the hay meadow.
 	var j1 := _end("hills1")
 	var h1 := _heading("hills1")
 	var around_ops := [["S", 3.0], ["A", 20.0, -48.4], ["A", 20.0, 48.4], ["S", 2.0], ["A", 20.0, 48.4], ["A", 20.0, -48.4], ["S", 3.0]]
@@ -108,9 +113,11 @@ func _build(hill: float, north: float) -> void:
 	ops = [["S", hill], ["A", 24.0, half], ["S", 5.0], ["A", 24.0, half], ["S", 8.0]]
 	var l2 := hill + deg_to_rad(half * 2.0) * 24.0 + 13.0
 	p = _draw_ops(_end("ramp_jump"), _heading("ramp_jump"), ops, [[0.0, 3.0], [hill, 3.0], [l2, 0.4]])
-	_add("hills2", "hills", "", "", p, 4.0, {"stretch": "church_hill"})
-	# Pond fork. Bridge: the lane swings left over the inflow brook on a covered wooden bridge.
-	# Water: a stone ford straight through the duck pond.
+	# Boost arrows on the left over the hill top, well before the downhill turns (no arrows on
+	# the start: a kart leaving from an outer slot would drive over them without steering).
+	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[20.0, 32.0, -1]], "stretch": "church_hill"})
+	# Pond fork. Bridge: the lane swings off to the right over the inflow brook on a covered
+	# wooden bridge. Water: a stone ford straight through the duck pond.
 	var j3 := _end("hills2")
 	var h3 := _heading("hills2")
 	var bridge_ops := [["S", 3.0], ["A", 11.0, -75.0], ["A", 20.0, 75.0], ["S", 8.0], ["A", 20.0, 75.0], ["A", 11.0, -75.0], ["S", 3.0]]
@@ -145,8 +152,8 @@ func _build(hill: float, north: float) -> void:
 	p = _draw_ops(_end("ridge"), _heading("ridge"), [["S", 30.0], ["A", 16.0, turn_in], ["S", 14.0]],
 		[[0.0, 3.4], [11.0, 2.3], [13.5, 2.0], [20.0, 2.0], [26.0, 1.6], [30.0 + deg_to_rad(absf(turn_in)) * 16.0, 0.4]])
 	_add("alpbach", "crossing", "", "", p, 3.5, {"exposure": 0.4, "water": [[12.5, 19.5]], "stretch": "alpbach"})
-	# Crossing fork. Sheltered: the arcade lane loops right in among the houses. Exposed: a low
-	# causeway straight over the open meadow, facing the mountains.
+	# Crossing fork. Sheltered: the arcade lane loops off to the left in among the houses.
+	# Exposed: a low causeway straight over the open meadow, facing the mountains.
 	var j4 := _end("alpbach")
 	var h4 := _heading("alpbach")
 	var shelter_ops := [["S", 3.0], ["A", 14.0, 62.0], ["A", 14.0, -62.0], ["S", 6.0], ["A", 14.0, -62.0], ["A", 14.0, 62.0], ["S", 3.0]]
@@ -184,7 +191,7 @@ func _build(hill: float, north: float) -> void:
 		"stretch": "square",
 	}
 	b["miss"] = {"at": at, "seg": "roundabout_loop", "chance": MISS_EXIT_CHANCE}
-	b["boosts"] = [[blen - clampf(north, 4.0, 12.0), blen - 1.0]]
+	b["boosts"] = [[blen - clampf(north, 4.0, 12.0), blen - 1.0, 1]]
 
 
 func _end(id: String) -> Vector3:

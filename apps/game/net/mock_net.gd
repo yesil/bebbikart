@@ -4,9 +4,9 @@ extends RefCounted
 ## messages (envelopes per contracts §7), `send()` takes game -> server messages and logs them.
 ##
 ## Fake players get random builds, join the line (contracts §2i) a few seconds after their
-## last lap, tap Boost (skilled players aim for boost zones using the progress they are sent,
-## others tap at random), hold Push (skilled players let go before the bends, §2g) and sometimes
-## re-roll their build between runs.
+## last lap, steer with their thumb (§2g: skilled players steer onto the boost arrows, everyone
+## picks a way at each fork, now and then the other one than their stars like, and some just
+## wiggle) and sometimes re-roll their build between runs.
 ## Like the server: the two halves each take the first in line when free (left first; only the
 ## left while the screen isn't split), one lap each, with the result held for duelResultMs; the
 ## champion (best lap) waits behind everyone else. The screen splits once two players play and
@@ -30,9 +30,9 @@ var time := 0.0
 var sent_counts := {}
 var finished := 0
 var failed := 0
-## Optional Course (sim/course.gd); skilled mock players use it to aim taps at boost zones.
+## Optional Course (sim/course.gd or sim/village_course.gd).
 var course = null
-## Optional sim (sim/sim.gd): mock players read their racer to know where pushing is safe.
+## Optional sim (sim/sim.gd): mock players read their racer to know where to steer.
 var sim = null
 ## The line, the halves, the champion (contracts §2i).
 var line: Array = []              # player dicts waiting, in the order they joined
@@ -75,14 +75,14 @@ func _init(config: Dictionary, n_players: int, seed_: int) -> void:
 			"status": "ready",
 			"assetBaseUrl": "",
 			"build": build,
-			"skill": rng.randf(),          # boost timing skill 0..1
+			"skill": rng.randf(),          # steering skill 0..1
 			"wait": rng.randf_range(0.2, 6.0),  # first launch staggered over a few seconds
 			"runId": "",
-			"taps": [],
 			"bestTimeMs": 0,
 			"bestAt": 0.0,
-			"pushing": false,
-			"push_t": 0.0,
+			"steer_x": null,
+			"steer_t": 0.0,
+			"minds": {},
 			"sound": _make_sound(),
 		})
 	# roster.updated carries a bare RosterEntry[] (contracts §7).
@@ -121,7 +121,7 @@ func poll(dt: float, _free_slots: int) -> Array:
 	time += dt
 	for p in players:
 		if p["status"] == "racing":
-			_drive_push(p, dt)
+			_drive_steer(p, dt)
 			continue
 		if line.has(p):
 			continue
@@ -139,10 +139,9 @@ func _launch(p: Dictionary, side: String) -> void:
 	var run_id := Messages.make_id("run", rng)
 	p["status"] = "racing"
 	p["runId"] = run_id
-	p["taps"] = []
-	p["hints"] = _boost_hints(p["build"])
-	p["pushing"] = false
-	p["push_t"] = 0.0
+	p["steer_x"] = null
+	p["steer_t"] = 0.0
+	p["minds"] = {}
 	by_run[run_id] = p
 	var payload := {"runId": run_id, "playerId": p["playerId"], "build": p["build"], "side": side}
 	if course != null and course.get("loop") == true:
@@ -150,29 +149,45 @@ func _launch(p: Dictionary, side: String) -> void:
 	inbox.append(Messages.make_msg(Messages.RUN_START, payload))
 
 
-## Push like a kid (contracts §2g): re-decided every few tenths of a second (quicker with more
-## skill). Skilled players let go before the bends where pushing would slide; the rest guess.
-func _drive_push(p: Dictionary, dt: float) -> void:
+## Steer like a kid (contracts §2g), re-decided every few tenths of a second (quicker with more
+## skill): near a fork, hands off (the autopilot takes the stars' way), or steering to the stars'
+## way or the other one; else onto the boost arrows coming up (skilled players more often); the
+## less skilled wiggle now and then. Otherwise the thumb is off the pad and the autopilot drives.
+func _drive_steer(p: Dictionary, dt: float) -> void:
 	if sim == null:
 		return
 	var r = sim.by_run.get(p["runId"])
 	if r == null:
 		return
-	p["push_t"] = float(p["push_t"]) - dt
-	if float(p["push_t"]) > 0.0:
+	p["steer_t"] = float(p["steer_t"]) - dt
+	if float(p["steer_t"]) > 0.0:
 		return
 	var skill := float(p["skill"])
-	p["push_t"] = lerpf(0.5, 0.12, skill) + rng.randf() * 0.15
-	var want: bool
-	if r.state != "racing":
-		want = rng.randf() < 0.3 + 0.6 * skill  # some hold it down on the grid already
-	elif rng.randf() < 0.45 + 0.5 * skill:
-		want = r.push_wise(lerpf(0.4, 0.12, skill))
-	else:
-		want = rng.randf() < 0.55
-	if want != bool(p["pushing"]):
-		p["pushing"] = want
-		inbox.append(Messages.make_msg(Messages.RUN_PUSH, {"runId": p["runId"], "on": want}))
+	p["steer_t"] = lerpf(0.5, 0.15, skill) + rng.randf() * 0.15
+	var x = null
+	if r.state == "racing":
+		var hint: Dictionary = r.fork_hint()
+		var minds: Dictionary = p["minds"]
+		if not hint.is_empty() and not minds.has(hint["id"]):
+			# Hands off (the stars' way), steers to the stars' way, or to the other one.
+			var roll := rng.randf()
+			minds[hint["id"]] = "off" if roll < 0.35 else ("stars" if roll < 0.75 else "other")
+		if not hint.is_empty() and int(hint["inM"]) < 40 and minds[hint["id"]] != "off":
+			x = r.bot_lane(false, true)
+			if x != null and minds[hint["id"]] == "other":
+				x = -float(x)
+		elif not hint.is_empty() and minds[hint["id"]] == "off":
+			x = null
+		else:
+			x = r.bot_lane(rng.randf() < 0.3 + 0.7 * skill, false)
+		if x == null and rng.randf() < 0.15 * (1.0 - skill):
+			x = rng.randf_range(-1.0, 1.0)
+	if x != null:
+		x = snappedf(float(x), 0.01)
+	if x == p["steer_x"]:
+		return
+	p["steer_x"] = x
+	inbox.append(Messages.make_msg(Messages.RUN_STEER, {"runId": p["runId"], "x": x}))
 
 
 # ---------------------------------------------------------------- the line (contracts §2i)
@@ -288,54 +303,16 @@ func _duel_done(p: Dictionary, run_id: String) -> void:
 		record["tries"] = int(record["tries"]) + 1
 
 
-## Boost zones as progress fractions [from, to] along this build's path.
-func _boost_hints(build: Dictionary) -> Array:
-	var out: Array = []
-	if course == null:
-		return out
-	var path: Array[String] = course.path_for(build["routes"])
-	var total: float = course.path_length(path)
-	var acc := 0.0
-	for id in path:
-		var seg: Dictionary = course.segments[id]
-		for z in seg["boosts"]:
-			out.append([(acc + float(z[0])) / total, (acc + float(z[1])) / total])
-		acc += float(seg["route"].length)
-	return out
-
-
-func _tap(p: Dictionary) -> void:
-	inbox.append(Messages.make_msg(Messages.RUN_BOOST, {"runId": p["runId"]}))
-
-
 ## Game -> server.
 func send(type: String, payload: Dictionary) -> void:
 	var msg := Messages.make_msg(type, payload)
 	sent_counts[type] = int(sent_counts.get(type, 0)) + 1
 	var p: Dictionary = by_run.get(String(payload.get("runId", "")), {})
 	match type:
-		Messages.GAME_RUN_PROGRESS:
-			if not p.is_empty():
-				_maybe_boost(p, float(payload["progress"]), int(payload["boostsLeft"]))
 		Messages.GAME_RUN_FINISHED, Messages.GAME_RUN_FAILED:
 			if not p.is_empty():
 				_run_over(p, type == Messages.GAME_RUN_FINISHED, payload)
 	_log(msg)
-
-
-func _maybe_boost(p: Dictionary, progress: float, boosts_left: int) -> void:
-	if boosts_left <= 0:
-		return
-	var skill := float(p["skill"])
-	# Skilled players tap inside boost zones; everyone else taps at random now and then.
-	for z in p.get("hints", []):
-		if progress >= float(z[0]) and progress <= float(z[1]) and not (p["taps"] as Array).has(z):
-			(p["taps"] as Array).append(z)
-			if rng.randf() < skill:
-				_tap(p)
-				return
-	if rng.randf() < 0.012 * (1.0 - skill):
-		_tap(p)
 
 
 func _run_over(p: Dictionary, ok: bool, payload: Dictionary) -> void:

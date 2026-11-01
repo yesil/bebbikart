@@ -107,18 +107,12 @@ func on_grid(run_id: String) -> bool:
 	return grid_slot.has(run_id)
 
 
-func boost(run_id: String) -> void:
+## The kid's thumb on the phone's steering pad (run.steer, contracts §2g): a lane x in [-1, 1]
+## across the road (+ right), or null when it lets go. A run that has just ended may still get one.
+func steer(run_id: String, x) -> void:
 	var r: Racer = by_run.get(run_id)
 	if r != null:
-		r.boost(self)
-
-
-## Push held down or let go on the phone (run.push, contracts §2g).
-func push(run_id: String, on: bool) -> void:
-	var r: Racer = by_run.get(run_id)
-	if r != null and r.pushing != on:
-		r.set_push(on)
-		emit("sim.push", {"runId": run_id, "on": on})
+		r.set_steer(x)
 
 
 ## Loop tracks: finish the run when the racer next crosses the line ("pit in").
@@ -372,10 +366,9 @@ static func _box_contact(d: Vector2, fa: Vector2, ha: Vector2, fb: Vector2, hb: 
 	return [depth, Vector3(axis.x, 0.0, axis.y)]
 
 
-## Racer r's lateral position after a sideways push of dd, kept on the road (inside where a
-## rail would stop it) unless it was already further out.
+## Racer r's lateral position after a sideways push of dd, kept inside the rails.
 func _shove(r: Racer, dd: float) -> float:
-	var lim := maxf(r.half_width() - 0.45, absf(r.d))
+	var lim := maxf(r.rail_lim(), absf(r.d))
 	return clampf(r.d + dd, -lim, lim)
 
 

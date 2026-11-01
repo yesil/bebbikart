@@ -6,6 +6,7 @@ extends RefCounted
 
 const Route = preload("res://sim/route.gd")
 const Tuning = preload("res://sim/tuning.gd")
+const Forks = preload("res://sim/forks.gd")
 
 ## Length of the plank wedge from the jump pit up onto the landing road.
 const LANDING_WEDGE := 1.6
@@ -17,10 +18,12 @@ const RAIL_INSET := 0.45
 
 ## Segment: {
 ##   id, section, fork ("" or fork id), choice, route (Route), half_width,
-##   edge (extra metres before off_track), rails (bool: d is clamped, no off_track),
-##   low_rails (bool, optional: clamped too, but a kart hitting them with |vd| > RAIL_TOPPLE_VD
+##   edge (soft shoulder of the corridor props keep out of), rails (bool: a fenced lane, the kart
+##   stops RAIL_INSET inside half_width; every other road stops it Tuning.OPEN_RAIL_INSET inside),
+##   low_rails (bool, optional: fenced too, but a kart hitting them with |vd| > RAIL_TOPPLE_VD
 ##   tips over: off_track),
-##   exposure (0..1 wind), water: [[a,b]], boosts: [[a,b]], bumps: [s...],
+##   exposure (0..1 wind), water: [[a,b]], boosts: [[a, b, side]] (boost arrows on side -1 left
+##   or 1 right, Course.arrow_d), bumps: [s...],
 ##   ramp: {} or {kick_a, lip_s, lip_h, land_s, pit_depth}, offset (route s at segment start; per path),
 ##   stretch (the stretch it belongs to: Protocol.TRACK_STRETCHES[NAME], contracts §2d)
 ## }
@@ -30,6 +33,8 @@ var segments := {}
 var ordered_ids: Array[String] = []
 ## Problems found while building (a segment without a known stretch). The sim refuses to race.
 var errors: PackedStringArray = []
+## The forks' ways and the side each leaves on (sim/forks.gd ways()).
+var forks := {}
 
 
 func _init() -> void:
@@ -46,7 +51,8 @@ func _init() -> void:
 		["A", 18.0, -15.0], ["A", 18.0, 30.0], ["A", 18.0, -15.0]],
 		[[0.0, 0.0], [14.0, 1.0], [28.0, 0.4], [40.0, 0.0]])
 	_add("hills1", "hills", "", "", p, 4.0, {"bumps": [12.0, 26.0], "stretch": "bumpy_road"})
-	# Jump: straight over a muddy dip. Around: an S out to the right round a knoll and back.
+	# Jump: straight over a muddy dip. Around: an S out round a knoll and back (to the left as
+	# the big screen shows it; sim/forks.gd measures every fork's sides).
 	# The kicker starts only once the around lane is clear of the jump road (_split_s).
 	var ramp_out := [["S", 3.0], ["A", 20.0, 48.4], ["A", 20.0, -48.4], ["S", 2.0], ["A", 20.0, -48.4], ["A", 20.0, 48.4], ["S", 3.0]]
 	var j1 := _end("hills1")
@@ -59,7 +65,7 @@ func _init() -> void:
 	})
 	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {"stretch": "knoll_road"})
 	p = _draw("hills2", _end("ramp_jump"), [["S", 25.0]], [[0.0, 0.0], [13.0, 1.0], [25.0, 0.4]])
-	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[10.0, 20.0]], "stretch": "hilltop"})
+	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[10.0, 20.0, 1]], "stretch": "hilltop"})
 	# Water: a shallow stone ford straight through the pond. Bridge: a fenced lane that swings
 	# west round the pond and crosses its inflow stream on a humped stone bridge.
 	var j3 := _end("hills2")
@@ -77,7 +83,7 @@ func _init() -> void:
 		{"water": [[fs.x + 1.0, fs.y - 1.0]], "stretch": "ford"})
 	_add("pond_bridge", "pond", "pond", "bridge", bridge_pts, 2.8, {"rails": true, "stretch": "stone_bridge"})
 	# Exposed: a low causeway straight across a shallow valley. Sheltered: a hedged lane that
-	# loops right round the valley head. The causeway only starts to climb once the lane has
+	# loops off to the left round the valley head. The causeway only starts to climb once the lane has
 	# split off, so the two never overlap at different heights.
 	var j4 := _end("pond_water")
 	var shelter_ops := [["S", 3.0], ["A", 14.0, 64.6], ["A", 14.0, -64.6], ["S", 7.0], ["A", 14.0, -64.6], ["A", 14.0, 64.6], ["S", 3.0]]
@@ -94,8 +100,10 @@ func _init() -> void:
 	_add("bends", "bends", "", "", p, 3.5, {"stretch": "rainbow_bends"})
 	var b: Dictionary = segments["bends"]
 	var bl2: float = (b["route"] as Route).length
-	b["boosts"] = [[bl2 - 18.0, bl2 - 8.0]]
+	b["boosts"] = [[bl2 - 18.0, bl2 - 8.0, -1]]
 	errors.append_array(stretch_errors(segments, NAME))
+	forks = Forks.ways(self)
+	errors.append_array(Forks.errors(forks))
 
 
 ## Control points every metre along straights ("S", length) and arcs ("A", radius, degrees;
@@ -213,6 +221,20 @@ func corridor_at(p: Vector2, margin := 0.0, except := "") -> String:
 					t += 0.05
 			s += 1.0
 	return ""
+
+
+## How far from the middle a kart's centre can go on a segment: the rails stop it there (a fenced
+## lane at RAIL_INSET inside its half width, any other road at Tuning.OPEN_RAIL_INSET).
+static func rail_lim(seg: Dictionary) -> float:
+	if bool(seg["rails"]) or bool(seg.get("low_rails", false)):
+		return float(seg["half_width"]) - RAIL_INSET
+	return float(seg["half_width"]) - Tuning.OPEN_RAIL_INSET
+
+
+## Lateral centre of a boost arrow strip on `side` (-1 left, 1 right): its outer edge 0.2 m
+## beyond where the rails stop a kart's centre, so a kart steered fully over catches it.
+static func arrow_d(seg: Dictionary, side: int) -> float:
+	return float(side) * (rail_lim(seg) + 0.2 - Tuning.BOOST_ARROW_HALF)
 
 
 ## Half width of the baked road surface (shoulder and gutter lip included).
