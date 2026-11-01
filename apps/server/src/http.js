@@ -134,6 +134,7 @@ export function createHttp({ game, jobs, settings }) {
     ],
     ["POST", "/api/players/me/runs", (req) => go(me(req).id)],
     ["DELETE", "/api/players/me/queue", (req) => json(game.leaveLine(me(req).id))],
+    ["DELETE", "/api/players/me/race", (req) => json(game.leaveRace(me(req).id))],
     [
       "GET",
       "/api/players/me/runs",

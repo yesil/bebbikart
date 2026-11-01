@@ -136,6 +136,10 @@ const en = {
     forkIn: (m) => `Fork in ${m} m`,
     forkHint: "Be on that side of the road when you get there!",
     arrowsHint: "Drive over the glowing arrows for a boost!",
+    leave: "✕ Leave the race",
+    leaveAsk: "Tap again to leave",
+    leaving: "Leaving…",
+    left: "You left the race. Join the line again whenever you like!",
   },
   result: {
     oops: "Oops!",
@@ -417,6 +421,10 @@ const de = {
     forkIn: (m) => `Gabelung in ${m} m`,
     forkHint: "Sei auf dieser Strassenseite, wenn du dort ankommst!",
     arrowsHint: "Fahr über die Leuchtpfeile für einen Boost!",
+    leave: "✕ Rennen verlassen",
+    leaveAsk: "Nochmal tippen zum Verlassen",
+    leaving: "Verlasse…",
+    left: "Du hast das Rennen verlassen. Stell dich wieder an, wann du willst!",
   },
   result: {
     oops: "Hoppla!",

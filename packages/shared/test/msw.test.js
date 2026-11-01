@@ -33,6 +33,13 @@ test("state, build and launch", async () => {
   expect(QueueStateSchema.safeParse(await go.json()).success).toBe(true);
   const again = await api("/api/players/me/runs", { method: "POST" });
   expect((await again.json()).error.code).toBe("run_in_progress");
+
+  // Leave the race: back in the garage, and Go works again.
+  const left = await api("/api/players/me/race", { method: "DELETE" });
+  expect(QueueStateSchema.safeParse(await left.json()).success).toBe(true);
+  const none = await api("/api/players/me/race", { method: "DELETE" });
+  expect((await none.json()).error.code).toBe("not_found");
+  expect((await api("/api/players/me/runs", { method: "POST" })).status).toBe(202);
 });
 
 test("admin routes need the PIN", async () => {

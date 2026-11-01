@@ -422,6 +422,23 @@ export function createGame({ db, settings, hub, log = console.log }) {
     pushPlayer(playerId);
     return b;
   }
+  /**
+   * Leave the race (the phone, any time): the kart leaves the track and the lap doesn't count
+   * (aborted, run.ended to the phone), or out of the line. The racer stays in the game, back in
+   * the garage, and can join the line again; their half takes the next in line at once.
+   */
+  function leaveRace(playerId) {
+    const p = players.get(playerId);
+    if (!p) throw new ApiError("not_found", "No such racer", 404);
+    const run = activeRun(playerId);
+    const waited = dropFromLine(playerId);
+    if (!run && !waited) throw new ApiError("not_found", "You're not racing or in the line", 404);
+    if (run) {
+      log(`[run] ${run.id} left by "${p.nickname}"`);
+      abortRun(run, "player_left");
+    } else log(`[duel] "${p.nickname}" left the line`);
+    return queueState();
+  }
   /** Quit (the phone) or delete (admin): out of any race or queue, off the big screen and the
    *  leaderboard, and the phone goes back to the join screen. */
   function removePlayer(playerId, reason = "player_deleted") {
@@ -1164,6 +1181,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     onGameMessage,
     // the line
     leaveLine,
+    leaveRace,
     gameChanged,
     queueState,
     fillHalves,

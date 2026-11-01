@@ -1331,3 +1331,30 @@ button.danger {
   font-size: 1.1rem;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
 }
+
+/* run: its half's badge and Leave the race (two taps: the first one asks) */
+.run-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.run-top .side-badge {
+  align-self: auto;
+}
+button.leave-race {
+  width: auto;
+  flex: none;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--muted);
+  border: 2px solid var(--line);
+}
+button.leave-race.ask {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}

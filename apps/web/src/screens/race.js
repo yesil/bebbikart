@@ -46,6 +46,7 @@ export function Run({ ctx }) {
   }, [counting, left <= 0]);
 
   const steer = useSteering(live, send);
+  const leave = useLeave(live.runId, ctx.dispatch);
   const lane = live.lane ?? 0;
   const fork = live.fork;
   // A little buzz when the way the kart is heading for at the fork changes.
@@ -55,7 +56,17 @@ export function Run({ ctx }) {
 
   return html`
     <div class=${`run steer-surface ${steer.x !== null ? "steering" : ""}`} ...${steer.handlers}>
-      ${side ? html`<div class=${`side-badge side-${side}`}>${COPY.duel.side[side]}</div>` : null}
+      <div class="run-top">
+        ${side ? html`<div class=${`side-badge side-${side}`}>${COPY.duel.side[side]}</div>` : html`<div></div>`}
+        <button
+          class=${`leave-race ${leave.state}`}
+          disabled=${leave.state === "sending"}
+          onPointerDown=${(e) => e.stopPropagation()}
+          onClick=${leave.tap}
+        >
+          ${leave.state === "ask" ? COPY.run.leaveAsk : leave.state === "sending" ? COPY.run.leaving : COPY.run.leave}
+        </button>
+      </div>
       ${counting ? html`<div class="get-ready">${COPY.run.getReady}</div>` : null}
       <div class=${`timer ${counting ? `count ${left > 0 ? "" : "go"}` : ""}`}>
         ${started ? secs(loop ? (live.lapMs ?? live.elapsedMs) : live.elapsedMs) : counting ? (left > 0 ? left : COPY.run.go) : COPY.run.queued}
@@ -85,6 +96,35 @@ export function Run({ ctx }) {
       <p class="hint center">${COPY.run.arrowsHint}</p>
     </div>
   `;
+}
+
+/**
+ * Leave the race, any time (contracts §6, DELETE /api/players/me/race): the kart leaves the
+ * track, the lap doesn't count, the phone goes back to the garage. The whole screen steers, so a
+ * thumb can brush the button: the first tap asks, a second within 3 s leaves.
+ * Returns { state: "" | "ask" | "sending", tap }.
+ */
+function useLeave(runId, dispatch) {
+  const [state, setState] = useState("");
+  useEffect(() => {
+    if (state !== "ask") return;
+    const t = setTimeout(() => setState(""), 3000);
+    return () => clearTimeout(t);
+  }, [state]);
+  async function tap(e) {
+    e.stopPropagation();
+    if (state === "") return setState("ask");
+    if (state !== "ask") return;
+    setState("sending");
+    try {
+      await api("DELETE", "/api/players/me/race");
+      dispatch({ type: "leftRace", runId });
+    } catch (err) {
+      dispatch({ type: "toast", text: errorText(err) });
+      setState("");
+    }
+  }
+  return { state, tap };
 }
 
 /**

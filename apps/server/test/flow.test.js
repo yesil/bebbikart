@@ -955,3 +955,75 @@ test("the big screen starts over: a new session or a new track stops the karts o
   game.ws.close();
   phone.ws.close();
 }, 40000);
+
+test("leave the race: the kart stops, the lap doesn't count, the racer stays and can race again", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey });
+  await game.start();
+  await game.wait("welcome");
+  const dev = await fetch(`${base}/api/device`, { method: "POST" });
+  const cookie = dev.headers.get("set-cookie").split(";")[0];
+  const created = await fetch(`${base}/api/players`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ nickname: "Leaver" }),
+  });
+  const playerId = (await created.json()).id;
+  const phone = client({ cookie }, { role: "phone" });
+  await phone.start();
+  await phone.wait("welcome");
+  const form = new FormData();
+  for (const [k, f] of [
+    ["character", "pair02-character-robot.jpg"],
+    ["vehicle", "pair02-vehicle-rocket-shoe.jpg"],
+  ])
+    form.append(k, new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }));
+  await fetch(`${base}/api/players/me/drawings`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  await phone.wait("player.updated", (p) => p.status === "ready", 20000);
+  const state = async () => (await (await fetch(`${base}/api/state`)).json()).session;
+  if ((await state()).status !== "running") {
+    game.send("gameToServer", "game.session.start", {});
+    await game.wait("session.updated", (s) => s.status === "running");
+  }
+  const leave = () =>
+    fetch(`${base}/api/players/me/race`, { method: "DELETE", headers: { cookie } });
+
+  // Not racing, not waiting: nothing to leave.
+  const nothing = await leave();
+  expect(nothing.status).toBe(404);
+  expect((await nothing.json()).error.code).toBe("not_found");
+
+  // Racing: the kart leaves the track, the lap doesn't count.
+  phone.send("phoneToServer", "phone.go", {});
+  const start = await game.wait("run.start", (p) => p.playerId === playerId);
+  const runId = start.payload.runId;
+  game.send("gameToServer", "game.run.started", { runId });
+  await phone.wait("run.started", (p) => p.run.id === runId);
+  const left = await leave();
+  expect(left.status).toBe(200);
+  expect((await left.json()).racing.some((r) => r.runId === runId)).toBe(false);
+  const abort = await game.wait("run.abort", (p) => p.runId === runId);
+  expect(abort.payload.reason).toBe("player_left");
+  const ended = await phone.wait("run.ended", (p) => p.run.id === runId);
+  expect(ended.payload.run.outcome).toBe("aborted");
+  expect(ended.payload.isPersonalBest).toBe(false);
+  const lb = await (await fetch(`${base}/api/leaderboard`)).json();
+  expect(lb.some((e) => e.playerId === playerId)).toBe(false);
+
+  // Still in the game: ready, and Go races again on the freed half.
+  const me = await (await fetch(`${base}/api/state`, { headers: { cookie } })).json();
+  expect(me.me.status).toBe("ready");
+  expect(me.me.currentRun).toBeUndefined();
+  phone.send("phoneToServer", "phone.go", {});
+  const again = await game.wait("run.start", (p) => p.playerId === playerId && p.runId !== runId);
+  expect(again.payload.side).toBe(start.payload.side);
+  // Leaving before the lights go green works the same way.
+  expect((await leave()).status).toBe(200);
+  const abort2 = await game.wait("run.abort", (p) => p.runId === again.payload.runId);
+  expect(abort2.payload.reason).toBe("player_left");
+  game.ws.close();
+  phone.ws.close();
+}, 40000);

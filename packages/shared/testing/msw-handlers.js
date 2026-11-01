@@ -71,6 +71,7 @@ export function mockHandlers({
     return HttpResponse.json(player.build);
   };
 
+  const laps = new Map(); // runId -> the timer that finishes it
   const launch = (player) => {
     if (state.session.status !== "running")
       return fail(409, "session_not_running", "Session is not running");
@@ -87,34 +88,50 @@ export function mockHandlers({
     };
     player.currentRun = run;
     // Finish the run after ~30 s so the phone can be built against the full loop.
-    setTimeout(() => {
-      const elapsedMs = 28_000 + Math.round(Math.random() * 6_000);
-      const done = {
-        ...run,
-        status: "done",
-        outcome: "finished",
-        startedAt: run.queuedAt,
-        endedAt: now(),
-        elapsedMs,
-        splits: { hills: 7_500, pond: elapsedMs - 22_500, crossing: 7_400, bends: 7_600 },
-        events: [],
-        boostsUsed: 2,
-        weatherSeen: [],
-        routes: { ...player.build.routes }, // hands off: the stars' ways (§2g)
-      };
-      player.currentRun = undefined;
-      player.lastRun = done;
-      state.runs.push(done);
-      if (player.bestTimeMs === undefined || elapsedMs < player.bestTimeMs) {
-        player.bestTimeMs = elapsedMs;
-        player.bestRunId = done.id;
-        player.bestRun = done;
-      }
-    }, 30_000);
+    laps.set(
+      run.id,
+      setTimeout(() => {
+        const elapsedMs = 28_000 + Math.round(Math.random() * 6_000);
+        const done = {
+          ...run,
+          status: "done",
+          outcome: "finished",
+          startedAt: run.queuedAt,
+          endedAt: now(),
+          elapsedMs,
+          splits: { hills: 7_500, pond: elapsedMs - 22_500, crossing: 7_400, bends: 7_600 },
+          events: [],
+          boostsUsed: 2,
+          weatherSeen: [],
+          routes: { ...player.build.routes }, // hands off: the stars' ways (§2g)
+        };
+        player.currentRun = undefined;
+        player.lastRun = done;
+        state.runs.push(done);
+        if (player.bestTimeMs === undefined || elapsedMs < player.bestTimeMs) {
+          player.bestTimeMs = elapsedMs;
+          player.bestRunId = done.id;
+          player.bestRun = done;
+        }
+      }, 30_000),
+    );
     const racing = [
       { side: "left", playerId: player.id, nickname: player.nickname, runId: run.id },
     ];
     return HttpResponse.json({ line: [], racing, split: false, skipped: [] }, { status: 202 });
+  };
+
+  // Leave the race (contracts §6): the kart stops, the lap doesn't count, back to the garage.
+  const leaveRace = (player) => {
+    const run = player.currentRun;
+    if (!run) return fail(404, "not_found", "You're not racing or in the line");
+    clearTimeout(laps.get(run.id));
+    laps.delete(run.id);
+    const done = { ...run, status: "done", outcome: "aborted", endedAt: now() };
+    player.currentRun = undefined;
+    player.lastRun = done;
+    state.runs.push(done);
+    return HttpResponse.json({ line: [], racing: [], split: false, skipped: [] });
   };
 
   const findPlayer = (id) => allPlayers().find((p) => p.id === id);
@@ -176,6 +193,10 @@ export function mockHandlers({
     http.post(`${baseUrl}/api/players/me/runs`, async () => {
       await wait();
       return requireMe() ?? launch(state.me);
+    }),
+    http.delete(`${baseUrl}/api/players/me/race`, async () => {
+      await wait();
+      return requireMe() ?? leaveRace(state.me);
     }),
     http.get(`${baseUrl}/api/leaderboard`, async () => {
       await wait();

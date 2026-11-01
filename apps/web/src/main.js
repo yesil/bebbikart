@@ -56,6 +56,16 @@ function reducer(s, a) {
       return { ...s, quitting: a.on };
     case "left":
       return left(s);
+    case "leftRace":
+      // Left the race (DELETE /api/players/me/race): straight back to the garage, no result.
+      return {
+        ...s,
+        live: null,
+        result: null,
+        leftRun: a.runId,
+        toast: COPY.run.left,
+        me: s.me ? { ...s.me, currentRun: undefined } : s.me,
+      };
     case "clearResult":
       return { ...s, result: null, lastCoach: a.coach ?? s.lastCoach };
     case "ws":
@@ -136,6 +146,9 @@ function onWs(s, type, p) {
       if (!s.live || s.live.runId !== p.runId) return s;
       return { ...s, live: { ...s.live, sections: { ...s.live.sections, [p.section]: p } } };
     case "run.ended":
+      // The run this phone left: no result screen, the garage stays.
+      if (p.run.id === s.leftRun)
+        return { ...s, live: null, me: s.me ? { ...s.me, currentRun: undefined } : s.me };
       return {
         ...s,
         live: null,
