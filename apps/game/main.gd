@@ -11,6 +11,7 @@
 #   --screenshot=path.png [--shot-at=SEC], --log=none|summary|full,
 #   --kit (mock mode: fake racers built with the racer kit from res://racer_kit/samples, in turn),
 #   --quality=low|medium|high (default: last pick in the options menu, else medium),
+#   --no-life (village: no crowd, bunting, pigeons or balloons),
 #   --language=en|de (default: last pick in the options menu, else config.language; server mode
 #   sends it to the server so every phone follows it)
 # One way to race (contracts §2i, king of the hill): the racers take turns from a line, one lap
@@ -51,6 +52,7 @@ const AudioDirector = preload("res://audio/audio_director.gd")
 const DuelScreen = preload("res://world/duel_screen.gd")
 const DuelHud = preload("res://ui/duel_hud.gd")
 const SteerMarks = preload("res://world/steer_marks.gd")
+const VillageLife = preload("res://world/village_life.gd")
 
 ## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
 ## resolution (0 = native; upscaled with MetalFX on Metal, FSR elsewhere), so a fullscreen 5K
@@ -116,6 +118,7 @@ var language_sent := ""
 var _village_plan = null   # world/village/village_plan.gd, built on a worker for the camera blockers
 var _plan_task := -1       # WorkerThreadPool task building it; -1 when none is running
 var _plan_terrain: Node = null
+var village_life: VillageLife = null   # the village's crowd, bunting, pigeons and balloons
 ## The line and the halves (contracts §2i).
 var duel_screen: DuelScreen          # the split screen's halves and their cameras
 var duel_hud: DuelHud                # names, times, lights, verdicts per half; the crown and the line
@@ -233,6 +236,8 @@ func _build_scene() -> void:
 		push_error("steering marks: " + marks_err)
 		_result(("steering marks: " + marks_err).left(160))
 		hud.problem("steering marks: " + marks_err)
+	if track == "village" and not args.has("no-life"):
+		_setup_village_life()
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)
@@ -655,6 +660,31 @@ func _finish_village_blockers() -> void:
 	camera.blockers = b
 	duel_screen.set_blockers(b)
 	duel_hud.set_blockers(b)
+	if village_life != null:
+		var err := village_life.place(_village_plan, func(x: float, z: float) -> float: return float(data.call("get_height", Vector3(x, 0.0, z))))
+		if err != "":
+			push_error("village life: " + err)
+			_result(("village life: " + err).left(160))
+			hud.problem("village life: " + err)
+
+
+## The village's crowd (the session's own racers in server mode, the kit's samples in mock mode),
+## bunting, pigeons and balloons. Placed once the village plan is laid out.
+func _setup_village_life() -> void:
+	village_life = VillageLife.new()
+	add_child(village_life)
+	village_life.setup(course, sim)
+	village_life.on_cheer = func() -> void: audio.crowd_cheer()
+	if assets != null:
+		assets.racer_ready.connect(func(pid: String) -> void: village_life.add_racer(pid, assets.spec_for(pid)))
+		return
+	for path in SpecFolders.list(SpecFolders.SAMPLES):
+		var spec = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if typeof(spec) != TYPE_DICTIONARY:
+			push_error("village life: %s is not a JSON object" % path)
+			hud.problem("village life: %s is not a JSON object" % path)
+			continue
+		village_life.add_racer(path.get_file(), spec)
 
 
 ## A shot of each village fork from just before its split, looking down both branches.
@@ -839,6 +869,11 @@ func _on_roster(roster: Array) -> void:
 		colors[pid] = hud.color_for(pid)
 	if assets != null:
 		assets.update(roster)
+	# Server mode: the crowd is the session's racers (mock mode's is the kit's samples).
+	if village_life != null and assets != null:
+		for pid in village_life.racers():
+			if not still.has(pid):
+				village_life.remove_racer(pid)
 
 
 func _on_racer_ready(player_id: String) -> void:
@@ -913,6 +948,8 @@ func _process(delta: float) -> void:
 	racing.sort_custom(func(a, b): return a.lap + a.progress() > b.lap + b.progress())
 	_update_duel(delta)
 	audio.follow_run = follow_run
+	if village_life != null:
+		village_life.follow_run = follow_run
 	for id in views:
 		views[id].parked = sim.on_grid(id)
 		views[id].sync()
