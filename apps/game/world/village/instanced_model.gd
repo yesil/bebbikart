@@ -40,10 +40,13 @@ func _ready() -> void:
 	# Many models scale or turn their mesh on an inner node (e.g. Z-up exports at 100x):
 	# carry that into every copy, or the mesh comes out tiny or lying down.
 	var inner := _model_transform(mi)
+	var mesh := _rest_pose(mi)
+	root.free()
+	if mesh == null:
+		return
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mi.mesh
-	root.free()
+	mm.mesh = mesh
 	var n := transforms.size() / 12
 	mm.instance_count = n
 	for i in n:
@@ -112,6 +115,53 @@ static func pack(xfs: Array) -> PackedFloat32Array:
 	for x: Transform3D in xfs:
 		out.append_array([x.basis.x.x, x.basis.x.y, x.basis.x.z, x.basis.y.x, x.basis.y.y, x.basis.y.z,
 			x.basis.z.x, x.basis.z.y, x.basis.z.z, x.origin.x, x.origin.y, x.origin.z])
+	return out
+
+
+## The mesh of a skinned model (the animals) posed on its skeleton's rest pose. A MultiMesh
+## draws the raw vertices without the bones, and some models keep parts there that only the
+## bones put in place (the Swiss cow's hooves, the whole blacknose sheep). Unskinned models
+## come back as they are.
+func _rest_pose(mi: MeshInstance3D) -> Mesh:
+	var skel := mi.get_node_or_null(mi.skeleton) as Skeleton3D
+	if mi.skin == null or skel == null:
+		return mi.mesh
+	var binds: Array[Transform3D] = []
+	for k in mi.skin.get_bind_count():
+		var bone := mi.skin.get_bind_bone(k)
+		if bone < 0:
+			bone = skel.find_bone(mi.skin.get_bind_name(k))
+		if bone < 0:
+			push_error("instanced_model %s: %s binds unknown bone \"%s\"" % [name, model, mi.skin.get_bind_name(k)])
+			return null
+		binds.append(skel.get_bone_global_rest(bone) * mi.skin.get_bind_pose(k))
+	var src := mi.mesh
+	var out := ArrayMesh.new()
+	for s in src.get_surface_count():
+		var a := src.surface_get_arrays(s)
+		var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var normals: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+		var bones: PackedInt32Array = a[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = a[Mesh.ARRAY_WEIGHTS]
+		var per := bones.size() / verts.size()
+		for i in verts.size():
+			var p := Vector3.ZERO
+			var n := Vector3.ZERO
+			for j in per:
+				var w := weights[i * per + j]
+				if w > 0.0:
+					var t := binds[bones[i * per + j]]
+					p += (t * verts[i]) * w
+					n += (t.basis * normals[i]) * w
+			verts[i] = p
+			normals[i] = n.normalized()
+		a[Mesh.ARRAY_VERTEX] = verts
+		a[Mesh.ARRAY_NORMAL] = normals
+		a[Mesh.ARRAY_TANGENT] = null
+		a[Mesh.ARRAY_BONES] = null
+		a[Mesh.ARRAY_WEIGHTS] = null
+		out.add_surface_from_arrays(src.surface_get_primitive_type(s), a)
+		out.surface_set_material(s, src.surface_get_material(s))
 	return out
 
 

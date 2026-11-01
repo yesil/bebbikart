@@ -8,7 +8,8 @@ extends RefCounted
 ## building is laid out on a grid of cells (stretched to its footprint), front facing +z
 ## (towards its road), origin at the footprint centre on the ground. All modules share one
 ## material: the kit's colour map recoloured to a Swiss palette (dark shingle roofs, honey and
-## dark timber, white plaster, grey stone), made once by swiss_material().
+## dark timber, white plaster, grey stone), rebuilt at every bake by swiss_material(); the roof
+## modules get a copy whose plaster is timber, for wooden eaves.
 ##
 ## Building kinds follow the village plan: chalet, inn, arcade, bakery, church, mill, barn, school.
 
@@ -17,6 +18,10 @@ const NATURE := "res://assets/nature/quaternius/"
 const VMAT_DIR := "res://world/village/materials/"
 const SWISS_MAT := VMAT_DIR + "kenney_swiss.tres"
 const SWISS_TEX := VMAT_DIR + "kenney_swiss_colormap.res"
+const SWISS_ROOF_MAT := VMAT_DIR + "kenney_swiss_roof.tres"
+const SWISS_ROOF_TEX := VMAT_DIR + "kenney_swiss_roof_colormap.res"
+## Modules drawn with the roof material (swiss_material(true)).
+const ROOF_MODULES := ["roof", "roof-point"]
 
 const FLOOR_H := 2.6        # metres per storey
 const CELL := 2.25          # target cell width in metres
@@ -25,13 +30,21 @@ const ROOF_RISE := 0.63     # Kenney "roof" rises this much per cell
 ## Colour map recolouring: [x0, y0, x1, y1] pixel block of colormap.png -> target HSV.
 static func _recolour() -> Array:
 	return [
-	[64, 384, 128, 512, Color.from_hsv(0.07, 0.35, 0.36)],    # teal roofs -> dark shingles
+	[64, 384, 128, 512, Color.from_hsv(0.07, 0.3, 0.3)],      # teal roofs -> dark shingles
+	# Sand and green: only the roof slabs' end boards sample them (a strip from the shingles
+	# to the timber), which showed as sand and teal stripes on every gable.
+	[128, 384, 256, 512, Color.from_hsv(0.06, 0.55, 0.36)],   # -> dark timber boards
 	[192, 256, 256, 384, Color.from_hsv(0.08, 0.62, 0.66)],   # light wood -> honey timber
 	[256, 256, 320, 384, Color.from_hsv(0.06, 0.6, 0.42)],    # brown wood -> dark timber
 	[256, 384, 384, 512, Color.from_hsv(0.06, 0.55, 0.4)],    # dark wood trims
 	[64, 256, 128, 384, Color.from_hsv(0.11, 0.06, 0.96)],    # lavender stone -> white plaster
 	[448, 384, 512, 512, Color.from_hsv(0.1, 0.05, 0.74)],    # grey stone -> warm grey stone
 	]
+
+
+## The roof copy: the eaves' undersides sample the plaster block, so there it is warm timber.
+static func _roof_recolour() -> Array:
+	return _recolour() + [[64, 256, 128, 384, Color.from_hsv(0.07, 0.55, 0.5)]]
 
 var errors: PackedStringArray = []
 var _meshes := {}           # module name -> Mesh
@@ -76,17 +89,19 @@ static func _first_mesh(n: Node) -> MeshInstance3D:
 	return null
 
 
-## The shared Swiss-palette material for every Kenney module (created once, then editable).
-static func swiss_material() -> Material:
-	if ResourceLoader.exists(SWISS_MAT):
-		return load(SWISS_MAT)
+## The shared Swiss-palette material for every Kenney module, or (roof) the roof modules' copy.
+## The colour map is rebuilt from the recolour table at every bake; the material is created
+## once (its other settings stay editable) and pointed at the new map.
+static func swiss_material(roof := false) -> Material:
+	var mat_path := SWISS_ROOF_MAT if roof else SWISS_MAT
+	var tex_path := SWISS_ROOF_TEX if roof else SWISS_TEX
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(VMAT_DIR))
 	var src := Image.load_from_file(ProjectSettings.globalize_path(KIT + "Textures/colormap.png"))
 	if src == null or src.is_empty():
 		push_error("village_kit: cannot read the Kenney colour map")
 		return null
 	src.convert(Image.FORMAT_RGBA8)
-	for r in _recolour():
+	for r in (_roof_recolour() if roof else _recolour()):
 		var target: Color = r[4]
 		var mean := 0.0
 		var n := 0
@@ -99,14 +114,23 @@ static func swiss_material() -> Material:
 			for x in range(r[0], r[2]):
 				var c := src.get_pixel(x, y)
 				src.set_pixel(x, y, Color.from_hsv(target.h, target.s, clampf(target.v * c.v / mean, 0.0, 1.0), c.a))
-	var tex := ImageTexture.create_from_image(src)
-	ResourceSaver.save(tex, SWISS_TEX)
-	var m := StandardMaterial3D.new()
-	m.albedo_texture = load(SWISS_TEX)
-	m.roughness = 0.85
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	ResourceSaver.save(m, SWISS_MAT)
-	return load(SWISS_MAT)
+	if ResourceSaver.save(ImageTexture.create_from_image(src), tex_path) != OK:
+		push_error("village_kit: cannot save %s" % tex_path)
+		return null
+	if not ResourceLoader.exists(mat_path):
+		var made := StandardMaterial3D.new()
+		made.roughness = 0.85
+		made.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		ResourceSaver.save(made, mat_path)
+	var m := ResourceLoader.load(mat_path, "", ResourceLoader.CACHE_MODE_REPLACE) as StandardMaterial3D
+	if m == null:
+		push_error("village_kit: %s is not a StandardMaterial3D" % mat_path)
+		return null
+	m.albedo_texture = ResourceLoader.load(tex_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+	if ResourceSaver.save(m, mat_path) != OK:
+		push_error("village_kit: cannot save %s" % mat_path)
+		return null
+	return m
 
 
 # ---------------------------------------------------------------- building grid helpers
@@ -553,7 +577,8 @@ func props(course, plan, shape) -> Array:
 
 const COW := "res://assets/village/quaternius_cow/Cow.glb"
 const COW_2 := "res://assets/village/poly_pizza/Cow_2.glb"
-const SHEEP := "res://assets/village/poly_pizza/Sheep_2.glb"
+## Blacknose sheep, the Valais breed (white fleece, black face and legs).
+const SHEEP := "res://assets/village/poly_pizza/Sheep_1.glb"
 const CHEESE := "res://assets/village/poly_pizza/CheeseBlock.glb"
 ## Models that wander about their spot (world/village/instanced_model.gd "wander").
 const ANIMALS := [COW, COW_2, SHEEP]
@@ -654,7 +679,7 @@ func swiss_details(course, plan, shape) -> Dictionary:
 			continue
 		var y: float = ground.call(p)
 		var model := COW_2 if herd % 3 == 0 else (SHEEP if herd % 3 == 1 else COW)
-		var sc := 0.34 if model == COW_2 else (0.65 if model == SHEEP else 0.32)
+		var sc := 0.34 if model == COW_2 else (0.25 if model == SHEEP else 0.32)
 		out.append([model, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc, sc)), Vector3(p.x, y, p.y))])
 		herd += 1
 	# Sheep on the slopes round the alp.
@@ -667,7 +692,7 @@ func swiss_details(course, plan, shape) -> Dictionary:
 		if Geometry2D.is_point_in_polygon(p, plan.detour_poly) or not _free(plan, p, 3.0):
 			continue
 		var y: float = ground.call(p)
-		out.append([SHEEP, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.55, 0.55, 0.55)), Vector3(p.x, y, p.y))])
+		out.append([SHEEP, Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(0.23, 0.23, 0.23)), Vector3(p.x, y, p.y))])
 		flock += 1
 	# Ability signs: a yellow board on a post at the start of each detour stretch, with its name.
 	for st in plan.STAT_SIGNS:

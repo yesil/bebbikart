@@ -775,8 +775,9 @@ func _square(parent: Node) -> void:
 ## scene keeps the model path and transforms; the MultiMesh is built at load).
 func _instanced(parent: Node, kit: VillageKit, placed: Dictionary) -> void:
 	var swiss := VillageKit.swiss_material()
-	if swiss == null:
-		_fail("could not make the Swiss kit material")
+	var roof := VillageKit.swiss_material(true)
+	if swiss == null or roof == null:
+		_fail("could not make the Swiss kit materials")
 		return
 	for module in placed:
 		if kit.mesh(module) == null:
@@ -794,7 +795,7 @@ func _instanced(parent: Node, kit: VillageKit, placed: Dictionary) -> void:
 			n.wander = paths
 			n.wander_points = VillageKit.WANDER_POINTS
 		if not module.begins_with("nature:") and not module.begins_with("res://"):
-			n.override = swiss
+			n.override = roof if module in VillageKit.ROOF_MODULES else swiss
 		_mark(n)
 		parent.add_child(n)
 	if not kit.errors.is_empty():
