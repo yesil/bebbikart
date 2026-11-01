@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   FAIL_REASONS,
+  FORK_CHOICES,
   JOB_STAGES,
   LANGUAGES,
   SECTION_IDS,
@@ -60,6 +61,7 @@ test("every key the game uses exists", () => {
     session: [...SESSION_STATUSES, "unknown"],
     net: ["connecting", "online", "offline"],
     quality: ["low", "medium", "high"],
+    way: Object.entries(FORK_CHOICES).flatMap(([fork, ways]) => ways.map((w) => `${fork}.${w}`)),
     bus: JSON.parse(
       readFileSync(join(GAME, "audio/audio_settings.gd"), "utf8").match(
         /const BUSES := (\[.*\])/,

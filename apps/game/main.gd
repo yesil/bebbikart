@@ -49,6 +49,7 @@ const I18n = preload("res://ui/i18n.gd")
 const AudioDirector = preload("res://audio/audio_director.gd")
 const DuelScreen = preload("res://world/duel_screen.gd")
 const DuelHud = preload("res://ui/duel_hud.gd")
+const SteerMarks = preload("res://world/steer_marks.gd")
 
 ## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
 ## resolution (0 = native; upscaled with MetalFX on Metal, FSR elsewhere), so a fullscreen 5K
@@ -206,6 +207,14 @@ func _build_scene() -> void:
 	else:
 		camera.fork_shots = Viewpoints.fork_shots(course)  # one shot per fork split
 	_setup_race_hud()
+	# The boost arrows on the road, the signs over the forks, the rings ahead of steered karts.
+	var marks := SteerMarks.new()
+	add_child(marks)
+	var marks_err := marks.setup(course, sim)
+	if marks_err != "":
+		push_error("steering marks: " + marks_err)
+		_result(("steering marks: " + marks_err).left(160))
+		hud.problem("steering marks: " + marks_err)
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)

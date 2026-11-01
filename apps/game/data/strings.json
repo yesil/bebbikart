@@ -114,7 +114,15 @@
     "log.no_side": "ERROR run %s (%s) came without its half of the screen (side \"%s\"); racing it on the left",
     "menu.new_session": "New session",
     "menu.new_session_note": "Starts over on %s: the podium shows, the karts stop, the leaderboard starts empty.",
-    "menu.session_idle_note": "Session %s. A new session opens the line for the phones."
+    "menu.session_idle_note": "Session %s. A new session opens the line for the phones.",
+    "way.left": "← %s",
+    "way.right": "%s →",
+    "way.ramp.jump": "Jump",
+    "way.ramp.around": "Around",
+    "way.pond.water": "Water",
+    "way.pond.bridge": "Bridge",
+    "way.crossing.exposed": "Windy bridge",
+    "way.crossing.sheltered": "Hedge path"
   },
   "de": {
     "lang.en": "English",
@@ -230,6 +238,14 @@
     "log.no_side": "FEHLER Lauf %s (%s) kam ohne seine Bildschirmhälfte (side \"%s\"); er fährt links",
     "menu.new_session": "Neue Session",
     "menu.new_session_note": "Beginnt neu auf %s: das Podest kommt, die Karts halten an, die Rangliste beginnt leer.",
-    "menu.session_idle_note": "Session %s. Eine neue Session öffnet die Schlange für die Handys."
+    "menu.session_idle_note": "Session %s. Eine neue Session öffnet die Schlange für die Handys.",
+    "way.left": "← %s",
+    "way.right": "%s →",
+    "way.ramp.jump": "Springen",
+    "way.ramp.around": "Aussen herum",
+    "way.pond.water": "Wasser",
+    "way.pond.bridge": "Brücke",
+    "way.crossing.exposed": "Windige Brücke",
+    "way.crossing.sheltered": "Heckenweg"
   }
 }
