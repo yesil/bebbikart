@@ -26,7 +26,7 @@ One small Bun process. It is the single source of truth for **who is playing, wh
 
 - **Run admission.** On `phone.go` / `POST …/runs`: check that the session is running, the player is `ready`, they have no active run, the cooldown has passed, and `running < maxConcurrentRuns`. Then create a `Run{status:"queued"}`, send `run.start` to the game, and mark it `running` on `game.run.started`. If the game isn't connected, refuse with `game_offline`.
 - **Game is authoritative** for results. On `game.run.finished`: store the run, update the best if faster (store `GhostTrace` only for the best), recompute ranks, compute `coachTip()` from shared, then push `run.ended` to the phone and `leaderboard.updated` to everyone.
-- **Relays.** `phone.boost` → `run.boost` to the game, only if the run is the player's active run (drop otherwise). Game progress and section messages → the owning phone only. `game.weather` → all phones.
+- **Relays.** `phone.steer` → `run.steer` to the game (contracts §2g), only if the run is the player's active run (drop otherwise); a phone that disconnects while steering gets `run.steer { x: null }` sent for it. The ways each lap took (`game.run.lap.routes`) are kept as `run.lapRoutes`, the finish's as `run.routes`; setups use them. Game progress and section messages → the owning phone only. `game.weather` → all phones.
 - **Session end.** At `endsAt`: status `ended`, reject new runs, let running runs finish (or abort after `runTimeCapMs`), then broadcast. The game shows the podium on `session.updated`.
 - **Presence.** `connected` = has an open phone socket. Use a 15 s heartbeat (ping/pong). Broadcast `roster.updated` to the game on change, debounced 250 ms.
 - **Restart.** On boot, load the current session and mark any `running` run as `aborted`. That's all.
@@ -55,4 +55,4 @@ One small Bun process. It is the single source of truth for **who is playing, wh
 ## Done when
 
 - All contract routes and messages work with the real phone app and game.
-- Go! and Boost! feel instant: a tap reaches the big screen in well under 100 ms on the event Wi-Fi.
+- Go! and steering feel instant: a tap or a thumb move reaches the big screen in well under 100 ms on the event Wi-Fi.

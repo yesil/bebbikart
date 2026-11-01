@@ -31,8 +31,8 @@ On the phone (same Wi-Fi as the Mac), open `http://<mac-ip>:5173`:
 
 1. Type a racer name, take a photo of the **driver** drawing and of the **ride** drawing, tap **Make my racer!**
 2. The phone shows "Looking at your drawing…", then the reveal with the racer's title. The game window shows `NEW  <name> · <title>` in its overlay, builds the racer with the kit and uploads its hero/avatar renders (the phone's reveal and avatar switch to them).
-3. Tap **Let's race!**, tune stars, routes and style, tap **Go!** Your racer appears on the track in the game.
-4. Tap **BOOST!** during the race (3 charges). Section deltas show on the phone after the first finished run.
+3. Tap **Let's race!**, tune stars, tap **Go!** Your racer appears on the track in the game.
+4. During the race, drag a thumb left or right anywhere on the phone to steer: the side of the road at a fork picks the way (the phone shows which), and the glowing arrows on the road give a boost. Let go and the kart drives itself. Section deltas show on the phone after the first finished run.
 5. The result screen shows time or fail reason, splits vs best, rank and a coach tip. The leaderboard tab updates.
 
 macOS may ask whether `bun` may accept incoming connections: allow it, or phones can't reach the Mac.
@@ -63,9 +63,9 @@ One-time setup: Godot's export templates for your Godot version (Godot editor �
 
 `bun run sim-players` drives N scripted phones over real HTTP and WebSocket, exactly like the phone
 site: device cookie, join, two sample drawings, the design job (real Claude), the big screen's
-renders, a random build, **Go** (all at once or staggered), **Boost** taps, the result, and racing
-again. It prints a timeline, then timings (join → racer ready, Go → on track, countdown green → on
-track, boost tap → seen, finish → result), message counts per phone and every error, and exits 1
+renders, a random build, **Go** (all at once or staggered), a few steers (`--steers N`), the result, and
+racing again. It prints a timeline, then timings (join → racer ready, Go → on track, countdown green
+→ on track, steer → the kart's lane moving on the phone, finish → result), message counts per phone and every error, and exits 1
 on any error.
 
 Use your own server so you don't touch anyone else's racers:

@@ -26,7 +26,6 @@ export const DEFAULT_CONFIG = {
   maxConcurrentRuns: 20,
   starsTotal: 20,
   starsMaxPerAbility: 10,
-  boostsPerRun: 3,
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
   startCountdownMs: 3_000, // race start countdown (§2c); 0 = each racer leaves as soon as there is room
@@ -106,15 +105,19 @@ track since the session started. The coach (§8) picks its tip from them.
 The phone draws each track from `TRACK_MAPS` (`packages/shared/src/track-maps.js`, `trackMap(track)`
 throws for a track without one): the sim course flattened to 2D polylines, one per segment in course
 order, each with its `stretch` (§2d), `fork` and `choice`, points about 2.5 m apart; `bounds`, the
-`start` line and `loop`. Map coordinates are metres, x = world x, y = −world z (north up). The JSON is
+`start` line and `loop`. Each segment also has `steer` (on a fork's way: the side a kart is on at the
+junction to take it, −1 left or 1 right as the big screen shows it from behind the kart; 0 elsewhere,
+§2g) and `arrows` (how many boost arrow strips it has). Map coordinates are metres, x = world x, y = −world z (north up). The JSON is
 generated from the Godot sim (`bun run maps:export`, `tools/export_track_maps.gd`); `bun run
 maps:check` and `village_laps.gd` fail when a map no longer matches its course, and a bun test checks
 each map's stretches against `TRACK_STRETCHES`. Never edit the JSON by hand.
 
 ## 2f. Setups ("peek at a faster racer")
 
-Kids learn by looking at what works. A **Setup** is what a time was set with: the build raced
-(`stars`, and the `routes` those stars chose, §2h) and the `weather` on that lap (`WeatherKind[]`: rain or wind active at
+Kids learn by looking at what works. A **Setup** is what a time was set with: the `stars` raced,
+the `routes` that lap took (steered or the stars', §2g: `game.run.lap` carries each lap's ways, the
+server keeps them as `Run.lapRoutes`, a point-to-point run's are `Run.routes`; runs recorded before
+karts could be steered went the stars' way, so their build's routes) and the `weather` on that lap (`WeatherKind[]`: rain or wind active at
 any time on the lap; `game.run.lap` carries each lap's `weatherSeen`, the server keeps them as
 `Run.lapWeather`; a point-to-point run uses the run's `weatherSeen`, and loop runs recorded before
 laps carried weather use the run's). `LeaderboardEntry.setup` is the setup of the player's best
@@ -123,23 +126,40 @@ laps carried weather use the run's). `LeaderboardEntry.setup` is the setup of th
 the other way (`{ id, ms, playerId, nickname, setup }`), so the phone can say "Mia takes the ford".
 The phone shows setups; it never copies one into the player's build.
 
-## 2g. Driving: Push and Boost
+## 2g. Driving: thumb steering
 
-The autopilot steers, picks the line and brakes. Kids drive it with two controls on the phone:
+The autopilot drives (speed, line, brakes), and the kid steers it across the road with a thumb
+anywhere on the phone. Hands off, the autopilot drives the whole lap by itself and takes the
+stars' way at every fork (§2h).
 
-- **Push** (hold the big button): `phone.push { runId, on: true }` when the thumb goes down,
-  `{ runId, on: false }` when it comes up; the server relays each as `run.push { runId, on }`.
-  While pushed the kart has a little more top speed (`PUSH_TOP_SPEED` in `sim/tuning.gd`), brakes
-  late and corners as if the road were dry and grippy, so it slides wide in a tight or wet bend
-  (`slip` events, time lost) and can leave the road on the worst ones. Letting go hands the
-  speed back to the autopilot. The skill is knowing where it is safe to push. The server sends
-  `run.push { on: false }` itself when the racer's phone disconnects mid-hold, and the game
-  drops a push when the run ends; a push for a run that is not racing (on the grid) is kept
-  and applies from the start.
-- **Boost** (tap, `boostsPerRun` a run) as before (README §2 rule 6).
+- **The lane.** The run screen is a steering pad: a thumb going down starts from the lane the
+  kart is in (`run.progress.lane`) and dragging left or right moves it, relative to where it went
+  down (past the edge of the road the anchor follows the thumb, so coming back reacts at once).
+  The phone sends `phone.steer { runId, x }`, x in −1 (left edge) .. 1 (right edge) as the big
+  screen shows it from behind the kart, about 16 times a second at most, and `x: null` when the
+  thumb lets go, the pointer is lost or the page hides. The server relays each as `run.steer
+  { runId, x }`, only for the player's active run, and sends `x: null` itself when that phone
+  disconnects while steering. The game holds a let-go lane for `STEER_HOLD_S`, or to the next
+  fork when that is near (`FORK_APPROACH_M`), then the autopilot drives again. A steer for a run
+  on the grid applies from the start.
+- **Forks.** Both ways of a fork start at the same junction (a Y). The side of the road the kart
+  is on at the junction (beyond `STEER_DEADBAND` of the middle) picks the way leaving to that side
+  (`sim/forks.gd` measures it from the course); in the middle, or hands off, it takes the stars'
+  way. Hands off, the autopilot leans toward the stars' way as a fork nears. While a fork is
+  within `FORK_APPROACH_M`, `run.progress.fork` says which way each side takes and which the kart
+  is heading for (`{ id, inM, left, right, way }`); the phone shows two signs, the big screen a
+  sign over the road.
+- **Rails everywhere.** No road can be driven off: steering into the edge scrapes along the rail
+  (speed lost, `scrape` events). The only `off_track` left is a crosswind tipping a kart over a
+  low rail (the causeways, `low_rails`).
+- **Boost arrows.** Glowing arrows on one side of the road (`boosts: [[a, b, side]]` on a course
+  segment, centred on `Course.arrow_d`). A kart driving over them on the ground gets the boost
+  (`boost_perfect` event, once per strip per lap; `boostsUsed` counts them). Hands off, the
+  autopilot keeps clear of them: the boost is for steering.
+- **On the big screen** (`world/steer_marks.gd`): the arrows on the road, the fork signs, and a ring
+  on the road ahead of a steered kart at the lane its thumb asks for.
 
-There is no driving style any more: the autopilot always drives as the old "balanced", and Push
-is daring, live, when the kid wants it.
+There is no driving style, no Push and no Boost button any more.
 
 ## 2h. Routes from stars
 
@@ -154,11 +174,12 @@ const ROUTE_STARS = {
 };
 ```
 
-`routesFor(stars)` in `build.js` applies it. The thresholds are where the sweep
+These are the ways the kart takes **hands off** (§2g): steering picks either way at any fork, and
+the stars make the risky one pay off. `routesFor(stars)` in `build.js` applies it. The thresholds are where the sweep
 (`tools/sweep.gd`, the fork tables) finds the risky way faster than the safe one in calm weather
 on both tracks; re-run it after any tuning change. The phone body for a build is `{ stars }`; the
-server stores `routes: routesFor(stars)` on the `Build`, so the game, setups (§2f) and the coach
-read `build.routes` as before. The garage says which way the stars take ("6 water stars: you
+server stores `routes: routesFor(stars)` on the `Build`; the game's autopilot and the coach's
+"try the risky way" tip read `build.routes`, while setups (§2f) use the ways a lap actually took. The garage says which way the stars take ("6 water stars: you
 splash through the ford", "2 more jump stars and you take the kicker").
 
 ## 2i. The line (king of the hill)
@@ -251,12 +272,12 @@ type RunEventKind =
   | "wind_push"
   | "bad_landing"
   | "slow_corner"
-  | "boost_perfect"
-  | "boost_weak"
+  | "boost_perfect" // drove over a boost arrow strip (§2g)
   | "bounce_wobble"
   | "bumped"
   | "bumped_other" // collisions with other racers
-  | "missed_exit"; // village: missed the roundabout exit and went round again (timeLostMs)
+  | "missed_exit" // village: missed the roundabout exit and went round again (timeLostMs)
+  | "scrape"; // steered into the rail and scraped along it (§2g)
 ```
 
 ## 4. Data model
@@ -327,8 +348,12 @@ interface Run {
   splits?: Partial<Record<SectionId, number>>; // ms spent in each section (loop tracks: of the best lap)
   stretches?: StretchTime[]; // §2d: the best lap's (point to point: the run's); failed: done on its last lap
   lapStretches?: StretchTime[][]; // loop tracks: every completed lap's
+  // The ways taken (§2g): point to point the run's (failed: the forks it reached); on a loop the
+  // best lap's (failed before a lap: the forks reached). Runs from before steering have none.
+  routes?: Partial<ForkChoice>;
+  lapRoutes?: ForkChoice[]; // loop tracks: every completed lap's ways
   events?: RunEvent[];
-  boostsUsed?: number;
+  boostsUsed?: number; // boost arrow strips driven over
   weatherSeen?: WeatherKind[];
 }
 
@@ -488,7 +513,6 @@ Phone auth: the server sets an httpOnly cookie `bk_device` on `POST /api/device`
 | `PUT /api/players/me/build`                                 | `{ stars }` → `Build`                                                            | 400 `invalid_build` if the star rules fail. The server adds `routes` (§2h); other fields are ignored. |
 | `POST /api/players/me/runs`                                 | – → `QueueState` (202)                                                           | Go: joins the line (§2i); a free half launches the racer with their latest build. 409 `in_line` when already in it, `run_in_progress`, `session_not_running`, `not_ready`; 400 `invalid_build` if that build breaks the star rules. |
 | `DELETE /api/players/me/queue`                              | – → `QueueState`                                                                 | Leave the line (same as `phone.queue.leave`).                                                                                                   |
-| `POST /api/players/me/runs/current/boost`                   | – → `{ ok }`                                                                     | REST fallback; the phone normally sends `phone.boost` over WS.                                                                                  |
 | `GET /api/leaderboard`                                      | → `LeaderboardEntry[]`                                                           |                                                                                                                                                 |
 | `GET /api/players/me/runs?limit=10`                         | → `Run[]`                                                                        | History for the phone.                                                                                                                          |
 | **Admin** `POST /api/admin/session/start`                   | `{ durationMs? }` → `Session`                                                    |                                                                                                                                                 |
@@ -499,7 +523,7 @@ Phone auth: the server sets an httpOnly cookie `bk_device` on `POST /api/device`
 | `POST /api/admin/players/:id/drawings` · `/build` · `/runs` | same as the `me` versions                                                        | Facilitator acts for a racer.                                                                                                                   |
 | `POST /api/admin/players/:id/approve`                       | → `PlayerView`                                                                   | `needs_review` → continue the pipeline.                                                                                                         |
 | `DELETE /api/admin/players/:id`                             | → 204                                                                            |                                                                                                                                                 |
-| `PATCH /api/admin/config`                                   | partial config → config                                                          | Live tuning (weather, boosts…).                                                                                                                 |
+| `PATCH /api/admin/config`                                   | partial config → config                                                          | Live tuning (weather…).                                                                                                                          |
 | **Game** `PUT /api/game/renders/:playerId/:key`             | PNG body (header `x-game-key`) → 204                                             | The game uploads `hero`, `avatar_happy`, `avatar_excited`, `avatar_sad` after building a racer. Server stores them and pushes `player.updated`. |
 
 ```ts
@@ -557,8 +581,7 @@ interface Envelope<T extends string, P> {
 | type          | payload                     |
 | ------------- | --------------------------- |
 | `phone.go`    | `{}`, same as `POST …/runs`: join the line (§2i) |
-| `phone.boost` | `{ runId }`                 |
-| `phone.push`  | `{ runId, on }`, Push held down (`on: true`) or let go (§2g) |
+| `phone.steer` | `{ runId, x: −1..1 \| null }`: the lane the thumb asks for, null when it lets go (§2g); ≤ ~16 Hz |
 | `phone.queue.leave` | `{}`, leave the line (§2i) |
 
 ### Server → Phone
@@ -571,7 +594,7 @@ interface Envelope<T extends string, P> {
 | `run.queued` / `run.started` | `{ run }`                                                                                      |                                                       |
 | `run.grid`                   | `{ runId, goInMs }`                                                                            | On the start line of its half: the lights go green in goInMs (§2c) |
 | `paddock.updated`            | `PaddockEntry[]`                                                                               | Everyone in the session (see "Paddock" below)         |
-| `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1 |
+| `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, lane: −1..1, fork?: ForkHint, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1; `lane` where the kart is across the road, `fork` while one is near (§2g): `{ id: ForkId, inM, left, right, way }` |
 | `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
 | `run.ended`                  | `{ run, isPersonalBest, rank?, coach: CoachTip, stretches: StretchResult[], duel? }`           | Finish or fail (stretches §2d; empty when aborted). `duel: { newChampion, gapMs?, recordNickname? }` (§2i), `gapMs` = this lap minus the record it was judged against (positive = slower; absent without a time or a record) |
@@ -622,8 +645,7 @@ Everything a phone gets that isn't about one player's run (`leaderboard.updated`
 | `welcome`                                                    | `{ session, config, roster: RosterEntry[], activeRuns: RunStart[] }` | On connect / reconnect                               |
 | `roster.updated`                                             | `RosterEntry[]`                                                      | Player joins, leaves, connects, gets assets, renames |
 | `run.start`                                                  | `RunStart`                                                           | Server admitted a run                                |
-| `run.boost`                                                  | `{ runId }`                                                          | Phone tapped Boost                                   |
-| `run.push`                                                   | `{ runId, on }`                                                      | Phone pressed or let go of Push (§2g); `on: false` also when that phone disconnects |
+| `run.steer`                                                  | `{ runId, x: −1..1 \| null }`                                        | Relayed `phone.steer` (§2g); `x: null` also when that phone disconnects while steering |
 | `queue.updated`                                              | `QueueState`                                                         | After welcome and on every change (§2i)              |
 | `run.abort`                                                  | `{ runId, reason }`                                                  | Admin stop, player deleted                           |
 | `session.updated` / `config.updated` / `leaderboard.updated` | as above                                                             |                                                      |
@@ -656,11 +678,11 @@ interface RunStart {
 | ------------------- | -------------------------------------------------------------------------------------------- |
 | `game.run.started`  | `{ runId }` (racer crossed the start line)                                                   |
 | `game.run.grid`     | `{ runId, goInMs }`: the run is on its start line, the lights count down (§2c); relayed to its phone as `run.grid` |
-| `game.run.progress` | `{ runId, progress, elapsedMs, section, boostsLeft, lap?, lapMs? }`, ≤ 5 Hz (lap fields on loops) |
+| `game.run.progress` | `{ runId, progress, elapsedMs, section, lane, fork?, lap?, lapMs? }`, ≤ 5 Hz (lap fields on loops; `lane` and `fork` §2g) |
 | `game.run.section`  | `{ runId, section, splitMs }`                                                                |
-| `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, stretches, weatherSeen, isBest }`: loop tracks, each line crossing (`isBest` within this run; `stretches` this lap's, §2d) |
-| `game.run.finished` | `{ runId, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, trace: GhostTrace, laps?, bestLapMs? }` |
-| `game.run.failed`   | `{ runId, reason: FailReason, section, stretch, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, laps?, bestLapMs? }` |
+| `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, stretches, weatherSeen, isBest, routes: ForkChoice }`: loop tracks, each line crossing (`isBest` within this run; `stretches` this lap's, §2d; `routes` the ways it took, §2g) |
+| `game.run.finished` | `{ runId, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, routes, trace: GhostTrace, laps?, bestLapMs? }` (`routes`: the ways taken, as `Run.routes`) |
+| `game.run.failed`   | `{ runId, reason: FailReason, section, stretch, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, routes, laps?, bestLapMs? }` |
 | `game.weather`      | `WeatherState` (on every phase change)                                                       |
 | `game.capacity`     | `{ freeSlots }` (if the game ever wants fewer than `maxConcurrentRuns`)                      |
 | `game.config.set`   | `{ track?, sessionMinutes?, language? }`: game manager options (see below) |
@@ -690,9 +712,9 @@ function abortTip(language: Language): CoachTip; // key "aborted", for runs that
 ```
 
 Rules, in priority order:
-1. Failed → a tip about the fail, naming the **stretch where it ended** (`failStretch`), from the reason and that stretch's dominant event. E.g. `off_track` on `farm` with `slip` events → "Slipped on the muddy farm track! Try +2 grip or Careful style."
-2. Finished slower than your best → the **stretch with the biggest loss against your best on it** (≥ 300 ms; on your first run: against the session's fastest racer on it, if that is someone else). Its tip: an off-zone boost, bumps or a missed exit there keep their own tip; else the stretch's star ("Lost 1.3 s on the muddy farm track. Try +2 grip!"), or on a fork's safe alternative the other route ("Try the ford next time!"; on the covered bridge in the rain, "Lost 1.5 s on the wet, slippery bridge. Try the ford!"). Within a hair of your best everywhere → "So close to your best! Go again?".
-3. Finished, first time (nobody faster) / new best → a cheer plus one experiment to try ("New best! Brave enough to try the water shortcut?").
+1. Failed → a tip about the fail, naming the **stretch where it ended** (`failStretch`), from the reason and that stretch's dominant event. E.g. `flipped` on `farm` with `slip` events → "Slipped on the muddy farm track! Try +2 grip."; `off_track` (a crosswind over a low rail, §2g) → "Over the wall on the windy causeway! Try +2 stability."
+2. Finished slower than your best → the **stretch with the biggest loss against your best on it** (≥ 300 ms; on your first run: against the session's fastest racer on it, if that is someone else). Its tip: bumps, a missed exit or scraping the rail there keep their own tip ("Lost 0.6 s scraping the wall on the windy ridge. Steer away!"); else the stretch's star ("Lost 1.3 s on the muddy farm track. Try +2 grip!"), or on a fork's safe alternative the side to steer to for the other way (the track map's `steer`, §2e: "Lost 1.5 s on the covered bridge. Steer left for the ford!"; on a slick bridge in the rain, "Lost 1.5 s on the wet, slippery bridge. Steer left for the ford!"). Within a hair of your best everywhere → "So close to your best! Go again?".
+3. Finished, first time (nobody faster) / new best → a cheer plus one experiment to try: first the boost arrows while some were missed ("New best! Steer over the glowing arrows for a boost!"), then a risky way the stars don't take yet ("New best! Try 6 water stars: they take the ford!"), else "New best! Can you beat it again?".
 
 Stretch names are per track and language (`STRETCH_NAMES`, with their preposition; `ROUTE_NAMES` for the other route).
 

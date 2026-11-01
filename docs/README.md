@@ -19,7 +19,7 @@ This folder splits BebbiKart into workstreams that can be built **in parallel** 
 
 ## 1. The game in one paragraph
 
-Kids draw a **character** and a **vehicle** on paper. The vehicle can be anything: a kart, a bicycle, a horse, a rocket shoe. A supervising adult photographs both drawings with a phone, using a simple web page opened from a QR code or a short URL. The server checks that the photos are drawings on paper and not real photos. AI then captures the drawing's spirit and colours and designs a 3D toy racer from it, which the game builds and brings to life with poses, facial expressions and a phone avatar, and the racer appears in a colourful 3D toy world shown on a **big screen** in the meeting room. During a **~30-minute session**, every racer tries to set the **fastest time** on one short course. **The computer drives.** Kids are the coaches: between runs they spread **10 stars** across six abilities, pick a route at each of three forks and set a driving style, then press **Go!** on the phone. During a run they time **Boost!** taps to glowing boost zones. After each run they see section-by-section times against their best, so they can tell exactly where they lost time. Many racers share the course at once, each with their own timer, and they **bump into each other**, so no two runs play out the same. Random **rain and wind** keep the world lively. Best times climb a live leaderboard, and at the end of the session the top three get a podium.
+Kids draw a **character** and a **vehicle** on paper. The vehicle can be anything: a kart, a bicycle, a horse, a rocket shoe. A supervising adult photographs both drawings with a phone, using a simple web page opened from a QR code or a short URL. The server checks that the photos are drawings on paper and not real photos. AI then captures the drawing's spirit and colours and designs a 3D toy racer from it, which the game builds and brings to life with poses, facial expressions and a phone avatar, and the racer appears in a colourful 3D toy world shown on a **big screen** in the meeting room. During a **~30-minute session**, every racer tries to set the **fastest time** on one short course. **The computer drives.** Kids are the coaches: between runs they spread **10 stars** across six abilities, then press **Go!** on the phone. During a run they **steer** with a thumb on the phone: pick a way at each of three forks and drive over glowing boost arrows; hands off, the autopilot drives the whole lap. After each run they see section-by-section times against their best, so they can tell exactly where they lost time. Many racers share the course at once, each with their own timer, and they **bump into each other**, so no two runs play out the same. Random **rain and wind** keep the world lively. Best times climb a live leaderboard, and at the end of the session the top three get a podium.
 
 ## 2. Game rules (the source of truth for all workstreams)
 
@@ -28,15 +28,14 @@ Kids draw a **character** and a **vehicle** on paper. The vehicle can be anythin
 3. **Presence.** A racer is shown in the **paddock** strip on the big screen while their phone is connected. Runs can only be launched from a connected device or by the facilitator.
 4. **Build.** Before each run a kid sets:
    - **Stars:** exactly **10**, 0–5 per ability, across `speed`, `jump`, `grip`, `water`, `stability`, `bounce` (meaning and trade-offs: brief §6).
-   - **Routes:** one choice at each of **three forks**: the **pond** (`water` shortcut / `bridge`), the **big ramp** (`jump` over / `around`), the **windy crossing** (`exposed` fast bridge / `sheltered` hedge path). The best choice depends on the build _and_ the weather.
-   - **Driving style:** `careful` / `balanced` / `daring`. This changes how fast the autopilot takes corners and how early it brakes. Daring is faster but slips more.
+   - **Ways at the forks:** there are **three forks**: the **pond** (`water` shortcut / `bridge`), the **big ramp** (`jump` over / `around`), the **windy crossing** (`exposed` fast bridge / `sheltered` hedge path). The stars choose the way the kart takes hands off (contracts §2h); steering picks either way during the run (rule 6). The best choice depends on the build _and_ the weather.
 5. **Run.** Pressing **Go!** puts the racer on the start grid and starts a **3-second countdown** (`startCountdownMs`) on the big screen and the phone; everyone who presses Go before the lights go green leaves together, so a group really races each other (contracts §2c). The course takes up to `maxConcurrentRuns` (default 20) at once. A per-run timer starts at the line. The autopilot drives. A clean run on a sensible build takes **~20–40 s**.
-6. **Boost.** Each run has **3 boosts** (`boostsPerRun`, set 0 to disable). The track has glowing **boost zones**. Tapping Boost while on a zone gives a **perfect boost**: strong and stable. Tapping anywhere else gives a weaker boost that also cuts grip for a moment, so it can cause a slip on a wet bend or a wobble mid-air in wind. Timing is the skill.
+6. **Steering** (contracts §2g). The phone is a steering pad: a thumb dragged anywhere on it moves the kart across the road; letting go hands the kart back to the autopilot. The side of the road the kart is on when it reaches a fork picks the way (the phone and the big screen show which side goes where). Glowing **boost arrows** lie on one side of the road in places: driving over them gives a boost. Every road has rails, so steering can't take a kart off the course; scraping along a rail costs time.
 7. **Learning tools.** These turn "try again" into "get better":
    - **Section splits.** The course has four timed sections: `hills`, `pond`, `crossing`, `bends`. After a run the phone shows each section's time compared with the racer's best: green if faster, red if slower. It also gives one **coach tip** aimed at the biggest loss, e.g. "Lost 3 s at the pond. Try the bridge, or +1 water."
    - **Best-run ghost.** A see-through copy of the racer's own best run drives next to them. Phone and big screen show "+1.2 s / −0.8 s vs your best" at each section line.
    - **Weather warning.** About **5 s before** rain or wind starts, the world shows it coming (clouds gather, leaves swirl) and phones show "Rain coming!" Kids can wait to launch, or launch anyway with a build ready for it.
-8. **Fail.** Off track, flipped, stuck for 3 s, or past the 90 s time cap → the run fails with a friendly "oops" and a one-line hint. **No checkpoints**: the next run starts from the start line.
+8. **Fail.** Blown over a low wall by the wind (the causeways), flipped, stuck for 3 s, or past the 90 s time cap → the run fails with a friendly "oops" and a one-line hint. **No checkpoints**: the next run starts from the start line.
 9. **Finish.** The run time is measured in **simulation time** (fixed-timestep ticks, not wall clock), so frame drops can't change results. A finished run updates the racer's personal best and the leaderboard.
 10. **One run at a time per racer.** A racer can't launch again until their current run ends.
 11. **Racers collide.** Everyone on the course is solid: racers bump, push and knock each other off line. This is deliberate. It adds entropy so runs aren't predictable, and it makes crowd timing part of the strategy: launch into a busy track and risk bumps, or wait for a quiet moment. Heavier builds (`stability`) push others and get pushed less. Bumps are comic, never damaging. Only the racer's own **best-run ghost** is see-through and doesn't collide (it's a replay).
@@ -49,7 +48,7 @@ Kids draw a **character** and a **vehicle** on paper. The vehicle can be anythin
 ```mermaid
 flowchart LR
   subgraph Phones["Phones (adults' devices)"]
-    P[Phone website · PWA<br/>create racer · stars · Go! · Boost!]
+    P[Phone website · PWA<br/>create racer · stars · Go! · steer]
     A[Facilitator console<br/>/admin]
   end
   subgraph Laptop["Event Mac"]
@@ -62,7 +61,7 @@ flowchart LR
   A -- REST + WS --> S
   S -- jobs --> J
   J -- check drawing --> D
-  S -- WS: roster, run.start, boost --> G
+  S -- WS: roster, run.start, steer --> G
   G -- WS: run progress / result, weather --> S
   G -. HDMI .-> Screen[[Big screen]]
 ```
@@ -119,7 +118,7 @@ The event date isn't set yet. Plan M4 for a few days before it.
 
 | Question                                                                                         | Default in these docs                                                                                                             |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Boost button during runs?                                                                        | On, 3 per run, configurable to 0                                                                                                  |
+| Boost button during runs?                                                                        | **Decided: no button.** Boost arrows on the road; the kid steers over them (contracts §2g).                                       |
 | One phone = one racer, or one adult phone for several kids?                                      | **Decided: one phone = one racer.** The facilitator console can still create and launch racers for kids without a phone.          |
 | Session length                                                                                   | 30 min, configurable                                                                                                              |
 | Max racers / concurrent runs                                                                     | 20 / 20                                                                                                                           |
@@ -131,4 +130,4 @@ The event date isn't set yet. Plan M4 for a few days before it.
 
 ## 7. Out of scope for V1
 
-Manual steering, combat, online play or accounts, multiple courses, procedural worlds, ML driving, generated 3D meshes, tablets as a separate controller type (phones already cover it).
+Full manual driving (the kid steers across the road; the autopilot keeps the speed and brakes), combat, online play or accounts, multiple courses, procedural worlds, ML driving, generated 3D meshes, tablets as a separate controller type (phones already cover it).

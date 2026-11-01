@@ -5,7 +5,7 @@
 
 ## Goal
 
-A tiny mobile **website** (a Progressive Web App, **not** a native app; nothing to install from a store) that an adult opens from a QR code or short URL. In under a minute they can photograph two drawings, name the racer and see it appear on the big screen. After that it becomes the kid's **coach's clipboard**: tune stars, routes and style, press **Go!**, time **Boost!**, and see section-by-section what to improve. Plus a `/admin` console for the facilitator.
+A tiny mobile **website** (a Progressive Web App, **not** a native app; nothing to install from a store) that an adult opens from a QR code or short URL. In under a minute they can photograph two drawings, name the racer and see it appear on the big screen. After that it becomes the kid's **coach's clipboard**: tune stars, press **Go!**, steer with a thumb (contracts §2g), and see section-by-section what to improve. Plus a `/admin` console for the facilitator.
 
 ## Stack (default)
 
@@ -17,7 +17,7 @@ Plain JavaScript. UI with [Preact](https://preactjs.com) + [htm](https://github.
 - **V1 runs over plain HTTP on the local network** (`http://<mac-ip>:8080`). Browsers only allow service workers, the install prompt and the screen wake lock on HTTPS, so in V1 those are **off**. The site still works fully as a normal web page, and "Add to Home Screen" still creates a shortcut.
 - **Later, once there's HTTPS** (a domain or local certificate, out of scope for now): add a service worker that precaches the app shell (never `/api/*`, `/ws` or uploads), the install prompt, and `navigator.wakeLock` during runs. Write the code so these are a small add-on, not a rewrite.
 - Keep the bundle small (target < 150 KB gzipped) so the first load is instant over local Wi-Fi.
-- **Vibration** on boost (Android only; iOS ignores it). Works over HTTP.
+- **Vibration** when the thumb goes down, when the kart's side of the road flips and when the way at a fork ahead changes (Android only; iOS ignores it). Works over HTTP.
 
 ## Screens (phone)
 
@@ -30,7 +30,7 @@ Plain JavaScript. UI with [Preact](https://preactjs.com) + [htm](https://github.
    - **Style.** Three-way toggle: 🐢 Careful · 🙂 Balanced · 🔥 Daring.
    - Weather strip: current weather plus "Rain coming in 5…" warnings, and a **track traffic** indicator ("3 racers on the track") so kids can choose to wait for a quiet moment.
    - A huge **Go!** button. Disabled with a reason when not allowed (cooldown countdown, "Your racer is still on the track").
-4. **Run.** Big **Boost!** button with 3 charges (dims when used up), haptic tap on Android. Live timer, a progress bar with four section ticks, and "+0.8 / −1.2 vs best" after each section line. A **"📺 Show me on the big screen"** button (`phone.watch`): the big screen's camera cuts to this racer soon, the button says "Coming up on the big screen…" until then, and glows green with "You're on the big screen!" (and a short buzz) while the camera is on them (`camera.updated`).
+4. **Run.** The whole run screen is a steering pad (contracts §2g): a thumb anywhere moves the kart across the road (the pad shows the kart's lane and where the thumb asks for), letting go hands it back to the autopilot; two signs show the fork coming up and which way the kart is heading for. Live timer, a progress bar with four section ticks, and "+0.8 / −1.2 vs best" after each section line. A **"📺 Show me on the big screen"** button (`phone.watch`): the big screen's camera cuts to this racer soon, the button says "Coming up on the big screen…" until then, and glows green with "You're on the big screen!" (and a short buzz) while the camera is on them (`camera.updated`).
 5. **Result.** The avatar reacts: `avatar_excited` for a new best, `avatar_happy` for a finish, `avatar_sad` for a fail. Time, or "Oops!" plus the reason. 🎉 if it's a new personal best. Rank. **Section table**: four rows with time vs best, coloured green or red. **Coach tip** card that highlights the suggested change (e.g. pulses the Grip row). Buttons: "Change & try again" (back to Garage), "Go again" (same build).
 6. **Leaderboard** (tab): top 20 with avatars, your row highlighted. **History** (tab): last 10 runs with splits.
 
@@ -43,7 +43,7 @@ PIN screen, then one page:
 - Show/hide QR on the big screen, and the join URL.
 - Player table: avatar, name, status, connected, best time, runs. Actions: rename, remove, approve `needs_review` (shows the uploaded photo), re-upload, **launch a run for them** (for kids without a phone), edit their build.
 - "Add racer without phone": same create flow as the phone, done by the facilitator.
-- Live config sliders: boosts per run, weather calm/active ranges, max concurrent runs.
+- Live config sliders: weather calm/active ranges, max concurrent runs.
 - Export results as CSV.
 
 ## Copy and tone
@@ -58,7 +58,7 @@ Short, warm, no jargon, no failure shaming. Every string goes in one `copy.js` f
 | 2   | Create racer flow with client-side downscale + upload progress            | M    | M1        |
 | 3   | Job status screen incl. reject/retake and needs-review states             | S    | M1        |
 | 4   | Garage: stars editor with rules, routes, style, weather strip, Go!        | M    | M1        |
-| 5   | Run screen: Boost, live timer, section ticks and deltas                   | M    | M1        |
+| 5   | Run screen: steering pad, fork signs, live timer, section ticks and deltas | M    | M1        |
 | 6   | Result screen: splits table, coach tip highlight, PB/rank                 | M    | M1        |
 | 7   | Leaderboard + history tabs                                                | S    | M2        |
 | 8   | Admin console                                                             | M    | M2        |
@@ -70,4 +70,4 @@ Short, warm, no jargon, no failure shaming. Every string goes in one `copy.js` f
 
 - An adult who has never seen the app creates a racer in under 60 s on their own phone.
 - A 7-year-old (with help reading) can change a star, pick a route and press Go! without being told how.
-- Every screen feels instant and smooth: transitions under 100 ms, no layout jumps, Boost reacts on touch-down.
+- Every screen feels instant and smooth: transitions under 100 ms, no layout jumps, steering reacts on touch-down.
