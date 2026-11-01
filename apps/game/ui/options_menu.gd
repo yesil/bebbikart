@@ -22,6 +22,7 @@ signal cam_cycle_chosen(seconds: float)
 signal inset_chosen(id: String)
 
 const MAC := "macOS"
+const COL_W := 440.0         # a column's width for the wrapping notes
 
 var _panel: PanelContainer
 var _fullscreen: CheckButton
@@ -75,10 +76,21 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 	_fullscreen.toggled.connect(func(_on: bool): fullscreen_toggled.emit())
 	box.add_child(_fullscreen)
 
-	box.add_child(_label(I18n.t("menu.graphics"), 20))
+	# Two columns (display on the left, the game on the right), so the menu fits a 1080p screen.
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 44)
+	box.add_child(cols)
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 14)
+	cols.add_child(left)
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 14)
+	cols.add_child(right)
+
+	left.add_child(_label(I18n.t("menu.graphics"), 20))
 	var qrow := HBoxContainer.new()
 	qrow.add_theme_constant_override("separation", 10)
-	box.add_child(qrow)
+	left.add_child(qrow)
 	var group := ButtonGroup.new()
 	for id in ["low", "medium", "high"]:
 		var b := Button.new()
@@ -92,14 +104,15 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 		_qualities[id] = b
 	var qnote := _label(I18n.t("menu.quality_note"), 15)
 	qnote.modulate = Color(1, 1, 1, 0.75)
-	box.add_child(qnote)
+	_wrap(qnote)
+	left.add_child(qnote)
 
-	box.add_child(_label(I18n.t("menu.camera"), 20))
+	left.add_child(_label(I18n.t("menu.camera"), 20))
 	var cgrid := GridContainer.new()
 	cgrid.columns = 2
 	cgrid.add_theme_constant_override("h_separation", 16)
 	cgrid.add_theme_constant_override("v_separation", 8)
-	box.add_child(cgrid)
+	left.add_child(cgrid)
 	cgrid.add_child(_label(I18n.t("menu.cam_cycle"), 17))
 	var crow := HBoxContainer.new()
 	crow.add_theme_constant_override("separation", 6)
@@ -123,13 +136,14 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 		_insets[id] = b
 	var cnote := _label(I18n.t("menu.camera_note"), 15)
 	cnote.modulate = Color(1, 1, 1, 0.75)
-	box.add_child(cnote)
+	_wrap(cnote)
+	left.add_child(cnote)
 
-	box.add_child(_label(I18n.t("menu.sound"), 20))
+	left.add_child(_label(I18n.t("menu.sound"), 20))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 16)
-	box.add_child(grid)
+	left.add_child(grid)
 	for bus in AudioSettings.BUSES:
 		grid.add_child(_label(I18n.t("bus." + bus), 17))
 		var sl := HSlider.new()
@@ -142,10 +156,10 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 		grid.add_child(sl)
 		_volumes[bus] = sl
 
-	box.add_child(_label(I18n.t("menu.language"), 20))
+	right.add_child(_label(I18n.t("menu.language"), 20))
 	var lrow := HBoxContainer.new()
 	lrow.add_theme_constant_override("separation", 10)
-	box.add_child(lrow)
+	right.add_child(lrow)
 	var lgroup := ButtonGroup.new()
 	for id in Protocol.LANGUAGES:
 		var b := Button.new()
@@ -159,12 +173,13 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 		lrow.add_child(b)
 	var lnote := _label(I18n.t("menu.language_note"), 15)
 	lnote.modulate = Color(1, 1, 1, 0.75)
-	box.add_child(lnote)
+	_wrap(lnote)
+	right.add_child(lnote)
 
-	box.add_child(_label(I18n.t("menu.track"), 20))
+	right.add_child(_label(I18n.t("menu.track"), 20))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	box.add_child(row)
+	right.add_child(row)
 	for id in Protocol.TRACK_IDS:
 		var b := Button.new()
 		b.text = _track_name(id) + ("  ✓" if id == current_track else "")
@@ -177,15 +192,15 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 		row.add_child(b)
 		_tracks[id] = b
 	_track_note = _label("", 15)
-	_track_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_wrap(_track_note)
 	_track_note.modulate = Color(1, 1, 1, 0.75)
-	box.add_child(_track_note)
+	right.add_child(_track_note)
 	_set_track_note()
 
-	box.add_child(_label(I18n.t("menu.mode"), 20))
+	right.add_child(_label(I18n.t("menu.mode"), 20))
 	var mrow := HBoxContainer.new()
 	mrow.add_theme_constant_override("separation", 10)
-	box.add_child(mrow)
+	right.add_child(mrow)
 	for id in Protocol.GAME_MODES:
 		var b := Button.new()
 		b.text = I18n.t("mode." + id) + ("  ✓" if id == current_mode else "")
@@ -198,9 +213,9 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 		mrow.add_child(b)
 		_modes[id] = b
 	_mode_note = _label(I18n.t("menu.mode_note"), 15)
-	_mode_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_wrap(_mode_note)
 	_mode_note.modulate = Color(1, 1, 1, 0.75)
-	box.add_child(_mode_note)
+	right.add_child(_mode_note)
 
 	box.add_child(HSeparator.new())
 	_resume = _button(I18n.t("menu.resume") + "    Esc", func(): close())
@@ -327,6 +342,12 @@ func _is_fullscreen() -> bool:
 
 func _is_mac() -> bool:
 	return OS.get_name() == MAC
+
+
+## A note under a section: wraps at a column's width.
+func _wrap(l: Label) -> void:
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(COL_W, 0)
 
 
 func _label(text: String, size: int) -> Label:

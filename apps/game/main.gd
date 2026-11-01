@@ -8,8 +8,9 @@
 # Options (after --): --mock (default), --server[=URL], --game-key=KEY, --racers=N, --seed=N,
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
 #   --track=countryside|village (mock mode; with --server the session config picks the track),
-#   --mode=race|duel (mock mode; with --server the session config picks it): duel = king of the
-#   hill (contracts §2i), one lap each, a half of the split screen per racer,
+#   --mode=race|duel: duel = king of the hill (contracts §2i), one lap each, a half of the split
+#   screen per racer (with 2+ racers). Mock mode starts in it; with --server the game sets it on
+#   the server when it connects (ending a running session, like the options menu),
 #   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full,
 #   --kit (mock mode: fake racers built with the racer kit from res://racer_kit/samples, in turn),
 #   --cam-cycle=SEC (switch racer every SEC s, 0 = never; default: options menu pick, else 8),
@@ -18,6 +19,7 @@
 #   --language=en|de (default: last pick in the options menu, else config.language; server mode
 #   sends it to the server so every phone follows it)
 # Keys: C camera mode, Tab / Shift+Tab next / previous racer, A automatic racer switching on/off,
+#   D free race / king of the hill (mock mode; server mode: options menu),
 #   V second camera (face / side / off), F next fork shot, R/W start next rain/wind phase,
 #   K toggle forced calm, B boost the followed racer, H hide overlay,
 #   Esc or ⌘, options menu (fullscreen, language, track, quit), ⌃⌘F or F11 fullscreen, ⌘Q quit.
@@ -123,6 +125,8 @@ var duel_screen: DuelScreen = null   # the split screen's halves and their camer
 var duel_hud: DuelHud = null
 var duel_sides := {}                 # runId -> "left" | "right" (run.start side), newest last
 var queue_state := {}                # last queue.updated
+var bests := {}                      # playerId -> best time (on a loop, best lap) in ms this session
+var mode_sent := false               # --mode with --server: sent to the server once
 
 
 func _ready() -> void:
@@ -149,6 +153,10 @@ func _ready() -> void:
 	print("language: ", I18n.language)
 	track = next_track if next_track != "" else String(args.get("track", config["track"]))
 	config["track"] = track
+	if args.has("mode") and not Protocol.GAME_MODES.has(String(args["mode"])):
+		push_error("unknown game mode \"%s\" (known: %s)" % [args["mode"], ", ".join(Protocol.GAME_MODES)])
+		get_tree().quit(1)
+		return
 	if args.has("mode") and not args.has("server"):
 		config["mode"] = String(args["mode"])
 	course = _make_course(track)
@@ -770,6 +778,9 @@ func _handle(msg: Dictionary) -> void:
 			hud.set_session(String(pl.get("status", "?")))
 		"leaderboard.updated":
 			hud.set_leaderboard(pl)
+			bests.clear()  # a new session starts with an empty leaderboard
+			for e in pl:
+				bests[String(e["playerId"])] = int(e["bestTimeMs"])
 		Messages.WELCOME:
 			# The big screen's language wins: a fresh server (or one an admin changed) gets ours.
 			var server_lang := String(pl.get("config", {}).get("language", ""))
@@ -780,6 +791,13 @@ func _handle(msg: Dictionary) -> void:
 			# The game owns the weather: a server that just met it (its start, a reconnect) gets the
 			# weather now, not at the next phase change; a forced --weather reaches the phones too.
 			net.send(Messages.GAME_WEATHER, sim.weather.state())
+			# --mode with --server: set it on the server once, like the options menu does.
+			var server_mode := String(pl.get("config", {}).get("mode", ""))
+			if args.has("mode") and not mode_sent:
+				mode_sent = true
+				if server_mode != String(args["mode"]):
+					print("game mode: server has %s, --mode asks for %s" % [server_mode, args["mode"]])
+					_switch_mode(String(args["mode"]))
 		"config.updated":
 			var lang := String(pl.get("language", ""))
 			if language_sent != "":
@@ -860,6 +878,11 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 				hud.run_result(pl["runId"], fv.racer.player_id, type == Messages.GAME_RUN_FINISHED, ms, String(pl.get("reason", "")))
 				if duel_sides.has(pl["runId"]) and duel_hud != null:
 					_duel_verdict(pl["runId"], fv.racer.player_id, type == Messages.GAME_RUN_FINISHED, ms, String(pl.get("reason", "")))
+				# Each racer's best (a loop's best lap, also from a run that failed after a lap).
+				var pid: String = fv.racer.player_id
+				var timed := type == Messages.GAME_RUN_FINISHED or pl.has("bestLapMs")
+				if timed and ms > 0 and (not bests.has(pid) or ms < int(bests[pid])):
+					bests[pid] = ms
 	match type:
 		Messages.GAME_RUN_FINISHED:
 			if pl.has("bestLapMs"):
@@ -960,6 +983,7 @@ func _apply_mode(id: String) -> void:
 		if duel_hud == null:
 			duel_hud = DuelHud.new()
 			add_child(duel_hud)
+			duel_hud.bests = bests
 		duel_hud.result_s = float(config.get("duelResultMs", 5000)) / 1000.0
 		duel_hud.set_queue(queue_state)
 		duel_hud.visible = true
@@ -1056,13 +1080,15 @@ func _duel_verdict(run_id: String, pid: String, ok: bool, ms: int, reason: Strin
 		return
 	var c: Dictionary = queue_state.get("champion", {})
 	var time := "%.2f s" % (ms / 1000.0)
+	var pb := bests.has(pid) and ms < int(bests[pid])  # a new best of their own (not their first lap)
 	if c.is_empty() or ms < int(c["timeMs"]):
 		var own: bool = not c.is_empty() and String(c["playerId"]) == pid
 		duel_hud.result(side, I18n.t("duel.new_record" if own else "duel.new_champion"), time, true)
 	elif String(c["playerId"]) == pid:
 		duel_hud.result(side, time, I18n.f("duel.keeps", [nicks.get(pid, "?")]), false)
 	else:
-		duel_hud.result(side, time, I18n.f("duel.short", [(ms - int(c["timeMs"])) / 1000.0, c["nickname"]]), false)
+		var gap := (ms - int(c["timeMs"])) / 1000.0
+		duel_hud.result(side, time, I18n.f("duel.new_best_short" if pb else "duel.short", [gap, c["nickname"]]), false)
 
 
 ## Who the camera can be on: the racers on the track, plus the karts parked on the start grid
@@ -1191,6 +1217,12 @@ func _unhandled_input(e: InputEvent) -> void:
 			director.step(-1 if k.shift_pressed else 1, sim.racers)
 		KEY_A:
 			director.auto = not director.auto
+		KEY_D:
+			# Mock mode: switch at once. Server mode ends the session, so it goes through the menu.
+			if assets == null:
+				_switch_mode("race" if mode == "duel" else "duel")
+			else:
+				open_menu()
 		KEY_V:
 			_choose_inset(cam_hud.cycle_inset())
 		KEY_R:

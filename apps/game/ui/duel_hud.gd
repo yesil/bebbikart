@@ -1,8 +1,8 @@
 extends CanvasLayer
 ## Duel mode's HUD (contracts §2i), over world/duel_screen.gd's halves (or the full screen):
 ##  - Each racing half, top: the racer's name on its side's colour (left red, right blue), the
-##    lap time, the record to beat, boosts left, and PUSH! while Push is held (SLIDE! after a
-##    slide with Push, contracts §2g).
+##    lap time, their own best lap, the record to beat, boosts left, and PUSH! while Push is held
+##    (SLIDE! after a slide with Push, contracts §2g).
 ##  - Each half's own start lights (a duel run never shares a countdown), then GO!.
 ##  - A finished lap's verdict in its half for duelResultMs: NEW CHAMPION!, or how far short of
 ##    whose record; a failed lap says oops and why.
@@ -19,6 +19,7 @@ const GO_S := 1.2
 const LINE_NAMES := 4        # names shown in the line at the top
 
 var result_s := 5.0          # how long a verdict stays (config.duelResultMs)
+var bests := {}              # playerId -> best lap in ms this session (main.gd keeps it)
 var _font: SystemFont
 var _queue := {}
 var _halves := {}            # side -> {root, plate, name, time, record, boosts, push, lights, verdict, verdict_big, verdict_small, idle}
@@ -67,6 +68,8 @@ func _build_half(side: String) -> Dictionary:
 	pbox.add_child(name_l)
 	var time_l := _label("", 54, Color.WHITE)
 	pbox.add_child(time_l)
+	var best_l := _label("", 22, Color.WHITE)
+	pbox.add_child(best_l)
 	var record_l := _label("", 20, Color(1, 1, 1, 0.85))
 	pbox.add_child(record_l)
 	var boosts_l := _label("", 20, Color("#ffd23a"))
@@ -93,7 +96,7 @@ func _build_half(side: String) -> Dictionary:
 	idle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	idle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(idle)
-	return {"root": root, "plate": plate, "name": name_l, "time": time_l, "record": record_l,
+	return {"root": root, "plate": plate, "name": name_l, "time": time_l, "best": best_l, "record": record_l,
 		"boosts": boosts_l, "push": push, "push_label": push_l, "lights": lights, "verdict": verdict,
 		"verdict_big": big, "verdict_small": small, "idle": idle}
 
@@ -173,6 +176,8 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		h["name"].text = nick_of.call(r.player_id)
 		var ms: int = r.lap_ms() if r.looping else r.elapsed_ms()
 		h["time"].text = "%.2f" % (ms / 1000.0) if r.state == "racing" else "0.00"
+		var best := int(bests.get(r.player_id, 0))
+		h["best"].text = I18n.f("duel.best", [best / 1000.0]) if best > 0 else I18n.t("duel.first_lap")
 		var c: Dictionary = _queue.get("champion", {})
 		h["record"].text = I18n.f("duel.record", [int(c["timeMs"]) / 1000.0]) + "  ·  " + String(c["nickname"]) if not c.is_empty() else I18n.t("duel.no_crown")
 		h["boosts"].text = I18n.f("duel.boosts", [r.boosts_left])

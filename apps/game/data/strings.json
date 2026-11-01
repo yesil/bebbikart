@@ -88,7 +88,7 @@
     "overlay.boost": "  BOOST",
     "overlay.pit": "  PIT",
     "overlay.recent": "recent:",
-    "overlay.keys": "C cam  Tab/Shift+Tab racer  A auto-switch  V 2nd cam  F fork  R rain  W wind  K calm  B boost  H hide  ",
+    "overlay.keys": "C cam  Tab/Shift+Tab racer  A auto-switch  V 2nd cam  F fork  R rain  W wind  K calm  B boost  D duel  H hide  ",
     "overlay.keys_mac": "Esc/⌘, options  ⌃⌘F fullscreen  ⌘Q quit",
     "overlay.keys_other": "Esc options  F11 fullscreen",
     "section.hills": "hills",
@@ -151,7 +151,11 @@
     "mode.duel": "King of the hill",
     "menu.mode_note": "King of the hill: one lap each, two racers at a time on a split screen, beat the champion.",
     "menu.mode_switching": "Switching to %s once the racers are off the track…",
-    "log.unknown_mode": "ERROR unknown game mode %s"
+    "log.unknown_mode": "ERROR unknown game mode %s",
+    "duel.best": "Best lap %.2f s",
+    "duel.first_lap": "First lap",
+    "duel.new_best_short": "New best! %.2f s short of %s",
+    "duel.new_best_keeps": "New best! %s keeps the crown"
   },
   "de": {
     "lang.en": "English",
@@ -241,7 +245,7 @@
     "overlay.boost": "  BOOST",
     "overlay.pit": "  BOX",
     "overlay.recent": "zuletzt:",
-    "overlay.keys": "C Kamera  Tab/Shift+Tab Fahrer  A Wechsel  V 2. Kamera  F Gabelung  R Regen  W Wind  K ruhig  B Boost  H aus  ",
+    "overlay.keys": "C Kamera  Tab/Shift+Tab Fahrer  A Wechsel  V 2. Kamera  F Gabelung  R Regen  W Wind  K ruhig  B Boost  D Duell  H aus  ",
     "overlay.keys_mac": "Esc/⌘, Optionen  ⌃⌘F Vollbild  ⌘Q beenden",
     "overlay.keys_other": "Esc Optionen  F11 Vollbild",
     "section.hills": "Hügel",
@@ -304,6 +308,10 @@
     "mode.duel": "König vom Hügel",
     "menu.mode_note": "König vom Hügel: eine Runde pro Person, zwei gleichzeitig im geteilten Bild, schlag den Champion.",
     "menu.mode_switching": "Wechsel zu %s, sobald alle von der Strecke sind…",
-    "log.unknown_mode": "FEHLER unbekannter Spielmodus %s"
+    "log.unknown_mode": "FEHLER unbekannter Spielmodus %s",
+    "duel.best": "Beste Runde %.2f s",
+    "duel.first_lap": "Erste Runde",
+    "duel.new_best_short": "Neue Bestzeit! %.2f s langsamer als %s",
+    "duel.new_best_keeps": "Neue Bestzeit! %s behält die Krone"
   }
 }
