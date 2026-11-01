@@ -15,7 +15,8 @@
 #   sends it to the server so every phone follows it)
 # One way to race (contracts §2i, king of the hill): the racers take turns from a line, one lap
 # each against the clock, two at a time; the screen splits once two people play.
-# Keys: R/W start next rain/wind phase, K toggle forced calm, B boost the newest racer,
+# Keys: R/W start next rain/wind phase, K toggle forced calm, B boost the newest racer (these
+#   four only in debug runs, not in the release build of `bun run play`),
 #   H hide overlay, Esc or ⌘, options menu (fullscreen, language, track, session, quit),
 #   ⌃⌘F or F11 fullscreen, ⌘Q quit.
 extends Node3D
@@ -1049,6 +1050,11 @@ func _unhandled_input(e: InputEvent) -> void:
 		return
 	if menu.is_open():
 		return  # game keys are off while the menu is up
+	if k.keycode == KEY_H:
+		overlay.get_parent().visible = not overlay.get_parent().visible
+		return
+	if not OS.is_debug_build():
+		return  # the test keys (weather, boost) are off in the release build (bun run play)
 	match k.keycode:
 		KEY_R:
 			sim.weather.advance("rain")
@@ -1063,8 +1069,6 @@ func _unhandled_input(e: InputEvent) -> void:
 		KEY_B:
 			if follow_run != "":
 				sim.boost(follow_run)
-		KEY_H:
-			overlay.get_parent().visible = not overlay.get_parent().visible
 
 
 func _toggle_fullscreen() -> void:
