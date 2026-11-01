@@ -65,7 +65,7 @@ detiling_shift = 0.3
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_ai1xw"]
 name = "rock"
 id = 5
-albedo_color = Color(0.95, 0.93, 0.9, 1)
+albedo_color = Color(1.15, 1.1, 1.04, 1)
 albedo_texture = ExtResource("11_s60wl")
 normal_texture = ExtResource("12_prmke")
 uv_scale = 0.06

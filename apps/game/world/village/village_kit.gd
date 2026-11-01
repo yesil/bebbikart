@@ -14,7 +14,7 @@ extends RefCounted
 ## Building kinds follow the village plan: chalet, inn, arcade, bakery, church, mill, barn, school.
 
 const KIT := "res://assets/village/kenney_fantasy_town/"
-const NATURE := "res://assets/nature/quaternius/"
+const PLANT_MESHES := "res://world/vegetation/meshes/"
 const VMAT_DIR := "res://world/village/materials/"
 const SWISS_MAT := VMAT_DIR + "kenney_swiss.tres"
 const SWISS_TEX := VMAT_DIR + "kenney_swiss_colormap.res"
@@ -50,13 +50,14 @@ var errors: PackedStringArray = []
 var _meshes := {}           # module name -> Mesh
 
 
-## Model file of a module: a Kenney kit name, "nature:<name>" for the Quaternius kit, or a
-## res:// path.
+## Model file of a module: a Kenney kit name, "nature:<name>" for a Quaternius plant, or a
+## res:// path. Plants are the countryside's prepared meshes (tools/bake_world.gd, from the
+## Quaternius kit): leaves that sway with the weather's wind and toned-down bark.
 static func model_path(module: String) -> String:
 	if module.begins_with("res://"):
 		return module
 	if module.begins_with("nature:"):
-		return NATURE + module.trim_prefix("nature:") + ".gltf"
+		return PLANT_MESHES + module.trim_prefix("nature:").to_snake_case() + ".res"
 	return KIT + module + ".glb"
 
 
@@ -69,10 +70,13 @@ func mesh(module: String) -> Mesh:
 		errors.append("missing model %s" % path)
 		_meshes[module] = null
 		return null
-	var root: Node = (load(path) as PackedScene).instantiate()
-	var mi := _first_mesh(root)
-	var m: Mesh = mi.mesh if mi != null else null
-	root.free()
+	var res := load(path)
+	var m: Mesh = res as Mesh
+	if res is PackedScene:
+		var root: Node = (res as PackedScene).instantiate()
+		var mi := _first_mesh(root)
+		m = mi.mesh if mi != null else null
+		root.free()
 	if m == null:
 		errors.append("no mesh in %s" % path)
 	_meshes[module] = m

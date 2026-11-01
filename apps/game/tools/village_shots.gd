@@ -32,6 +32,10 @@ func _initialize() -> void:
 		quit(1)
 		return
 	DirAccess.make_dir_recursive_absolute(out)
+	# On top, so the Mac keeps drawing it under other windows; never focused, so it doesn't catch
+	# keys meant for other apps (Esc would open the options menu over the shots).
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true)
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true)
 	_run.call_deferred()
 
 

@@ -18,7 +18,7 @@ const Route = preload("res://sim/route.gd")
 
 enum Layer { GRASS, GRASS_DIRT, DIRT, GRAVEL, MUD, ROCK, SNOW }
 const LAYER_NAMES := ["grass", "grass_dirt", "dirt", "gravel", "mud", "rock", "snow"]
-const SNOW_LINE := 95.0
+const SNOW_LINE := 78.0
 const ROCK_LINE := 40.0
 
 const MAP_RECT := Rect2(-512, -512, 1024, 1024)  # 4 x 4 Terrain3D regions of 256 m
@@ -414,7 +414,7 @@ func _paint(i: int, j: int) -> void:
 	# Mountains: alpine meadow up to the rock line, rock above and on steep ground, snow on
 	# the high, gentler slopes.
 	var line := SNOW_LINE + patch.get_noise_2d(p.x * 0.3, p.y * 0.3) * 25.0
-	if y > line and slope < 1.1:
+	if y > line and slope < 1.4:
 		b = Layer.SNOW
 		o = Layer.ROCK
 		bl = clampf(slope * 0.6, 0.0, 0.7)

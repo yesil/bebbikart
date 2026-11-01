@@ -4,8 +4,8 @@ extends MultiMeshInstance3D
 ## tools/bake_village.gd. The scene stores only the model path and the transforms; the MultiMesh
 ## is built when the node enters the tree (also in the editor), so the baked scene stays small.
 
-## glTF/GLB model whose first mesh is instanced.
-@export_file("*.glb", "*.gltf") var model := ""
+## glTF/GLB model whose first mesh is instanced, or a mesh resource (the prepared plants).
+@export_file("*.glb", "*.gltf", "*.res") var model := ""
 ## 12 floats per copy: basis x, y, z columns then origin.
 @export var transforms := PackedFloat32Array()
 ## Overrides the model's own materials when set (the Swiss Kenney palette).
@@ -27,21 +27,24 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
-	var ps: PackedScene = load(model) if ResourceLoader.exists(model) else null
-	if ps == null:
-		push_error("instanced_model %s: cannot load %s" % [name, model])
+	var res: Resource = load(model) if ResourceLoader.exists(model) else null
+	if not (res is PackedScene or res is Mesh):
+		push_error("instanced_model %s: cannot load %s as a model or mesh" % [name, model])
 		return
-	var root := ps.instantiate()
-	var mi := _first_mesh(root)
-	if mi == null:
+	var inner := Transform3D()
+	var mesh: Mesh = res as Mesh
+	if res is PackedScene:
+		var root := (res as PackedScene).instantiate()
+		var mi := _first_mesh(root)
+		if mi == null:
+			root.free()
+			push_error("instanced_model %s: no mesh in %s" % [name, model])
+			return
+		# Many models scale or turn their mesh on an inner node (e.g. Z-up exports at 100x):
+		# carry that into every copy, or the mesh comes out tiny or lying down.
+		inner = _model_transform(mi)
+		mesh = _rest_pose(mi)
 		root.free()
-		push_error("instanced_model %s: no mesh in %s" % [name, model])
-		return
-	# Many models scale or turn their mesh on an inner node (e.g. Z-up exports at 100x):
-	# carry that into every copy, or the mesh comes out tiny or lying down.
-	var inner := _model_transform(mi)
-	var mesh := _rest_pose(mi)
-	root.free()
 	if mesh == null:
 		return
 	var mm := MultiMesh.new()

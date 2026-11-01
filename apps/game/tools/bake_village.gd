@@ -42,7 +42,7 @@ const LAYER_LOOK := {
 	"dirt": [0.2, Color(1.0, 0.95, 0.88)],
 	"gravel": [0.35, Color(0.95, 0.95, 0.95)],
 	"mud": [0.25, Color(0.8, 0.72, 0.62)],
-	"rock": [0.06, Color(0.95, 0.93, 0.9)],
+	"rock": [0.06, Color(1.15, 1.1, 1.04)],    # pale limestone, like the Alps over a valley
 	"snow": [0.08, Color(2.2, 2.25, 2.4)],
 }
 ## Snow reuses the gravel textures, brightened (no extra texture download).
