@@ -8,6 +8,8 @@
 # Options (after --): --mock (default), --server[=URL], --game-key=KEY, --racers=N, --seed=N,
 #   --weather=calm|rain|wind|storm (forced), --duration=SEC (quit after), --speed=X,
 #   --track=countryside|village (mock mode; with --server the session config picks the track),
+#   --mode=race|duel (mock mode; with --server the session config picks it): duel = king of the
+#   hill (contracts §2i), one lap each, a half of the split screen per racer,
 #   --screenshot=path.png [--shot-at=SEC] [--cam=follow|wide|forks], --log=none|summary|full,
 #   --kit (mock mode: fake racers built with the racer kit from res://racer_kit/samples, in turn),
 #   --cam-cycle=SEC (switch racer every SEC s, 0 = never; default: options menu pick, else 8),
@@ -49,6 +51,8 @@ const RaceHud = preload("res://ui/race_hud.gd")
 const OptionsMenu = preload("res://ui/options_menu.gd")
 const I18n = preload("res://ui/i18n.gd")
 const AudioDirector = preload("res://audio/audio_director.gd")
+const DuelScreen = preload("res://world/duel_screen.gd")
+const DuelHud = preload("res://ui/duel_hud.gd")
 
 ## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
 ## resolution (0 = native; upscaled with MetalFX on Metal, FSR elsewhere), so a fullscreen 5K
@@ -64,6 +68,10 @@ const FPS_CAP := 60          # also caps 120 Hz ProMotion displays
 const FPS_UNFOCUSED := 30    # window in the background: still smooth enough for a big screen
 
 const FORCED := {"calm": [0.0, 0.0], "rain": [1.0, 0.0], "wind": [0.0, 0.8], "storm": [1.0, 0.8]}
+## Split screen draws the world twice (two cameras, two sets of shadow cascades), so the halves
+## keep their shadows closer and their vegetation a little shorter than the full-screen preset.
+const SPLIT_SHADOW_M := 80.0
+const SPLIT_VEG := 0.8
 
 var args := {}
 var course                 # sim/course.gd or sim/village_course.gd (loop)
@@ -108,6 +116,12 @@ var language_sent := ""
 var _village_plan = null   # world/village/village_plan.gd, built on a worker for the camera blockers
 var _plan_task := -1       # WorkerThreadPool task building it; -1 when none is running
 var _plan_terrain: Node = null
+## Duel mode (contracts §2i): config.mode as applied (it switches once the track is empty).
+var mode := "race"
+var duel_screen: DuelScreen = null   # the split screen's halves and their cameras
+var duel_hud: DuelHud = null
+var duel_sides := {}                 # runId -> "left" | "right" (run.start side), newest last
+var queue_state := {}                # last queue.updated
 
 
 func _ready() -> void:
@@ -134,6 +148,8 @@ func _ready() -> void:
 	print("language: ", I18n.language)
 	track = next_track if next_track != "" else String(args.get("track", config["track"]))
 	config["track"] = track
+	if args.has("mode") and not args.has("server"):
+		config["mode"] = String(args["mode"])
 	course = _make_course(track)
 	if course == null:
 		return
@@ -156,6 +172,7 @@ func _ready() -> void:
 		if args.has("kit") and not _load_kit_samples():
 			return
 		net = MockNet.new(config, n_racers, seed_)
+		net.sim = sim  # mock players read their racer to know where pushing is safe
 		print("BebbiKart mock mode: protocol v%d, %d fake players, seed %d, course %s" % [
 			Protocol.PROTOCOL_VERSION, n_racers, seed_, JSON.stringify(course.all_route_lengths())])
 	net.course = course
@@ -261,9 +278,10 @@ func _make_menu() -> void:
 		menu.queue_free()
 	menu = OptionsMenu.new()
 	add_child(menu)
-	menu.setup(track, assets != null)
+	menu.setup(track, assets != null, mode)
 	menu.fullscreen_toggled.connect(_toggle_fullscreen)
 	menu.track_chosen.connect(_switch_track)
+	menu.mode_chosen.connect(_switch_mode)
 	menu.quit_pressed.connect(_quit)
 	menu.quality_chosen.connect(func(id: String): apply_quality(id); _save_setting("graphics", "quality", id))
 	menu.language_chosen.connect(_choose_language)
@@ -402,10 +420,13 @@ func apply_quality(id: String) -> void:
 	_apply_render_scale()
 	RenderingServer.directional_shadow_atlas_set_size(q["shadow_atlas"], true)
 	RenderingServer.directional_soft_shadow_filter_set_quality(q["soft_shadows"])
-	sun.directional_shadow_max_distance = q["shadow_distance"]
+	var split := duel_screen != null and duel_screen.split
+	sun.directional_shadow_max_distance = minf(q["shadow_distance"], SPLIT_SHADOW_M) if split else q["shadow_distance"]
 	env.ssao_enabled = q["ssao"]
 	env.glow_enabled = q["glow"]
-	_scale_visibility(self, q["veg"])
+	_scale_visibility(self, q["veg"] * (SPLIT_VEG if split else 1.0))
+	if duel_screen != null:
+		duel_screen.apply_quality(int(q["render_height"]))
 	menu.set_quality(id)
 
 
@@ -610,6 +631,8 @@ func _finish_village_blockers() -> void:
 		return
 	camera.blockers = b
 	cam_hud.blockers = b
+	if duel_screen != null:
+		duel_screen.set_blockers(b)
 
 
 ## A shot of each village fork from just before its split, looking down both branches.
@@ -645,6 +668,7 @@ func _physics_process(_delta: float) -> void:
 	for msg in net.poll(1.0 / float(Protocol.SIM_TICK_HZ), free_slots):
 		_handle(msg)
 	_check_track()
+	_check_mode()
 	sim.step()
 	for m in sim.outbox:
 		if audio != null:
@@ -708,8 +732,22 @@ func _handle(msg: Dictionary) -> void:
 			v.show_name_tag(false)  # the race HUD draws the tags
 			views[pl["runId"]] = v
 			net.remember_run(pl["runId"], nicks.get(pl["playerId"], "?"))
+			var side := String(pl.get("side", ""))
+			if side != "":
+				duel_sides.erase(pl["runId"])
+				duel_sides[pl["runId"]] = side  # newest last: the run a half shows
+				if duel_hud != null:
+					duel_hud.set_side(pl["runId"], side)
 		Messages.RUN_BOOST:
 			sim.boost(pl["runId"])
+		Messages.RUN_PUSH:
+			sim.push(pl["runId"], bool(pl.get("on", false)))
+		Messages.QUEUE_UPDATED:
+			queue_state = pl
+			if duel_hud != null:
+				duel_hud.set_queue(pl)
+			if duel_screen != null and mode == "duel":
+				_set_split(bool(pl.get("split", false)))
 		Messages.RUN_STOP:
 			sim.stop(pl["runId"])
 		Messages.RUN_ABORT:
@@ -814,6 +852,8 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 				# On a loop the best lap ranks, also for a run that failed after some laps.
 				var ms := int(pl["bestLapMs"]) if pl.has("bestLapMs") else int(pl.get("elapsedMs", 0))
 				hud.run_result(pl["runId"], fv.racer.player_id, type == Messages.GAME_RUN_FINISHED, ms, String(pl.get("reason", "")))
+				if duel_sides.has(pl["runId"]) and duel_hud != null:
+					_duel_verdict(pl["runId"], fv.racer.player_id, type == Messages.GAME_RUN_FINISHED, ms, String(pl.get("reason", "")))
 	match type:
 		Messages.GAME_RUN_FINISHED:
 			if pl.has("bestLapMs"):
@@ -846,18 +886,22 @@ func _process(delta: float) -> void:
 	var racing: Array = sim.racers.duplicate()
 	# On a loop, laps first, then position in the lap.
 	racing.sort_custom(func(a, b): return a.lap + a.progress() > b.lap + b.progress())
-	director.update(delta, _camera_pool())
-	director.pick_inset(delta, _inset_pool())
-	if director.run_id != follow_run:
-		follow_run = director.run_id
-		_camera_cut()
-	camera.target = _view_of(follow_run)
+	if mode == "duel":
+		_update_duel(delta)
+	else:
+		director.update(delta, _camera_pool())
+		director.pick_inset(delta, _inset_pool())
+		if director.run_id != follow_run:
+			follow_run = director.run_id
+			_camera_cut()
+		camera.target = _view_of(follow_run)
+		camera.targets = views.values()
 	audio.follow_run = follow_run
-	camera.targets = views.values()
 	for id in views:
 		views[id].parked = sim.on_grid(id)
 		views[id].sync()
-	_update_camera_hud()
+	if mode != "duel":
+		_update_camera_hud()
 	hud.update(delta, sim, views)
 	_update_overlay(racing)
 	var dur := float(args.get("duration", "0"))
@@ -871,6 +915,148 @@ func _process(delta: float) -> void:
 		_screenshot("%s/t%05.1f_r%d.jpg" % [args["shots"], run_time, sim.racers.size()])
 	if dur > 0.0 and run_time >= dur:
 		_quit()
+
+
+# ---------------------------------------------------------------- duel mode (contracts §2i)
+
+## The session's game mode: switches once the track is empty (like a track change), so no run
+## races under the other mode's rules.
+func _check_mode() -> void:
+	var want := String(config.get("mode", "race"))
+	if want == mode or sim.active_count() > 0 or hud == null:
+		return
+	if not Protocol.GAME_MODES.has(want):
+		push_error("config.mode \"%s\" is not a known game mode" % want)
+		_result(I18n.f("log.unknown_mode", [want]))
+		config["mode"] = mode
+		return
+	_apply_mode(want)
+
+
+func _apply_mode(id: String) -> void:
+	mode = id
+	var duel := id == "duel"
+	sim.solo = duel
+	hud.duel = duel
+	cam_hud.visible = not duel
+	if assets == null:
+		net.duel = duel
+		net.hold = false
+		net.line.clear()
+	duel_sides.clear()
+	if duel:
+		if duel_screen == null:
+			duel_screen = DuelScreen.new()
+			add_child(duel_screen)
+			duel_screen.setup(camera, camera.fork_shots)
+			if camera.blockers != null:
+				duel_screen.set_blockers(camera.blockers)
+		if duel_hud == null:
+			duel_hud = DuelHud.new()
+			add_child(duel_hud)
+		duel_hud.result_s = float(config.get("duelResultMs", 5000)) / 1000.0
+		duel_hud.set_queue(queue_state)
+		duel_hud.visible = true
+		_set_split(bool(queue_state.get("split", false)))
+	else:
+		queue_state = {}
+		if duel_hud != null:
+			duel_hud.visible = false
+		if duel_screen != null:
+			duel_screen.teardown()
+		camera.mode = CameraRig.Mode.FOLLOW  # an idle duel screen left it on the fork shots
+		fx.followers = []
+		if quality != "":
+			apply_quality(quality)
+	_make_menu()
+	print("game mode: %s" % id)
+
+
+## queue.updated split: a half per racer (2+ racers in the session) or the full screen for one.
+func _set_split(on: bool) -> void:
+	if duel_screen.split == on:
+		return
+	duel_screen.set_split(on)
+	if quality != "":
+		apply_quality(quality)  # the halves keep their shadows closer (SPLIT_SHADOW_M)
+
+
+## Options menu: free races or king of the hill. Mock mode stops the runs on the track and
+## switches at once; server mode asks the server like a track change (a running session ends,
+## the mode is set, a new session starts), and the game switches once the track is empty.
+func _switch_mode(id: String) -> void:
+	if not Protocol.GAME_MODES.has(id):
+		push_error("mode switch: unknown game mode \"%s\"" % id)
+		menu.show_error(I18n.f("log.unknown_mode", [id]))
+		return
+	if assets == null:
+		print("game mode change (options menu): %s -> %s" % [mode, id])
+		net.hold = true  # no new runs until the track is empty and the mode switched
+		for r in sim.racers + sim.queue:
+			sim.abort(r.run_id)  # sim.removed tells the mock players and the HUD
+		config["mode"] = id
+		return
+	if net.status != "online":
+		push_error("mode switch: server is %s" % net.status)
+		menu.show_error(I18n.f("error.offline_track", [I18n.t("net." + net.status)]))
+		return
+	print("game mode change (options menu): asking the server for %s (session %s)" % [id, net.session_status])
+	if net.session_status == "running":
+		net.send("game.session.end", {})
+	net.send("game.config.set", {"mode": id})
+	net.send("game.session.start", {})
+
+
+## Per frame in a duel: each half's camera on its racer (the newest run of that side, also while
+## it cheers after its lap), the weather around both cameras, the duel HUD.
+func _update_duel(delta: float) -> void:
+	var on_side := {}       # side -> racer view in that half
+	var runs := {}          # side -> its Racer (on the grid or racing)
+	for rid in duel_sides.keys():
+		var v = _view_of(rid)
+		var r = sim.by_run.get(rid)
+		if v == null and r == null:
+			duel_sides.erase(rid)
+			continue
+		var side: String = duel_sides[rid]
+		if v != null:
+			on_side[side] = v
+		runs[side] = r
+	if not duel_screen.split:
+		# One racer in the session: the whole screen is theirs, whichever side the server gave.
+		var only = on_side.get("left", on_side.get("right", null))
+		on_side = {"left": only} if only != null else {}
+		var only_r = runs.get("left", null) if runs.get("left", null) != null else runs.get("right", null)
+		runs = {"left": only_r}
+	var cams: Array = duel_screen.update(delta, on_side, views.values())
+	fx.followers = cams if duel_screen.split else []
+	# The music and engines follow the newest racer on the track.
+	follow_run = ""
+	for rid in duel_sides:
+		if sim.by_run.has(rid):
+			follow_run = rid
+	var rects := {"left": duel_screen.rect_of("left")}
+	if duel_screen.split:
+		rects["right"] = duel_screen.rect_of("right")
+	duel_hud.update(delta, sim, rects, runs, func(pid: String) -> String: return String(nicks.get(pid, "?")))
+
+
+## A duel lap ended: its half shows the verdict, judged against the crown as it stood (the
+## server's queue.updated with the new champion comes after it).
+func _duel_verdict(run_id: String, pid: String, ok: bool, ms: int, reason: String) -> void:
+	var side: String = duel_sides[run_id] if duel_screen.split else "left"
+	if not ok:
+		duel_hud.result(side, I18n.t("hud.oops").to_upper() + "!", I18n.t("fail." + reason) if reason != "" else "", false)
+		return
+	var c: Dictionary = queue_state.get("champion", {})
+	var time := "%.2f s" % (ms / 1000.0)
+	if c.is_empty() or ms < int(c["timeMs"]):
+		var own: bool = not c.is_empty() and String(c["playerId"]) == pid
+		duel_hud.result(side, I18n.t("duel.new_record" if own else "duel.new_champion"), time, true)
+	elif String(c["playerId"]) == pid:
+		duel_hud.result(side, time, I18n.f("duel.keeps", [nicks.get(pid, "?")]), false)
+	else:
+		duel_hud.result(side, time, I18n.f("duel.short", [(ms - int(c["timeMs"])) / 1000.0, c["nickname"]]), false)
 
 
 ## Who the camera can be on: the racers on the track, plus the karts parked on the start grid

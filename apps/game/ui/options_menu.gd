@@ -14,6 +14,7 @@ const CameraHud = preload("res://ui/camera_hud.gd")
 
 signal fullscreen_toggled
 signal track_chosen(id: String)
+signal mode_chosen(id: String)
 signal quit_pressed
 signal quality_chosen(id: String)
 signal language_chosen(id: String)
@@ -30,6 +31,10 @@ var _cycles := {}            # seconds -> Button (camera switch interval)
 var _insets := {}            # inset id -> Button (second camera)
 var _volumes := {}           # audio bus -> HSlider
 var _track_note: Label
+var _modes := {}             # GameMode -> Button
+var _mode_note: Label
+var _current_mode := ""
+var _confirm_mode := ""      # mode waiting for its confirming second click
 var _resume: Button
 var _current_track := ""
 var _server := false
@@ -37,8 +42,9 @@ var _session := "?"          # server session status (server mode)
 var _confirm := ""           # track waiting for its confirming second click
 
 
-func setup(current_track: String, server_mode: bool) -> void:
+func setup(current_track: String, server_mode: bool, current_mode := "race") -> void:
 	_current_track = current_track
+	_current_mode = current_mode
 	_server = server_mode
 	layer = 10
 	var dim := ColorRect.new()
@@ -176,6 +182,26 @@ func setup(current_track: String, server_mode: bool) -> void:
 	box.add_child(_track_note)
 	_set_track_note()
 
+	box.add_child(_label(I18n.t("menu.mode"), 20))
+	var mrow := HBoxContainer.new()
+	mrow.add_theme_constant_override("separation", 10)
+	box.add_child(mrow)
+	for id in Protocol.GAME_MODES:
+		var b := Button.new()
+		b.text = I18n.t("mode." + id) + ("  ✓" if id == current_mode else "")
+		b.toggle_mode = true
+		b.button_pressed = id == current_mode
+		b.disabled = id == current_mode
+		b.custom_minimum_size = Vector2(190, 44)
+		b.add_theme_font_size_override("font_size", 18)
+		b.pressed.connect(_on_mode.bind(id))
+		mrow.add_child(b)
+		_modes[id] = b
+	_mode_note = _label(I18n.t("menu.mode_note"), 15)
+	_mode_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_mode_note.modulate = Color(1, 1, 1, 0.75)
+	box.add_child(_mode_note)
+
 	box.add_child(HSeparator.new())
 	_resume = _button(I18n.t("menu.resume") + "    Esc", func(): close())
 	box.add_child(_resume)
@@ -253,7 +279,31 @@ func _cancel_confirm() -> void:
 	if _confirm != "":
 		_tracks[_confirm].text = _track_name(_confirm)
 		_confirm = ""
+	if _confirm_mode != "":
+		_modes[_confirm_mode].text = I18n.t("mode." + _confirm_mode)
+		_confirm_mode = ""
+		_mode_note.modulate = Color(1, 1, 1, 0.75)
+		_mode_note.text = I18n.t("menu.mode_note")
 	_set_track_note()
+
+
+## Game mode (contracts §2i): like a track switch, a running session ends first (second click).
+func _on_mode(id: String) -> void:
+	var name := I18n.t("mode." + id)
+	if _server and _session == "running" and _confirm_mode != id:
+		_cancel_confirm()
+		_confirm_mode = id
+		_modes[id].text = I18n.f("menu.end_session_to", [name])
+		_modes[id].set_pressed_no_signal(false)
+		_mode_note.modulate = Color(1.0, 0.85, 0.4)
+		_mode_note.text = I18n.f("menu.confirm_switch", [name])
+		return
+	_confirm_mode = ""
+	for k in _modes:
+		_modes[k].disabled = true
+	_mode_note.modulate = Color(1, 1, 1, 0.75)
+	_mode_note.text = I18n.f("menu.mode_switching", [name])
+	mode_chosen.emit(id)
 
 
 func _set_track_note() -> void:

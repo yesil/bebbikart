@@ -16,9 +16,12 @@ var _gloom := 0.0
 var _wet := 0.0
 var _wind_vis := 0.0
 var follow: Node3D   # rain volume follows this (usually the camera)
+## Split screen (duel mode): one rain and wind volume per camera, instead of `follow`'s one.
+var followers: Array = []
 
 var _rain: CPUParticles3D
 var _wind: CPUParticles3D
+var _extra: Array = []    # [rain, wind] volumes for the second and later followers
 var _rain_vis := 0.0
 
 const SKY_TOP := Color(0.32, 0.6, 0.98)
@@ -80,22 +83,49 @@ func setup(p_weather, p_env: Environment, p_sun: DirectionalLight3D) -> void:
 	add_child(_wind)
 
 
+## The rain and wind volumes for follower i (0: the main pair; more are made on first use and
+## share the main pair's meshes, so their looks ease together). Split screen halves the drops per
+## volume: the same rain on the screen, the same CPU.
+func _volumes(i: int) -> Array:
+	if i == 0:
+		return [_rain, _wind]
+	while _extra.size() < i:
+		var r := _rain.duplicate() as CPUParticles3D
+		var w := _wind.duplicate() as CPUParticles3D
+		r.mesh = _rain.mesh
+		w.mesh = _wind.mesh
+		add_child(r)
+		add_child(w)
+		_extra.append([r, w])
+	return _extra[i - 1]
+
+
 func _process(delta: float) -> void:
 	if weather == null:
 		return
 	var rain_i: float = weather.rain_intensity()
 	var wind_s: float = weather.wind_strength()
-	if follow != null:
-		_rain.global_position = follow.global_position + Vector3(0, 14, 0)
-		_wind.global_position = follow.global_position + Vector3(0, 2, 0)
 	_rain_vis = move_toward(_rain_vis, rain_i, delta * 0.5)
-	_rain.emitting = _rain_vis > 0.05
 	(_rain.mesh.material as StandardMaterial3D).albedo_color.a = 0.15 + 0.45 * _rain_vis
 	var wdir: Vector3 = weather.wind_dir()
-	_rain.direction = (Vector3(0, -1, 0) + wdir * wind_s * 0.5).normalized()
-	_wind.emitting = wind_s > 0.05
 	(_wind.mesh.material as StandardMaterial3D).albedo_color.a = 0.1 + 0.4 * wind_s
-	_wind.direction = wdir
+	var follows: Array = followers if not followers.is_empty() else ([follow] if follow != null else [])
+	var split := follows.size() > 1
+	for i in maxi(follows.size(), 1 + _extra.size()):
+		var v: Array = _volumes(i)
+		var rain: CPUParticles3D = v[0]
+		var wind: CPUParticles3D = v[1]
+		var on := i < follows.size() or (i == 0 and follows.is_empty())
+		if i < follows.size() and is_instance_valid(follows[i]):
+			rain.global_position = (follows[i] as Node3D).global_position + Vector3(0, 14, 0)
+			wind.global_position = (follows[i] as Node3D).global_position + Vector3(0, 2, 0)
+		var drops := 1400 if split else 2500
+		if rain.amount != drops:
+			rain.amount = drops
+		rain.emitting = on and _rain_vis > 0.05
+		rain.direction = (Vector3(0, -1, 0) + wdir * wind_s * 0.5).normalized()
+		wind.emitting = on and wind_s > 0.05
+		wind.direction = wdir
 	var gloom := clampf(_rain_vis * 0.9 + wind_s * 0.3, 0.0, 1.0)
 	if weather.phase("rain") == "warning" or weather.phase("wind") == "warning":
 		gloom = maxf(gloom, 0.25)

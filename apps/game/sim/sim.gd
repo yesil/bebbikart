@@ -21,6 +21,10 @@ var outbox: Array = []
 var pair_cool := {}             # "runA|runB" -> tick until which bumps are not logged
 var collisions_enabled := true
 var emit_messages := true       # sweep turns progress chatter off
+## Duel mode (contracts §2i): every run is alone against the clock. Each gets its own start
+## lights, the karts pass through each other (no collisions, no bumps) and the autopilot drives
+## as if the road were empty (no overtaking, no blocked start slots).
+var solo := false
 ## Race start countdown (contracts §2c, config.startCountdownMs): runs that arrive while it is
 ## open wait on the grid and leave together when it goes green.
 var grid_go := -1               # tick the open countdown goes green; -1 = none since start
@@ -63,11 +67,15 @@ func add_run(run_id: String, player_id: String, build: Dictionary, size: Vector2
 	queue.append(r)
 	var countdown_ms := int(config.get("startCountdownMs", 0))
 	if countdown_ms > 0:
-		if grid_go <= tick:
-			grid_go = tick + int(ceil(countdown_ms * Tuning.HZ / 1000.0))
-		go_tick[run_id] = grid_go
+		var go := tick + int(ceil(countdown_ms * Tuning.HZ / 1000.0))
+		if solo:
+			go_tick[run_id] = go  # its own lights: never joins another run's countdown
+		else:
+			if grid_go <= tick:
+				grid_go = go
+			go_tick[run_id] = grid_go
 		_park_on_grid(r)
-		emit("game.run.grid", {"runId": run_id, "goInMs": int(round((grid_go - tick) * 1000.0 / Tuning.HZ))})
+		emit("game.run.grid", {"runId": run_id, "goInMs": int(round((int(go_tick[run_id]) - tick) * 1000.0 / Tuning.HZ))})
 	return r
 
 
@@ -76,8 +84,9 @@ func add_run(run_id: String, player_id: String, build: Dictionary, size: Vector2
 func _park_on_grid(r: Racer) -> void:
 	var home := r.lane_home * (r.half_width() - 0.7)
 	var taken := {}
-	for id in grid_slot:
-		taken[grid_slot[id]] = true
+	if not solo:
+		for id in grid_slot:
+			taken[grid_slot[id]] = true
 	var best := INF
 	for lane in Tuning.START_LANES:
 		if taken.has(lane) or _start_gap(lane, r) < Tuning.START_GAP:
@@ -144,7 +153,7 @@ func step() -> void:
 	_release_from_queue()
 	for r in racers:
 		(r as Racer).step(self)
-	if collisions_enabled:
+	if collisions_enabled and not solo:
 		_collide()
 	var keep: Array = []
 	for r in racers:
@@ -161,10 +170,15 @@ func step() -> void:
 func _release_from_queue() -> void:
 	# A group pressing Go together leaves side by side: each racer takes the free slot nearest
 	# the line it likes to drive (lane_home), so nobody has to cut across another kart's nose.
-	# A racer parked on the grid leaves from its own slot.
-	while not queue.is_empty():
-		var q: Racer = queue[0]
+	# A racer parked on the grid leaves from its own slot. Solo runs (duel) each have their own
+	# lights: one still counting down doesn't hold back one behind it that is green.
+	var i := 0
+	while i < queue.size():
+		var q: Racer = queue[i]
 		if int(go_tick.get(q.run_id, 0)) > tick:
+			if solo:
+				i += 1
+				continue
 			return  # the countdown hasn't gone green yet
 		var home: float = grid_slot.get(q.run_id, q.lane_home * (q.half_width() - 0.7))
 		var best_lane := 0.0
@@ -177,7 +191,7 @@ func _release_from_queue() -> void:
 				best_lane = lane
 		if best_miss == INF:
 			return
-		queue.pop_front()
+		queue.remove_at(i)
 		go_tick.erase(q.run_id)
 		grid_slot.erase(q.run_id)
 		q.state = "racing"
@@ -193,6 +207,8 @@ func _release_from_queue() -> void:
 ## nobody is near it), each counted at its own size.
 func _start_gap(lane: float, q: Racer) -> float:
 	var gap := 1000.0
+	if solo:
+		return gap
 	for o in racers:
 		var r: Racer = o
 		if absf(r.d - lane) >= r.radius + q.radius:
@@ -210,6 +226,8 @@ func _start_gap(lane: float, q: Racer) -> float:
 ## Nearest racer ahead on the same segment within `dist` metres and |dd| < lat.
 func racer_ahead(me: Racer, dist: float, lat: float):
 	var best = null
+	if solo:
+		return best
 	var best_ds := dist
 	for o in racers:
 		var r: Racer = o
@@ -227,6 +245,8 @@ func racer_ahead(me: Racer, dist: float, lat: float):
 ## Metres of free road ahead in a lateral line `d`.
 func lane_free(me: Racer, d: float, dist: float) -> float:
 	var free := dist
+	if solo:
+		return free
 	for o in racers:
 		var r: Racer = o
 		if r == me or r.seg_id != me.seg_id:

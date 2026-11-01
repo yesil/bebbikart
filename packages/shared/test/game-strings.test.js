@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   FAIL_REASONS,
+  GAME_MODES,
   JOB_STAGES,
   LANGUAGES,
   SECTION_IDS,
@@ -60,6 +61,7 @@ test("every key the game uses exists", () => {
     session: [...SESSION_STATUSES, "unknown"],
     net: ["connecting", "online", "offline"],
     quality: ["low", "medium", "high"],
+    mode: GAME_MODES,
     bus: JSON.parse(
       readFileSync(join(GAME, "audio/audio_settings.gd"), "utf8").match(
         /const BUSES := (\[.*\])/,

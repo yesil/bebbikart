@@ -43,6 +43,9 @@ var camera: Camera3D
 var avatar_of := Callable()
 ## Mock mode has no server leaderboard: bests come from the runs finished here.
 var local_bests := false
+## Duel mode (contracts §2i): ui/duel_hud.gd shows the racers, their lights and the line; this HUD
+## keeps only the banners, the problems and the podium (no tags, board, paddock or countdown).
+var duel := false
 
 var _font: SystemFont
 var _t := 0.0
@@ -172,6 +175,12 @@ func run_result(run_id: String, pid: String, ok: bool, result_ms: int, reason: S
 	h["done_t"] = _t
 	_heat[run_id] = h
 	var name := _nick(pid)
+	if duel:
+		# The duel HUD shows the verdict in the racer's half; only the local bests are kept.
+		if ok and local_bests and (not _ranks.has(pid) or result_ms < int(_ranks[pid]["bestTimeMs"])):
+			_ranks[pid] = {"rank": 0, "bestTimeMs": result_ms}
+			_rerank_local()
+		return
 	if ok:
 		# No place in the banner: a racer who started later may still beat this time (the board
 		# keeps the places sorted as the times come in).
@@ -230,13 +239,20 @@ func update(delta: float, sim, views: Dictionary) -> void:
 			continue
 		if _t - float(h["done_t"]) > RESULT_HOLD_S or (_empty_since >= 0.0 and _t - _empty_since > EMPTY_HOLD_S):
 			_heat.erase(run_id)
-	var order := _order(sim)
-	_update_countdown(sim)
-	_update_board(order, sim)
-	_update_tags(order, sim, views, delta)
-	_paddock_t -= delta
-	if _paddock_dirty or _paddock_t <= 0.0:
-		_rebuild_paddock(sim)
+	_tag_layer.visible = not duel
+	if duel:
+		_board_panel.visible = false
+		_paddock_panel.visible = false
+		_countdown.visible = false
+		_paddock_dirty = true  # rebuilt at once when free races come back
+	else:
+		var order := _order(sim)
+		_update_countdown(sim)
+		_update_board(order, sim)
+		_update_tags(order, sim, views, delta)
+		_paddock_t -= delta
+		if _paddock_dirty or _paddock_t <= 0.0:
+			_rebuild_paddock(sim)
 	_expire(_banners)
 	_expire(_problems)
 	if _podium != null and _t > float(_podium.get_meta("until")):
