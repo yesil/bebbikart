@@ -73,12 +73,22 @@ func _run() -> void:
 		cam.fov = float(v[3]) if v.size() > 3 else 60.0
 		for i in 6:
 			await process_frame
+		_close_menu(main)
 		await RenderingServer.frame_post_draw
 		var img := get_root().get_texture().get_image()
 		var path := out.path_join("%s.png" % v[0])
 		img.save_png(path)
 		print("shot ", path)
 	quit(0)
+
+
+## The window can still get ⌘, (or Esc) meant for another app while it is the active app: shut
+## the options menu before a shot instead of capturing it.
+static func _close_menu(main: Node) -> void:
+	var menu = main.get("menu")
+	if menu != null and menu.is_open():
+		menu.close()
+		print("village_shots: closed the options menu (a key reached the window)")
 
 
 ## Race-camera views (low, behind, looking along the road) of every place where two road pieces

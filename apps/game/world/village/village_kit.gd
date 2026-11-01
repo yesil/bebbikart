@@ -305,9 +305,12 @@ func _arcade(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
 	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
 		return "wall-arch" if side == "front" else "wall")
 	var upper := "wall-window-shutters" if rng.randf() < 0.5 else "wall-window-glass"
+	# Side walls: small windows in every other cell, so an end house shows no blank wall.
 	for f in [1, 2]:
 		_walls(out, nx, nz, sx, sz, f * FLOOR_H, FLOOR_H, func(side, i, n):
-			return upper if side == "front" or side == "back" else "wall")
+			if side == "front" or side == "back":
+				return upper
+			return "wall-window-small" if i % 2 == 1 else "wall")
 	var top := 3 * FLOOR_H
 	var ridge := _roof(out, nx, nz, sx, sz, top, 0.6, 0.5, 0.3)
 	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
@@ -485,6 +488,19 @@ func covered_bridge(r, mid: float, half_len: float, road_hw: float) -> Dictionar
 
 # ---------------------------------------------------------------- props
 
+const FOUNTAIN_SCALE := 2.4
+## The basin of "fountain-round-detail" in model units: inner wall radius and a water level a
+## little under its 0.28 rim.
+const FOUNTAIN_BASIN_R := 0.70
+const FOUNTAIN_WATER_Y := 0.2
+
+
+## The fountain's water: [centre at the water level, radius reaching just into the basin wall].
+static func fountain_water(plan, shape) -> Array:
+	var f: Vector2 = plan.fountain
+	return [Vector3(f.x, shape.height_at(f.x, f.y) + FOUNTAIN_WATER_Y * FOUNTAIN_SCALE, f.y), (FOUNTAIN_BASIN_R + 0.01) * FOUNTAIN_SCALE]
+
+
 ## Street furniture and planting. Returns [[module, Transform3D world]] (modules may be
 ## "nature:<name>" for the Quaternius kit).
 func props(course, plan, shape) -> Array:
@@ -492,10 +508,10 @@ func props(course, plan, shape) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 42
 	var ground := func(p: Vector2) -> float: return shape.height_at(p.x, p.y)
-	# Fountain on the square: round basin with its centre piece, lime tree beside it.
+	# Fountain on the square: round basin (its water is baked as a disc, fountain_water()), lime
+	# tree beside it.
 	var f: Vector2 = plan.fountain
-	out.append(["fountain-round-detail", Transform3D(Basis().scaled(Vector3(2.4, 2.4, 2.4)), Vector3(f.x, ground.call(f), f.y))])
-	out.append(["fountain-center", Transform3D(Basis().scaled(Vector3(2.4, 2.4, 2.4)), Vector3(f.x, ground.call(f) + 0.3, f.y))])
+	out.append(["fountain-round-detail", Transform3D(Basis().scaled(Vector3(FOUNTAIN_SCALE, FOUNTAIN_SCALE, FOUNTAIN_SCALE)), Vector3(f.x, ground.call(f), f.y))])
 	var lt: Vector2 = plan.lime_tree
 	out.append(["nature:CommonTree_3", Transform3D(Basis().scaled(Vector3(1.6, 1.6, 1.6)), Vector3(lt.x, ground.call(lt), lt.y))])
 	# Benches round the square.

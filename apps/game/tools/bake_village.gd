@@ -862,10 +862,35 @@ func _bake_props() -> void:
 			placed[m[0]] = []
 		placed[m[0]].append(m[1])
 	_instanced(node, kit, placed)
+	_fountain_water(node)
 	_flags(node, swiss["flags"])
 	_signs(node, swiss["signs"], swiss["boards"])
 	_labels(node, swiss["labels"])
 	print("bake: %d props, %d types, %d flags, %d signs" % [props.size(), placed.size(), swiss["flags"].size(), swiss["signs"].size()])
+
+
+## Water in the fountain's basin: a disc at the water level, its edge just inside the basin
+## wall (the centre piece stands up through it).
+func _fountain_water(parent: Node) -> void:
+	var water: Material = _res(MAT_DIR + "water.tres")
+	if water == null:
+		return
+	var fw: Array = VillageKit.fountain_water(plan, shape)
+	var c: Vector3 = fw[0]
+	var r: float = fw[1]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := 40
+	for i in n:
+		var a0 := TAU * i / n
+		var a1 := TAU * (i + 1) / n
+		for q: Vector3 in [c, c + Vector3(cos(a0), 0, sin(a0)) * r, c + Vector3(cos(a1), 0, sin(a1)) * r]:
+			st.set_normal(Vector3.UP)
+			st.set_uv(Vector2(q.x, q.z) * 0.1)
+			st.add_vertex(q)
+	st.generate_tangents()
+	st.set_material(water)
+	_mesh_node(parent, "FountainWater", st.commit(), false)
 
 
 ## Swiss flags: a square cloth (the public-domain flag, assets/village/swiss_flag/) hanging

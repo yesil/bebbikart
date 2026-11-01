@@ -20,4 +20,13 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	get_root().add_child((load("res://main.tscn") as PackedScene).instantiate())
+	var main: Node = (load("res://main.tscn") as PackedScene).instantiate()
+	get_root().add_child(main)
+	# The window can still get ⌘, (or Esc) meant for another app while it is the active app:
+	# shut the options menu at once instead of capturing it.
+	while is_instance_valid(main):
+		var menu = main.get("menu")
+		if menu != null and menu.is_open():
+			menu.close()
+			print("race_cam_shots: closed the options menu (a key reached the window)")
+		await process_frame
