@@ -1,10 +1,24 @@
 extends SceneTree
 ## Headless check of the race-wide reactions (race_reactions.gd) in the real mock race with kit
-## racers: counts every reaction event and fails if the start grid (lean in, whoop on green),
-## overtakes, a rival alongside or two racers finishing together never happened, if a racer
-## coasting after its finish leaves the road, if two finishers stand inside each other (after
-## SETTLE_S), if a rival moment fires while a group leaves the grid or a finisher cheers together
-## twice. Crashes are rare, so flinches are only counted.
+## racers. The game races duels (main.gd sets sim.solo): one racer per half, two at most on the
+## track, passing through each other. Counts every reaction event and fails if the start grid
+## (lean in, a fist bump, whoop on green), overtakes or two racers finishing together never
+## happened (MUST: seed 4 has them all), if a finisher misses its finish (its signature cheer, a
+## wave, a look into the camera), if no half ever showed its racer from the front on the grid and
+## after its lap (main.gd turns the racer's head to that camera; what took the head before such a
+## look ended is reported), if a racer coasting after its finish leaves the road, if two finishers
+## stand inside each other (after SETTLE_S), if a rival moment fires while a group leaves the grid
+## or a finisher cheers together twice. Crashes and failed runs are rare, so flinches and slumps
+## are only counted.
+## Alongside (a wave or taunt at a rival side by side at the same speed for SIDE_S) needs two
+## karts in different lines: duel karts keep their own lines through each other and it never came
+## up (0 in 1080 s of duels over five seeds; two racers seldom even hold the same speed for a
+## second). The check stages it: once two racers are well clear of the grid, a Stager holds one
+## beside the other at the other's speed as race_reactions.gd reads them, and the check fails
+## unless the reaction fires for that pair and the two look at each other. The sim never sees it:
+## main.gd's next sync puts the racer back on its line, and its speed is put back before the sim's
+## next tick (the reaction keeps its own cooldown and rivalry memory). Alongside in the race
+## itself is counted and reported.
 ## main.gd reads the same user args (pass --kit).
 ##
 ## High fives must bring the two hands together (HF_TOUCH); every pair of a high five is listed.
@@ -12,13 +26,48 @@ extends SceneTree
 ##     -- --kit --racers=16 --seed=4 --speed=2 [--limit=120] [--verbose]
 
 const KitRacerView = preload("res://racer_kit/kit_racer_view.gd")
-const MUST := ["go", "overtake", "alongside", "finish_together", "fist_bump"]
+const RaceReactions = preload("res://racer_kit/race_reactions.gd")
+const Gestures = preload("res://racer_kit/racer_gestures.gd")
+const MUST := ["go", "overtake", "finish_together", "fist_bump"]
 const SETTLE_S := 0.5
 const MAX_PAIR_FRAMES := 15
 const HF_TOUCH := 0.2        # m: the two slapping hands (centres) must come this close
+const STAGE_LAT := 2.0       # m: the staged racer drives this far beside the other (in RaceReactions.SIDE_LANE, past BRACE_DIST)
+const STAGE_MAX_S := 3.0     # s: the staged pair must react within this
+
+
+## Holds `b` beside `a` as race_reactions.gd sees them: the same heading, STAGE_LAT to its left, at
+## a's speed. It sits under main.gd just before RaceReactions, so it runs after main.gd has synced
+## the views; main.gd's next sync puts `b` back on its own line, and a Restorer just after
+## RaceReactions gives it its own speed back before the sim's next tick (_physics_process).
+class Stager extends Node:
+	var a = null
+	var b = null
+	var own_v := 0.0         # b's own speed while staged
+
+	func _process(_delta: float) -> void:
+		if not staging():
+			return
+		var fwd: Vector3 = a.forward()
+		b.global_position = a.global_position + Vector3(fwd.z, 0.0, -fwd.x).normalized() * STAGE_LAT
+		b._body.rotation = a._body.rotation
+		own_v = b.racer.v
+		b.racer.v = a.racer.v
+
+	func staging() -> bool:
+		return a != null and is_instance_valid(a) and is_instance_valid(b)
+
+
+class Restorer extends Node:
+	var stager: Stager
+
+	func _process(_delta: float) -> void:
+		if stager.staging():
+			stager.b.racer.v = stager.own_v
 
 var main: Node
 var limit := 120.0
+var done := false
 var t := 0.0
 var counts := {"go": 0, "overtake": 0, "alongside": 0, "flinch": 0, "finish_together": 0, "revenge": 0, "high_five": 0, "fist_bump": 0}
 var fb_pairs := {}     # [a, b] of each grid fist bump -> [time it started, closest the two fists came (m)]
@@ -32,6 +81,19 @@ var overlaps := 0      # frames two finishers standing after their run were insi
 var pair_frames := {}  # pair -> those frames
 var arrived := {}      # finisher -> seen
 var arrived_inside := 0  # finishers already inside another racer on their first frame after the line
+var finishes := {}     # finisher instance id -> {sig, wave, joint, cam: seen its signature, wave, joint cheer, camera look; left: _leave_t}
+var slumps := {}       # failed racer instance id -> slumped (Gestures.G.SLUMP seen)
+var front_was := {}    # side -> main.gd showed that half's racer from the front last frame
+var front_looks := {}  # view instance id -> {view, cam, kind, left}: a front look under way
+var front_count := {"grid": 0, "finish": 0}  # front looks main.gd started
+var front_lost := {"grid": 0, "finish": 0}   # of those, the head turned elsewhere before the look ended
+var front_lost_to := {}  # what took the head -> times
+var stager: Stager = null
+var stage_t := 0.0
+var stage_tries := 0   # staged pairs that stopped racing before the reaction
+var staged = null      # the staged alongside reaction once it fired: {by, to, gesture, after}
+var staged_looks := false  # and the two looked at each other
+var staged_late := false   # the pair held side by side STAGE_MAX_S without a reaction
 
 
 func _initialize() -> void:
@@ -47,10 +109,25 @@ func _initialize() -> void:
 
 
 func _process(delta: float) -> bool:
+	if done:
+		return false
 	t += delta
 	var rr = main.get_node_or_null("RaceReactions")
+	if rr != null and stager == null:
+		stager = Stager.new()
+		main.add_child(stager)
+		main.move_child(stager, rr.get_index())
+		var restorer := Restorer.new()
+		restorer.stager = stager
+		main.add_child(restorer)
+		main.move_child(restorer, rr.get_index() + 1)
 	if rr != null:
 		for e in rr.events:
+			if e.type == "alongside" and stager.a != null and [e.by, e.to].has(stager.a) and [e.by, e.to].has(stager.b):
+				staged = {"by": e.by.nickname, "to": e.to.nickname, "gesture": e.gesture, "after": stage_t}
+				staged_looks = e.by.toy.gestures._look_node == e.to.toy.head_pivot and e.to.toy.gestures._look_node == e.by.toy.head_pivot
+				stager.a = null
+				continue
 			counts[e.type] = int(counts.get(e.type, 0)) + 1
 			if e.type == "alongside" and (e.by.race_t < 5.0 or e.to.race_t < 5.0):
 				early_rivals += 1
@@ -81,6 +158,9 @@ func _process(delta: float) -> bool:
 				print("hf %s-%s t %.2f hands %.2f gap %.2f reach %.2f+%.2f hand_a->meet %.2f hand_b->meet %.2f meet_y %.2f" % [a.nickname, b.nickname, a.hf_t, d,
 					a.global_position.distance_to(b.global_position), ga.high_five_reach(_toward(a, b)), gb.high_five_reach(_toward(b, a)),
 					ga.hand_world(_toward(a, b)).distance_to(ga._hf_point), gb.hand_world(_toward(b, a)).distance_to(gb._hf_point), ga._hf_point.y - a.global_position.y])
+	_stage(delta)
+	_front_looks()
+	_finishes()
 	for k in main.views:
 		var v = main.views[k]
 		if v.get_script() == KitRacerView and v.grid_ready:
@@ -120,8 +200,117 @@ func _process(delta: float) -> bool:
 			if v._leave_ls <= rt.length and off > float(v._leave_seg["half_width"]) + 0.5:
 				off_road += 1
 	if t >= limit:
+		done = true
 		_report()
 	return false
+
+
+## Staging alongside: picks two racers well clear of the grid and holds one beside the other until
+## the reaction fires (or one of them stops racing: try again with the next pair).
+func _stage(delta: float) -> void:
+	if staged != null or staged_late or stager == null:
+		return
+	if stager.a != null:
+		stage_t += delta
+		if not _racing(stager.a) or not _racing(stager.b):
+			stager.a = null
+			stage_tries += 1
+		elif stage_t > STAGE_MAX_S:
+			stager.a = null
+			staged_late = true
+		return
+	var kits: Array = main.views.values().filter(func(v): return _racing(v) and v.race_t > RaceReactions.SIDE_AFTER_S + 0.5 \
+		and v.react_cool <= 0.0)
+	if kits.size() >= 2 and kits[0].racer.v > 5.0:
+		stager.a = kits[0]
+		stager.b = kits[1]
+		stage_t = 0.0
+
+
+func _racing(v) -> bool:
+	return is_instance_valid(v) and v.get("toy") != null and v.racer != null and v.racer.state == "racing" \
+		and not v.parked and v.leaving == ""
+
+
+## main.gd turns a racer's head to its half's camera as that camera comes round to the front (on
+## the grid, after the lap; main.gd _update_duel): follows each such look until it ends and notes
+## whether something else took the head first.
+func _front_looks() -> void:
+	var fw: Dictionary = main._front_was
+	for side in fw:
+		if fw[side] and not front_was.get(side, false):
+			var v = _front_view(side)
+			if v != null and v.get("toy") != null:
+				var kind := "finish" if String(v.leaving) != "" else "grid"
+				front_count[kind] += 1
+				front_looks[v.get_instance_id()] = {"view": v, "cam": main.duel_screen.camera_of(side), "kind": kind,
+					"left": main.FRONT_LOOK_S}
+	front_was = fw.duplicate()
+	for id in front_looks.keys():
+		var f: Dictionary = front_looks[id]
+		if not is_instance_id_valid(id):
+			front_looks.erase(id)
+			continue
+		var g = f.view.toy.gestures
+		if g._look_t > 0.0 and g._look_node == f.cam:
+			f.left = g._look_t
+			continue
+		# A new look as this one runs out (its last frame) is the look ending, not a theft.
+		if g._look_t > 0.0 and float(f.left) > 0.1:
+			front_lost[f.kind] += 1
+			var what := _look_name(g._look_node)
+			front_lost_to[what] = int(front_lost_to.get(what, 0)) + 1
+			if "--verbose" in OS.get_cmdline_user_args():
+				print("front look (%s) of %s lost to %s with %.2f s left" % [f.kind, f.view.nickname, what, f.left])
+		front_looks.erase(id)
+
+
+## The racer view main.gd turned to the half's front camera (as _update_duel picks it: the
+## newest run of the side; full screen shows the one racer whatever its side).
+func _front_view(side: String):
+	var on_side := {}
+	for rid in main.duel_sides:
+		var v = main._view_of(rid)
+		if v != null:
+			on_side[main.duel_sides[rid]] = v
+	if not main.duel_screen.split:
+		return on_side.get("left", on_side.get("right", null))
+	return on_side.get(side, null)
+
+
+func _look_name(n) -> String:
+	if n == null:
+		return "a point (the road ahead)"
+	if not is_instance_valid(n):
+		return "a node gone"
+	if n is Camera3D:
+		return "another camera"
+	if String(n.name).begins_with("Lamp"):
+		return "the start lights"
+	return "another racer"
+
+
+## Finishers: the signature cheer, then the wave (or a joint cheer or high five with another
+## finisher, which takes its place: race_reactions.gd _cheer_together) and a look into a camera
+## (KitRacerView.leave -> ToyRacer.finish, main.gd's front shot); failed runs: the slump.
+func _finishes() -> void:
+	for id in main.leaving:
+		var v = main.leaving[id]
+		if not is_instance_valid(v) or v.get("toy") == null:
+			continue
+		var g = v.toy.gestures
+		var key: int = v.get_instance_id()
+		if v.leaving == "finished":
+			if not finishes.has(key):
+				finishes[key] = {"name": v.nickname, "sig": false, "wave": false, "joint": false, "cam": false, "left": v._leave_t}
+			var f: Dictionary = finishes[key]
+			f.sig = f.sig or g.weight(g.sig_pose) > 0.0
+			f.wave = f.wave or g.weight(Gestures.G.WAVE) > 0.0
+			f.joint = f.joint or together.has(v)
+			f.cam = f.cam or (g._look_t > 0.0 and is_instance_valid(g._look_node) and g._look_node is Camera3D)
+			f.left = v._leave_t
+		elif v.leaving == "failed":
+			slumps[key] = bool(slumps.get(key, false)) or g.weight(Gestures.G.SLUMP) > 0.0
 
 
 func _toward(v, other) -> int:
@@ -183,9 +372,51 @@ func _report() -> void:
 		bad.append("two finishers inside each other for %d frames (limit %d)" % [worst, MAX_PAIR_FRAMES])
 	if off_road > 0:
 		bad.append("coasting finishers off the road for %d of %d frames" % [off_road, coast_frames])
+	# Finishers seen through their stay (not cut off by the end of the check).
+	var judged := 0
+	var missed_fin := PackedStringArray()
+	for k in finishes:
+		var f: Dictionary = finishes[k]
+		if float(f.left) > 0.5:
+			continue
+		judged += 1
+		var miss := PackedStringArray()
+		if not f.sig:
+			miss.append("signature cheer")
+		if not f.wave and not f.joint:
+			miss.append("wave or joint cheer")
+		if not f.cam:
+			miss.append("camera look")
+		if not miss.is_empty():
+			missed_fin.append("%s (%s)" % [f.name, ", ".join(miss)])
+	if judged == 0:
+		bad.append("no finisher stayed through its finish")
+	if not missed_fin.is_empty():
+		bad.append("finishers without their finish: " + "; ".join(missed_fin))
+	for kind in front_count:
+		if front_count[kind] == 0:
+			bad.append("no front look %s" % ("on the grid" if kind == "grid" else "after a lap"))
+	if staged == null:
+		bad.append("staged alongside never fired (%s)" % ("held side by side %.0f s without a reaction" % STAGE_MAX_S if staged_late
+			else "no two racers on the track to stage it with, %d pairs stopped racing first" % stage_tries))
+	elif not staged_looks:
+		bad.append("staged alongside fired but the two did not look at each other")
 	print("race reactions in %.0f s: %s, leaning in on the grid: %d racers, coasting finishers on the road: %d frames, finishers inside each other: %d frames (%d pairs), crossed the line inside another: %d of %d%s" % [
 		limit, JSON.stringify(counts), ready_seen.size(), coast_frames, overlaps, pair_frames.size(), arrived_inside, arrived.size(),
 		"" if counts.flinch > 0 else " (no crash near a racer this run)"])
+	print("finishes: %d finishers seen through their stay, %d with signature cheer, wave (or joint cheer) and camera look; failed runs: %d, slumped: %d%s" % [
+		judged, judged - missed_fin.size(), slumps.size(), slumps.values().count(true), "" if slumps.size() > 0 else " (no failed run this time)"])
+	print("front looks into the half's camera: %d on the grid (head taken elsewhere in %d), %d after a lap (in %d)%s" % [
+		front_count.grid, front_lost.grid, front_count.finish, front_lost.finish,
+		"" if front_lost_to.is_empty() else ", taken by: " + JSON.stringify(front_lost_to)])
+	if staged != null:
+		print("alongside: %d in the race itself%s; staged (%s beside %s, %d earlier pairs stopped racing first): fired after %.1f s, %s, heads turned to each other: %s" % [
+			counts.alongside, " (duel karts keep their own lines through each other, so it seldom comes up)" if counts.alongside == 0 else "",
+			staged.by, staged.to, stage_tries, staged.after, "no gesture" if staged.gesture < 0 else Gestures.G.find_key(staged.gesture), staged_looks])
 	if not bad.is_empty():
 		push_error("race_reactions_check: " + "; ".join(bad))
+	# The game goes first, and the audio thread drops its stopped music and engines on its next mix:
+	# quitting at once leaks their streams.
+	main.free()
+	await create_timer(0.3).timeout
 	quit(0 if bad.is_empty() else 1)
