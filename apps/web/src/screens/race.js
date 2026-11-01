@@ -7,23 +7,29 @@ import { Avatar, delta, isLoop, secs } from "./common.js";
 import { SetupCard } from "./setup-card.js";
 import { TrackMap } from "./track-map.js";
 
+/** How often the thumb's lane goes to the server at most (contracts §2g): about 16 times a second. */
+const STEER_EVERY_MS = 60;
+/** Thumb travel, as a share of the screen's width, from the middle of the road to its edge. */
+const STEER_SPAN = 0.35;
+/** The kart's side of the road counts from this far off the middle (the sim's deadband). */
+const SIDE_FROM = 0.25;
+
+/** Where a lane (-1..1) sits across the pad's road (it spans 6%..94% of the pad). */
+const pct = (lane) => `${(50 + lane * 38).toFixed(1)}%`;
+const round2 = (x) => Math.round(x * 100) / 100;
+
 export function Run({ ctx }) {
   const { s, send } = ctx;
   const live = s.live ?? {
     runId: s.me.currentRun?.id,
     progress: 0,
     elapsedMs: 0,
-    boostsLeft: s.config.boostsPerRun,
     sections: {},
   };
-  const [flash, setFlash] = useState(false);
-  const [pushing, setPushing] = useState(false);
-  const pushOn = useRef(false);
   // Its half of the big screen (contracts §2i): one lap against the clock.
   const side = s.me.currentRun?.side;
   const loop = isLoop(s.me.currentRun?.track ?? s.config.track);
   const started = s.me.currentRun?.status === "running" || live.elapsedMs > 0;
-  const boostsLeft = live.boostsLeft ?? s.config.boostsPerRun;
   const lastSection = SECTION_IDS.filter((id) => live.sections?.[id]).pop();
   const last = lastSection ? live.sections[lastSection] : null;
   // The start countdown, in step with the lights on the big screen.
@@ -39,38 +45,16 @@ export function Run({ ctx }) {
     if (counting && left <= 0) navigator.vibrate?.(120);
   }, [counting, left <= 0]);
 
-  /**
-   * Push (contracts §2g): on while the thumb is down, off when it comes up, slides off or the
-   * page hides. Kept on the grid too: the push applies from the start.
-   */
-  function push(on, e) {
-    e?.preventDefault();
-    if (!live.runId || pushOn.current === on) return;
-    if (on) e?.currentTarget?.setPointerCapture?.(e.pointerId);
-    pushOn.current = on;
-    setPushing(on);
-    send("phone.push", { runId: live.runId, on });
-    if (on) navigator.vibrate?.(25);
-  }
+  const steer = useSteering(live, send);
+  const lane = live.lane ?? 0;
+  const fork = live.fork;
+  // A little buzz when the way the kart is heading for at the fork changes.
   useEffect(() => {
-    const letGo = () => {
-      if (pushOn.current && document.hidden) push(false);
-    };
-    document.addEventListener("visibilitychange", letGo);
-    return () => document.removeEventListener("visibilitychange", letGo);
-  }, [live.runId]);
-
-  function boost(e) {
-    e.preventDefault();
-    if (!started || boostsLeft <= 0 || !live.runId) return;
-    send("phone.boost", { runId: live.runId });
-    navigator.vibrate?.(40);
-    setFlash(true);
-    setTimeout(() => setFlash(false), 180);
-  }
+    if (fork?.way) navigator.vibrate?.(15);
+  }, [fork?.id, fork?.way]);
 
   return html`
-    <div class="run">
+    <div class=${`run steer-surface ${steer.x !== null ? "steering" : ""}`} ...${steer.handlers}>
       ${side ? html`<div class=${`side-badge side-${side}`}>${COPY.duel.side[side]}</div>` : null}
       ${counting ? html`<div class="get-ready">${COPY.run.getReady}</div>` : null}
       <div class=${`timer ${counting ? `count ${left > 0 ? "" : "go"}` : ""}`}>
@@ -90,31 +74,120 @@ export function Run({ ctx }) {
             </div>`
           : html`<div class="delta"></div>`
       }
-      <div class="controls">
-        <button
-          class=${`push ${pushing ? "on" : ""}`}
-          disabled=${!live.runId}
-          onPointerDown=${(e) => push(true, e)}
-          onPointerUp=${(e) => push(false, e)}
-          onPointerCancel=${(e) => push(false, e)}
-          onLostPointerCapture=${(e) => push(false, e)}
-          onContextMenu=${(e) => e.preventDefault()}
-        >
-          ${pushing ? COPY.run.pushing : COPY.run.push}
-        </button>
-        <button
-          class=${`boost ${flash ? "flash" : ""}`}
-          disabled=${!started || boostsLeft <= 0}
-          onPointerDown=${boost}
-          onContextMenu=${(e) => e.preventDefault()}
-        >
-          ${COPY.run.boost}
-          <span class="charges">${Array.from({ length: s.config.boostsPerRun }, (_, i) => html`<i class=${i < boostsLeft ? "on" : ""}>⚡</i>`)}</span>
-        </button>
+      ${fork ? html`<${ForkAhead} fork=${fork} />` : html`<div class="fork-ahead empty"></div>`}
+      <div class=${`steer-pad ${steer.x !== null ? "on" : ""}`} aria-label=${COPY.run.padLabel}>
+        <div class="road"><i class="mid"></i></div>
+        ${steer.x !== null ? html`<div class="thumb" style=${{ left: pct(steer.x) }}></div>` : null}
+        <div class="kart" style=${{ left: pct(lane) }}><${Avatar} me=${s.me} mood="happy" size=${54} /></div>
+        <div class="pad-state">${steer.x !== null ? COPY.run.steering : COPY.run.handsOff}</div>
       </div>
-      <p class="hint center">${COPY.run.pushHint}</p>
+      <p class="hint center">${fork ? COPY.run.forkHint : COPY.run.steerHint}</p>
+      <p class="hint center">${COPY.run.arrowsHint}</p>
     </div>
   `;
+}
+
+/**
+ * The fork coming up (run.progress fork, contracts §2g): the way to each side, the one the kart
+ * is heading for lit up, and how far off it is.
+ */
+function ForkAhead({ fork }) {
+  const ways = COPY.forks[fork.id];
+  const sign = (dir, choice) =>
+    html`<div class=${`sign ${dir} ${fork.way === choice ? "on" : ""}`}>
+      ${dir === "left" ? html`<b>◀</b> ` : null}${ways[choice][0]}${dir === "right" ? html` <b>▶</b>` : null}
+    </div>`;
+  return html`
+    <div class="fork-ahead">
+      ${sign("left", fork.left)}
+      <div class="dist">${COPY.run.forkIn(fork.inM)}</div>
+      ${sign("right", fork.right)}
+    </div>
+  `;
+}
+
+/**
+ * The steering pad (contracts §2g): a thumb dragged anywhere on the run screen moves the kart's
+ * lane, relative to where it went down (starting from the lane the kart is in). Dragging past the
+ * edge of the road moves the anchor, so coming back moves the kart straight away. Letting go,
+ * the pointer being lost or the page hiding sends null: the autopilot drives again.
+ * Returns { x: the lane asked for or null, handlers: pointer handlers for the surface }.
+ */
+function useSteering(live, send) {
+  const [x, setX] = useState(null);
+  const st = useRef({ id: null, px: 0, base: 0, span: 1, x: null, sent: undefined, timer: 0 });
+  const runId = useRef(live.runId);
+  runId.current = live.runId;
+  const lane = useRef(0);
+  lane.current = live.lane ?? 0;
+
+  const flush = () => {
+    const t = st.current;
+    clearTimeout(t.timer);
+    t.timer = 0;
+    if (!runId.current || t.x === t.sent) return;
+    t.sent = t.x;
+    send("phone.steer", { runId: runId.current, x: t.x });
+  };
+  const queue = () => {
+    if (!st.current.timer) st.current.timer = setTimeout(flush, STEER_EVERY_MS);
+  };
+  const letGo = () => {
+    const t = st.current;
+    if (t.id === null) return;
+    t.id = null;
+    t.x = null;
+    setX(null);
+    flush();
+  };
+  useEffect(() => {
+    const hidden = () => document.hidden && letGo();
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      document.removeEventListener("visibilitychange", hidden);
+      letGo();
+    };
+  }, [live.runId]);
+
+  const handlers = {
+    onPointerDown(e) {
+      const t = st.current;
+      if (!runId.current || t.id !== null) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      t.id = e.pointerId;
+      t.px = e.clientX;
+      t.base = lane.current;
+      t.span = Math.max(80, e.currentTarget.getBoundingClientRect().width * STEER_SPAN);
+      t.x = round2(t.base);
+      setX(t.x);
+      navigator.vibrate?.(10);
+      flush();
+    },
+    onPointerMove(e) {
+      const t = st.current;
+      if (e.pointerId !== t.id) return;
+      e.preventDefault();
+      let raw = t.base + (e.clientX - t.px) / t.span;
+      // Past the edge: the anchor follows the thumb, so the way back starts moving at once.
+      if (raw > 1) t.px = e.clientX - (1 - t.base) * t.span;
+      if (raw < -1) t.px = e.clientX - (-1 - t.base) * t.span;
+      raw = Math.max(-1, Math.min(1, raw));
+      const nx = round2(raw);
+      if (nx === t.x) return;
+      // A buzz when the kart's side of the road flips: that side picks the way at a fork.
+      const sideOf = (v) => (Math.abs(v) > SIDE_FROM ? Math.sign(v) : 0);
+      if (sideOf(nx) !== sideOf(t.x ?? 0) && sideOf(nx) !== 0) navigator.vibrate?.(12);
+      t.x = nx;
+      setX(nx);
+      queue();
+    },
+    onPointerUp: (e) => e.pointerId === st.current.id && letGo(),
+    onPointerCancel: (e) => e.pointerId === st.current.id && letGo(),
+    onLostPointerCapture: (e) => e.pointerId === st.current.id && letGo(),
+    onContextMenu: (e) => e.preventDefault(),
+  };
+  return { x, handlers };
 }
 
 export function Result({ ctx }) {
@@ -160,7 +233,7 @@ export function Result({ ctx }) {
     ${
       r.stretches?.length || run.failStretch
         ? html`<section class="card map">
-              <${TrackMap} track=${run.track} routes=${r.build?.routes} tone=${see.tone}
+              <${TrackMap} track=${run.track} routes=${run.routes} tone=${see.tone}
                 pulse=${r.coach?.stretch} crash=${run.failStretch}
                 flag=${see.faster ? { stretch: see.faster.id, text: see.faster.who } : null}
                 selected=${sel} onPick=${setSel} />
@@ -178,7 +251,8 @@ export function Result({ ctx }) {
               timeMs: see.faster.ms,
               timeLabel: COPY.stretches[run.track][see.faster.route ?? see.faster.id],
             }}
-            setup=${see.faster.setup} mine=${r.build ?? s.me.build} maxStars=${s.config.starsMaxPerAbility}
+            setup=${see.faster.setup} mine=${{ stars: (r.build ?? s.me.build).stars, routes: run.routes }}
+            maxStars=${s.config.starsMaxPerAbility}
             ability=${see.faster.route ? null : see.faster.ability}
             fork=${see.faster.route ? TRACK_STRETCHES[run.track].find((x) => x.id === see.faster.route).fork : null}
             onClose=${() => setPeek(false)} />`

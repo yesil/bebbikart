@@ -1,4 +1,4 @@
-// BebbiKart phone site (WS4): create a racer from two drawings, then tune, Go! and Boost!.
+// BebbiKart phone site (WS4): create a racer from two drawings, then tune, Go! and steer.
 import { html } from "htm/preact";
 import { render } from "preact";
 import { useEffect, useErrorBoundary, useReducer, useRef, useState } from "preact/hooks";
@@ -16,7 +16,7 @@ const initial = {
   me: null,
   weather: null,
   leaderboard: [],
-  live: null, // { runId, progress, elapsedMs, section, boostsLeft, deltaVsBestMs, sections: {s: {splitMs, bestSplitMs}} }
+  live: null, // { runId, progress, elapsedMs, section, lane, fork?, deltaVsBestMs, sections: {s: {splitMs, bestSplitMs}} }
   result: null, // run.ended payload, plus prevBest splits
   paddock: [], // paddock.updated: everyone in the session (friends' racers being made, racing)
   queue: null, // queue.updated (contracts §2i): the line, the two halves, the champion
@@ -115,7 +115,6 @@ function onWs(s, type, p) {
                 runId: p.run.id,
                 progress: 0,
                 elapsedMs: 0,
-                boostsLeft: s.config?.boostsPerRun ?? 3,
                 sections: {},
               },
         me: s.me ? { ...s.me, currentRun: p.run } : s.me,
@@ -128,7 +127,8 @@ function onWs(s, type, p) {
       return { ...s, live: { ...s.live, goAt: Date.now() + p.goInMs } };
     case "run.progress":
       if (s.live && s.live.runId !== p.runId) return s;
-      return { ...s, live: { sections: {}, ...s.live, ...p } };
+      // fork is only there while one is near: an old one doesn't linger.
+      return { ...s, live: { sections: {}, ...s.live, ...p, fork: p.fork } };
     case "run.lap":
       if (!s.live || s.live.runId !== p.runId) return s;
       return { ...s, live: { ...s.live, laps: [...(s.live.laps ?? []), p], sections: {} } };

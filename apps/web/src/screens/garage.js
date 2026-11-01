@@ -146,6 +146,7 @@ function Ways({ stars }) {
   return html`
     <section class="card ways">
       <h2>${COPY.garage.ways}</h2>
+      <p class="hint">${COPY.garage.waysSteer}</p>
       ${Object.entries(ROUTE_STARS).map(([fork, rule]) => {
         const [icon, name] = COPY.abilities[rule.ability];
         const have = stars[rule.ability];

@@ -79,6 +79,7 @@ const en = {
     starsLeft: (n) =>
       n === 0 ? "All stars placed!" : n > 0 ? `Stars left: ${n}` : `Too many stars: ${-n}`,
     ways: "🛣️ Your stars choose the way",
+    waysSteer: "Hands off, your kart goes this way. Steer to take the other one!",
     wayOn: (n, ability, way) => `${n} ${ability.toLowerCase()} stars: you ${way}!`,
     wayOff: (more, ability, way) =>
       `${more} more ${ability.toLowerCase()} ${more === 1 ? "star" : "stars"} and you ${way}`,
@@ -128,10 +129,13 @@ const en = {
     queued: "Lining up at the start…",
     getReady: "Get ready!",
     go: "GO!",
-    boost: "BOOST!",
-    push: "PUSH",
-    pushing: "PUSHING!",
-    pushHint: "Hold Push to go faster. Let go before tight bends!",
+    padLabel: "Steering: slide your thumb left or right",
+    steering: "👍 You steer",
+    handsOff: "🤖 Driving by itself",
+    steerHint: "Slide your thumb left or right to steer. Let go: your kart drives itself.",
+    forkIn: (m) => `Fork in ${m} m`,
+    forkHint: "Be on that side of the road when you get there!",
+    arrowsHint: "Drive over the glowing arrows for a boost!",
   },
   result: {
     oops: "Oops!",
@@ -355,6 +359,7 @@ const de = {
     starsLeft: (n) =>
       n === 0 ? "Alle Sterne verteilt!" : n > 0 ? `Sterne übrig: ${n}` : `Zu viele Sterne: ${-n}`,
     ways: "🛣️ Deine Sterne wählen den Weg",
+    waysSteer: "Hände weg: Dein Kart fährt hier lang. Lenk, dann nimmst du den anderen Weg!",
     wayOn: (n, ability, way) => `${n} Sterne ${ability}: du ${way}!`,
     wayOff: (more, ability, way) =>
       `Noch ${more} ${more === 1 ? "Stern" : "Sterne"} ${ability} und du ${way}`,
@@ -404,10 +409,14 @@ const de = {
     queued: "Aufstellen am Start…",
     getReady: "Bereit machen!",
     go: "LOS!",
-    boost: "BOOST!",
-    push: "PUSH",
-    pushing: "VOLLGAS!",
-    pushHint: "Halt Push für mehr Tempo. Lass vor engen Kurven los!",
+    padLabel: "Lenken: Schieb den Daumen nach links oder rechts",
+    steering: "👍 Du lenkst",
+    handsOff: "🤖 Fährt allein",
+    steerHint:
+      "Schieb den Daumen nach links oder rechts zum Lenken. Lass los: Dein Kart fährt allein.",
+    forkIn: (m) => `Gabelung in ${m} m`,
+    forkHint: "Sei auf dieser Strassenseite, wenn du dort ankommst!",
+    arrowsHint: "Fahr über die Leuchtpfeile für einen Boost!",
   },
   result: {
     oops: "Hoppla!",

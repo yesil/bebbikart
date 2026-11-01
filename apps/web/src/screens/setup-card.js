@@ -8,8 +8,10 @@ import { secs } from "./common.js";
 /**
  * Props:
  *   who        { nickname, avatarUrl?, timeMs?, timeLabel }   whose setup
- *   setup      Setup { stars, routes, weather } (routes: the ones their stars chose, §2h)
- *   mine       my build { stars, routes }
+ *   setup      Setup { stars, routes, weather } (routes: the ways that lap took, steered or the
+ *              stars', §2g)
+ *   mine       { stars, routes }: my build, or after a run its stars and the ways it took (a
+ *              failed run: only the forks it reached)
  *   maxStars   config.starsMaxPerAbility
  *   ability    an ability to highlight ("Mia has 8 grip, you have 4")
  *   fork       a fork to highlight ("Mia took the ford, you took the bridge")
@@ -40,7 +42,7 @@ export function SetupCard({ who, setup, mine, maxStars, ability, fork, onClose }
             : null
         }
         ${
-          fork
+          fork && mine.routes[fork]
             ? html`<p class="why">${t.tookRoute(who.nickname, COPY.forks[fork][setup.routes[fork]][0], COPY.forks[fork][mine.routes[fork]][0])}</p>`
             : null
         }
@@ -61,7 +63,8 @@ export function SetupCard({ who, setup, mine, maxStars, ability, fork, onClose }
         </div>
         <div class="chips">
           ${FORK_IDS.map((f) => {
-            const same = setup.routes[f] === mine.routes[f];
+            // A fork my run didn't reach isn't a difference.
+            const same = !mine.routes[f] || setup.routes[f] === mine.routes[f];
             return html`<span key=${f} class=${`chip ${same ? "" : "diff"} ${fork === f ? "hl" : ""}`}>
               ${COPY.forks[f][setup.routes[f]][0]}
             </span>`;

@@ -98,8 +98,9 @@ export function mockHandlers({
         elapsedMs,
         splits: { hills: 7_500, pond: elapsedMs - 22_500, crossing: 7_400, bends: 7_600 },
         events: [],
-        boostsUsed: state.config.boostsPerRun,
+        boostsUsed: 2,
         weatherSeen: [],
+        routes: { ...player.build.routes }, // hands off: the stars' ways (§2g)
       };
       player.currentRun = undefined;
       player.lastRun = done;
@@ -175,13 +176,6 @@ export function mockHandlers({
     http.post(`${baseUrl}/api/players/me/runs`, async () => {
       await wait();
       return requireMe() ?? launch(state.me);
-    }),
-    http.post(`${baseUrl}/api/players/me/runs/current/boost`, async () => {
-      await delay(20);
-      const missing = requireMe();
-      if (missing) return missing;
-      if (!state.me.currentRun) return fail(409, "not_found", "No run on the track");
-      return HttpResponse.json({ ok: true });
     }),
     http.get(`${baseUrl}/api/leaderboard`, async () => {
       await wait();
