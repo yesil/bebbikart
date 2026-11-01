@@ -1,6 +1,7 @@
 // Coach tips (contracts.md §8). WS3 owns the gameplay knowledge and tunes the rules. All
 // kid-facing copy is in COACH_COPY / STRETCH_NAMES / ROUTE_NAMES so it is reviewed in one place.
 import { LANGUAGES, ROUTE_STARS, TRACK_STRETCHES } from "./enums.js";
+import { trackMap } from "./track-maps.js";
 
 /**
  * Where each stretch is, per language and track, with its preposition ("on the muddy farm
@@ -125,6 +126,12 @@ export const ABILITY_NAMES = {
   },
 };
 
+/** The side to steer to at a fork ({side}), as the big screen shows it. */
+export const SIDE_NAMES = {
+  en: { left: "left", right: "right" },
+  de: { left: "links", right: "rechts" },
+};
+
 /** The star each fixed tip suggests (the phone highlights that row); loss_stretch: the stretch's. */
 export const COACH_ABILITY = {
   fail_slip: "grip",
@@ -133,8 +140,7 @@ export const COACH_ABILITY = {
   fail_bad_landing: "bounce",
   fail_bounce_wobble: "bounce",
   fail_bumped: "stability",
-  fail_off_track: "grip",
-  fail_push_slide: "grip",
+  fail_off_track: "stability", // every road has rails: only the wind tips a kart over the causeway's low wall
   fail_flipped: "stability",
   fail_stuck: "speed",
   fail_timeout: "speed",
@@ -144,61 +150,58 @@ export const COACH_ABILITY = {
 /**
  * Text templates per language (config.language). {where} = a STRETCH_NAMES entry, {s} = seconds
  * lost, {ability} = an ABILITY_NAMES entry, {alt} = a ROUTE_NAMES entry, {n} = the stars of
- * {ability} that take the other way at a fork (ROUTE_STARS, contracts §2h). Each fits 70 chars with the longest names (coach.test.js).
- * Both languages have exactly the same keys.
+ * {ability} that take the other way at a fork (ROUTE_STARS, contracts §2h), {side} = a
+ * SIDE_NAMES entry: where to steer for {alt} (§2g). Each fits 70 chars with the longest names
+ * (coach.test.js). Both languages have exactly the same keys.
  */
 export const COACH_COPY = {
   en: {
     // Rule 1: failed runs, by reason and the dominant event on the stretch where it ended.
     fail_slip: "Slipped {where}! Try +2 grip.",
-    fail_push_slide: "Slid off {where}! Let go of Push before the bend.",
     fail_wind_push: "Blown off {where}! Try +2 stability.",
     fail_water_slow: "Stuck {where}! Try +2 water.",
     fail_bad_landing: "Crash landing {where}! Try +2 bounce.",
     fail_bounce_wobble: "Too wobbly {where}! Try -2 bounce.",
     fail_bumped: "Bumped off {where}! Try +2 stability.",
-    fail_off_track: "Off the road {where}! Let go of Push sooner.",
+    fail_off_track: "Blown over the wall {where}! Try +2 stability.",
     fail_flipped: "Flipped over {where}! Try +2 stability.",
     fail_stuck: "Got stuck {where}! Try other stars.",
     fail_timeout: "Out of time {where}! Try +2 speed.",
     // Rule 2: the stretch that cost most against your best (first run: the session's fastest).
     loss_stretch: "Lost {s} s {where}. Try +2 {ability}!",
-    loss_route: "Lost {s} s {where}. Try {n} {ability} stars!",
-    loss_slick: "Lost {s} s on the wet, slippery bridge. Try {n} {ability} stars!",
-    loss_push_slide: "Lost {s} s sliding {where}. Let go of Push sooner!",
-    loss_boost_weak: "Lost {s} s {where}. Boost on the glowing zones!",
+    loss_route: "Lost {s} s {where}. Steer {side} for {alt}!",
+    loss_slick: "Lost {s} s on the wet, slippery bridge. Steer {side} for {alt}!",
+    loss_scrape: "Lost {s} s scraping the wall {where}. Steer away!",
     loss_bumped: "Lost {s} s to bumps {where}. Wait for a quiet track!",
-    loss_missed_exit: "Lost {s} s going round the roundabout again! Let go of Push.",
+    loss_missed_exit: "Lost {s} s going round the roundabout again!",
     close: "So close to your best! Go again?",
     // Rule 3: first finish or new best, plus one experiment.
+    best_try_arrows: "New best! Steer over the glowing arrows for a boost!",
     best_try_route: "New best! Try {n} {ability} stars: they take {alt}!",
-    best_try_push: "New best! Hold Push on the straights for more speed!",
     best_keep: "New best! Can you beat it again?",
     // The run was stopped (session ended, game gone, admin).
     aborted: "That race was stopped. Press Go! to try again.",
   },
   de: {
     fail_slip: "Ausgerutscht {where}! Probier +2 Grip.",
-    fail_push_slide: "Abgerutscht {where}! Lass Push vor der Kurve los.",
     fail_wind_push: "Weggeweht {where}! Probier +2 Stabilität.",
     fail_water_slow: "Stecken geblieben {where}! Probier +2 Wasser.",
     fail_bad_landing: "Bruchlandung {where}! Probier +2 Federung.",
     fail_bounce_wobble: "Zu wackelig {where}! Probier -2 Federung.",
     fail_bumped: "Weggerempelt {where}! Warte auf freie Bahn.",
-    fail_off_track: "Abgeflogen {where}! Lass Push früher los.",
+    fail_off_track: "Über die Mauer {where}! Probier +2 Stabilität.",
     fail_flipped: "Überschlagen {where}! Probier +2 Stabilität.",
     fail_stuck: "Stecken geblieben {where}! Probier andere Sterne.",
     fail_timeout: "Zeit abgelaufen {where}! Probier +2 Tempo.",
     loss_stretch: "{s} s verloren {where}. Probier +2 {ability}!",
-    loss_route: "{s} s verloren {where}. Nimm {n} Sterne {ability}!",
-    loss_slick: "{s} s auf der nassen Brücke verloren. Nimm {n} Sterne {ability}!",
-    loss_push_slide: "{s} s gerutscht {where}. Lass Push früher los!",
-    loss_boost_weak: "{s} s verloren {where}. Boost auf Leuchtfeldern!",
+    loss_route: "{s} s verloren {where}. Lenk {side}: {alt}!",
+    loss_slick: "{s} s auf der nassen Brücke verloren. Lenk {side}: {alt}!",
+    loss_scrape: "{s} s an der Mauer geschrammt {where}. Lenk weg!",
     loss_bumped: "{s} s durch Rempler {where}. Warte auf freie Bahn!",
-    loss_missed_exit: "{s} s verloren, nochmal um den Kreisel! Lass Push los.",
+    loss_missed_exit: "{s} s verloren, nochmal um den Kreisel!",
     close: "Ganz knapp an deiner Bestzeit! Nochmal?",
+    best_try_arrows: "Neue Bestzeit! Fahr über die Leuchtpfeile für einen Boost!",
     best_try_route: "Neue Bestzeit! {n} Sterne {ability} und du nimmst {alt}!",
-    best_try_push: "Neue Bestzeit! Halt Push auf den Geraden für mehr Tempo!",
     best_keep: "Neue Bestzeit! Schaffst du es noch schneller?",
     aborted: "Das Rennen wurde gestoppt. Drück Los! und versuch es nochmal.",
   },
@@ -208,7 +211,6 @@ export const COACH_COPY = {
 export const MIN_STRETCH_LOSS_MS = 300;
 
 const FAIL_EVENT_KEYS = [
-  "push_slide",
   "slip",
   "wind_push",
   "water_slow",
@@ -217,7 +219,7 @@ const FAIL_EVENT_KEYS = [
   "bumped",
 ];
 // Loss events whose fix isn't the stretch's star: they get their own tip.
-const OWN_TIP_EVENTS = ["boost_weak", "bumped", "missed_exit", "push_slide"];
+const OWN_TIP_EVENTS = ["bumped", "missed_exit", "scrape"];
 const LOSS_EVENT_KEYS = [
   "slip",
   "water_slow",
@@ -279,6 +281,9 @@ export function coachTip(run, build, best, language, stretches) {
     if (!newBest) return tip(language, run.track, "close", {});
   }
 
+  // Boost arrows left on the road (contracts §2g): steer over them first.
+  if (countEvents(events, "boost_perfect") < arrowsPerLap(run.track) * (run.laps?.length || 1))
+    return tip(language, run.track, "best_try_arrows", {});
   // A risky way the stars don't take yet (contracts §2h), in this order.
   const fork = ["pond", "ramp", "crossing"].find((f) => build.routes[f] !== ROUTE_STARS[f].choice);
   if (fork) {
@@ -292,9 +297,24 @@ export function coachTip(run, build, best, language, stretches) {
       { fork, choice: rule.choice },
     );
   }
-  // No slide all run: maybe Push was hardly used.
-  const slid = events.some((e) => e.kind === "push_slide");
-  return tip(language, run.track, slid ? "best_keep" : "best_try_push", {});
+  return tip(language, run.track, "best_keep", {});
+}
+
+function countEvents(events, kind) {
+  return events.filter((e) => e.kind === kind).length;
+}
+
+/** Boost arrow strips on one lap of a track (they sit off the forks, so every lap has them all). */
+function arrowsPerLap(track) {
+  return trackMap(track).segments.reduce((n, s) => n + (s.fork === "" ? s.arrows : 0), 0);
+}
+
+/** The side a kid steers to at the junction for a fork's way (the track map's steer, §2e). */
+function steerSide(track, fork, choice) {
+  const seg = trackMap(track).segments.find((s) => s.fork === fork && s.choice === choice);
+  if (!seg || (seg.steer !== -1 && seg.steer !== 1))
+    throw new Error(`coach: the ${track} map has no steering side for ${fork} "${choice}"`);
+  return seg.steer < 0 ? "left" : "right";
 }
 
 /** The tip for the stretch that cost most: its own event's tip, else its star, else the other route. */
@@ -316,13 +336,12 @@ function stretchTip(language, run, track, st, lossMs, events) {
   const alt = track.find((t) => t.fork === meta.fork && t.choice !== meta.choice);
   if (!alt) throw new Error(`coach: stretch "${st.id}" has no ability and no other route`);
   const key = meta.slick && (run.weatherSeen ?? []).includes("rain") ? "loss_slick" : "loss_route";
-  // The stars choose the route (§2h): name how many it takes.
-  const rule = ROUTE_STARS[alt.fork];
+  // The kid steers onto the other way at the fork (§2g): name the side.
   return tip(
     language,
     run.track,
     key,
-    { stretch: st.id, lossMs, alt: alt.id, ability: rule.ability, n: rule.stars },
+    { stretch: st.id, lossMs, alt: alt.id, side: steerSide(run.track, alt.fork, alt.choice) },
     { fork: alt.fork, choice: alt.choice },
   );
 }
@@ -356,7 +375,7 @@ function copyFor(language) {
   return COACH_COPY[language];
 }
 
-function tip(language, track, key, { stretch, lossMs, ability, alt, n }, route) {
+function tip(language, track, key, { stretch, lossMs, ability, alt, n, side }, route) {
   const template = copyFor(language)[key];
   if (template === undefined) throw new Error(`coach: no "${language}" text for tip "${key}"`);
   const fill = (table, id, what) => {
@@ -368,6 +387,10 @@ function tip(language, track, key, { stretch, lossMs, ability, alt, n }, route) 
   if (text.includes("{where}"))
     text = text.replace("{where}", fill(STRETCH_NAMES, stretch, "name"));
   if (text.includes("{alt}")) text = text.replace("{alt}", fill(ROUTE_NAMES, alt, "route name"));
+  if (text.includes("{side}")) {
+    if (!SIDE_NAMES[language][side]) throw new Error(`coach: no "${language}" side "${side}"`);
+    text = text.replace("{side}", SIDE_NAMES[language][side]);
+  }
   const star = ability ?? COACH_ABILITY[key];
   if (text.includes("{ability}")) text = text.replace("{ability}", ABILITY_NAMES[language][star]);
   const out = { key, text };

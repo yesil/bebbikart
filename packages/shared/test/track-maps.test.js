@@ -39,3 +39,22 @@ test("a loop map closes; points stay inside the bounds", () => {
     }
   }
 });
+
+// Steering (contracts §2g): at every fork a kid steers left for one way and right for the other;
+// every lap has boost arrows to steer over, off the forks.
+test("each fork has a way to the left and one to the right; each lap has arrows", () => {
+  for (const track of TRACK_IDS) {
+    const segs = TRACK_MAPS[track].segments;
+    const forks = [...new Set(segs.filter((s) => s.fork).map((s) => s.fork))];
+    for (const fork of forks) {
+      const sides = segs
+        .filter((s) => s.fork === fork)
+        .map((s) => s.steer)
+        .sort();
+      expect(sides, `${track} ${fork}`).toEqual([-1, 1]);
+    }
+    for (const s of segs.filter((s) => !s.fork)) expect(s.steer, `${track} ${s.id}`).toBe(0);
+    expect(segs.filter((s) => s.fork).every((s) => s.arrows === 0), `${track}: arrows on a fork`).toBe(true);
+    expect(segs.reduce((n, s) => n + s.arrows, 0), track).toBeGreaterThan(0);
+  }
+});

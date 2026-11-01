@@ -7,6 +7,7 @@ import {
   DEFAULT_BUILD,
   LANGUAGES,
   ROUTE_NAMES,
+  SIDE_NAMES,
   STRETCH_NAMES,
   TRACK_STRETCHES,
 } from "../src/index.js";
@@ -17,6 +18,7 @@ const longest = (values) => [...values].sort((a, b) => b.length - a.length)[0];
 test("every tip fits in 70 chars, with every name it can get, in every language", () => {
   for (const lang of LANGUAGES) {
     const ability = longest(Object.values(ABILITY_NAMES[lang]));
+    const side = longest(Object.values(SIDE_NAMES[lang]));
     for (const [track, list] of Object.entries(TRACK_STRETCHES)) {
       for (const st of list) {
         const alt = list.find((t) => st.fork && t.fork === st.fork && t.id !== st.id);
@@ -28,6 +30,7 @@ test("every tip fits in 70 chars, with every name it can get, in every language"
             .replace("{where}", STRETCH_NAMES[lang][track][st.id])
             .replace("{alt}", alt ? ROUTE_NAMES[lang][track][alt.id] : "")
             .replace("{ability}", ability)
+            .replace("{side}", side)
             .replace("{n}", "10")
             .replace("{s}", "12.3");
           expect(filled.length, `${lang} ${key}: ${filled}`).toBeLessThanOrEqual(70);
@@ -95,9 +98,15 @@ const village = (over = {}) => ({
   elapsedMs: 52_000,
   weatherSeen: [],
   events: [],
+  laps: [52_000],
   ...over,
 });
 const st = (id, ms, extra = {}) => ({ id, ms, lostMs: 0, ...extra });
+// Both of a village lap's boost arrow strips caught (contracts §2g).
+const arrows = [
+  { kind: "boost_perfect", section: "hills", stretch: "church_hill", atMs: 12_000 },
+  { kind: "boost_perfect", section: "bends", stretch: "square", atMs: 51_000 },
+];
 
 test("slower than your best: the stretch that cost most, and its star", () => {
   const stretches = [
@@ -123,10 +132,13 @@ test("first run: against the session's fastest racer on each stretch", () => {
   expect(tip.text).toBe("Lost 1.5 s on the windy ridge. Try +2 stability!");
   // Nobody faster (or only yourself): a cheer and an experiment.
   const alone = [st("ridge", 7_400, { fastestMs: 7_400, fastestPlayerId: "ply_me" })];
-  expect(coachTip(village(), DEFAULT_BUILD, undefined, "en", alone).key).toBe("best_try_route");
+  expect(coachTip(village(), DEFAULT_BUILD, undefined, "en", alone).key).toBe("best_try_arrows");
+  expect(coachTip(village({ events: arrows }), DEFAULT_BUILD, undefined, "en", alone).key).toBe(
+    "best_try_route",
+  );
 });
 
-test("a fork's safe alternative: the stars that take the other way; the bridge is slick in the rain", () => {
+test("a fork's safe alternative: steer to the other way; the bridge is slick in the rain", () => {
   const stretches = [st("covered_bridge", 9_000, { bestMs: 7_500 })];
   const dry = coachTip(village(), DEFAULT_BUILD, { elapsedMs: 50_000 }, "en", stretches);
   expect(dry).toMatchObject({
@@ -134,8 +146,21 @@ test("a fork's safe alternative: the stars that take the other way; the bridge i
     stretch: "covered_bridge",
     route: { fork: "pond", choice: "water" },
   });
-  expect(dry).toMatchObject({ ability: "water" });
-  expect(dry.text).toBe("Lost 1.5 s on the covered bridge. Try 6 water stars!");
+  expect(dry.ability).toBeUndefined();
+  // The village bridge leaves to the right; the ford goes straight on: steer left for it.
+  expect(dry.text).toBe("Lost 1.5 s on the covered bridge. Steer left for the ford!");
+  expect(coachTip(village(), DEFAULT_BUILD, { elapsedMs: 50_000 }, "de", stretches).text).toBe(
+    "1.5 s verloren auf der gedeckten Brücke. Lenk links: die Furt!",
+  );
+  // The countryside: the knoll road leaves to the left, so the kicker is to the right.
+  const knoll = coachTip(
+    { ...village({ track: "countryside" }), laps: undefined },
+    DEFAULT_BUILD,
+    { elapsedMs: 30_000 },
+    "en",
+    [st("knoll_road", 4_000, { bestMs: 2_500 })],
+  );
+  expect(knoll.text).toBe("Lost 1.5 s round the knoll. Steer right for the big ramp!");
   const wet = coachTip(
     village({ weatherSeen: ["rain"] }),
     DEFAULT_BUILD,
@@ -144,45 +169,34 @@ test("a fork's safe alternative: the stars that take the other way; the bridge i
     stretches,
   );
   expect(wet.key).toBe("loss_slick");
-  expect(wet.text).toBe("Lost 1.5 s on the wet, slippery bridge. Try 6 water stars!");
+  expect(wet.text).toBe("Lost 1.5 s on the wet, slippery bridge. Steer left for the ford!");
 });
 
-test("an off-zone boost or a missed exit on that stretch gets its own tip", () => {
+test("scraping a wall or a missed exit on that stretch gets its own tip", () => {
   const events = [
-    { kind: "boost_weak", section: "hills", stretch: "main_street", atMs: 900, timeLostMs: 400 },
+    { kind: "scrape", section: "crossing", stretch: "ridge", atMs: 30_000, timeLostMs: 400 },
     { kind: "missed_exit", section: "bends", stretch: "square", atMs: 50_000, timeLostMs: 8_000 },
   ];
   const run = village({ events });
-  const boost = coachTip(run, DEFAULT_BUILD, { elapsedMs: 50_000 }, "en", [
-    st("main_street", 6_500, { bestMs: 5_900 }),
+  const scrape = coachTip(run, DEFAULT_BUILD, { elapsedMs: 50_000 }, "en", [
+    st("ridge", 7_100, { bestMs: 6_500 }),
   ]);
-  expect(boost).toMatchObject({ key: "loss_boost_weak", stretch: "main_street" });
-  expect(boost.text).toBe("Lost 0.6 s on the main street. Boost on the glowing zones!");
+  expect(scrape).toMatchObject({ key: "loss_scrape", stretch: "ridge" });
+  expect(scrape.text).toBe("Lost 0.6 s scraping the wall on the windy ridge. Steer away!");
   const exit = coachTip(run, DEFAULT_BUILD, { elapsedMs: 50_000 }, "en", [
     st("square", 16_000, { bestMs: 8_000 }),
   ]);
   expect(exit.key).toBe("loss_missed_exit");
 });
 
-test("a slide with Push held: let go sooner, as a loss and as a fail", () => {
-  const events = [
-    { kind: "push_slide", section: "bends", stretch: "farm", atMs: 30_000, timeLostMs: 900 },
-    { kind: "slip", section: "bends", stretch: "farm", atMs: 30_500, timeLostMs: 200 },
-  ];
-  const loss = coachTip(village({ events }), DEFAULT_BUILD, { elapsedMs: 50_000 }, "en", [
-    st("farm", 4_600, { bestMs: 3_300 }),
-  ]);
-  expect(loss).toMatchObject({ key: "loss_push_slide", stretch: "farm" });
-  expect(loss.text).toBe("Lost 1.3 s sliding on the muddy farm track. Let go of Push sooner!");
-  const failed = village({
-    events,
-    outcome: "failed",
-    failReason: "off_track",
-    failStretch: "farm",
-  });
-  const fail = coachTip(failed, DEFAULT_BUILD, undefined, "de", []);
-  expect(fail).toMatchObject({ key: "fail_push_slide", stretch: "farm", ability: "grip" });
-  expect(fail.text).toBe("Abgerutscht auf dem matschigen Feldweg! Lass Push vor der Kurve los.");
+test("the one way off the road left: blown over the causeway's low wall", () => {
+  const failed = village({ outcome: "failed", failReason: "off_track", failStretch: "causeway" });
+  const fail = coachTip(failed, DEFAULT_BUILD, undefined, "en", []);
+  expect(fail).toMatchObject({ key: "fail_off_track", stretch: "causeway", ability: "stability" });
+  expect(fail.text).toBe("Blown over the wall on the windy causeway! Try +2 stability.");
+  expect(coachTip(failed, DEFAULT_BUILD, undefined, "de", []).text).toBe(
+    "Über die Mauer auf dem windigen Damm! Probier +2 Stabilität.",
+  );
 });
 
 test("slower than your best by a hair on every stretch: no lecture", () => {
@@ -192,22 +206,26 @@ test("slower than your best by a hair on every stretch: no lecture", () => {
   expect(tip.key).toBe("close");
 });
 
-test("new best: cheer plus an experiment (a risky way the stars don't take yet, then Push)", () => {
+test("new best: cheer plus an experiment (the arrows left, then a risky way the stars don't take)", () => {
+  // One of the countryside's two boost arrow strips caught.
   const tip = coachTip(RUNS[0], DEFAULT_BUILD, undefined, "en", RUNS[0].stretches);
-  expect(tip).toMatchObject({
+  expect(tip).toMatchObject({ key: "best_try_arrows" });
+  expect(tip.text).toBe("New best! Steer over the glowing arrows for a boost!");
+  const both = {
+    ...RUNS[0],
+    events: [
+      ...RUNS[0].events,
+      { kind: "boost_perfect", section: "bends", stretch: "rainbow_bends", atMs: 28_000 },
+    ],
+  };
+  expect(coachTip(both, DEFAULT_BUILD, undefined, "en", RUNS[0].stretches)).toMatchObject({
     key: "best_try_route",
     ability: "water",
     route: { fork: "pond", choice: "water" },
+    text: "New best! Try 6 water stars: they take the ford!",
   });
-  expect(tip.text).toBe("New best! Try 6 water stars: they take the ford!");
   const brave = { pond: "water", ramp: "jump", crossing: "exposed" };
-  const all = coachTip(RUNS[0], { ...DEFAULT_BUILD, routes: brave }, undefined, "en", []);
-  expect(all.key).toBe("best_try_push");
-  const slid = {
-    ...RUNS[0],
-    events: [{ kind: "push_slide", section: "hills", stretch: "hilltop", atMs: 1 }],
-  };
-  expect(coachTip(slid, { ...DEFAULT_BUILD, routes: brave }, undefined, "en", []).key).toBe(
+  expect(coachTip(both, { ...DEFAULT_BUILD, routes: brave }, undefined, "en", []).key).toBe(
     "best_keep",
   );
 });

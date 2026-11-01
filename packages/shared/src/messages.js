@@ -1,5 +1,6 @@
 // WebSocket protocol (contracts.md §7). Each channel maps a message type to its payload schema.
 import { z } from "zod";
+import { ForkChoiceSchema } from "./build.js";
 import { ConfigSchema } from "./config.js";
 import { PROTOCOL_VERSION } from "./enums.js";
 import { newId } from "./ids.js";
@@ -7,12 +8,15 @@ import {
   CoachTipSchema,
   DuelResultSchema,
   FailReasonSchema,
+  ForkHintSchema,
   GhostTraceSchema,
+  LaneSchema,
   LeaderboardEntrySchema,
   PaddockEntrySchema,
   PlayerViewSchema,
   QueueStateSchema,
   RosterEntrySchema,
+  RoutesTakenSchema,
   RunEventSchema,
   RunSchema,
   RunStartSchema,
@@ -72,17 +76,19 @@ const runResult = {
   // on the lap it failed in (the one it failed on not included).
   stretches: z.array(StretchTimeSchema),
   events: z.array(RunEventSchema),
-  boostsUsed: z.number().int().nonnegative(),
+  boostsUsed: z.number().int().nonnegative(), // boost arrows driven over
   weatherSeen: z.array(WeatherKindSchema),
+  // The ways taken (§2g): a point-to-point run's (a failed one: the forks it reached); on a loop
+  // the best lap's (a run that failed before completing a lap: the forks reached on it).
+  routes: RoutesTakenSchema,
 };
 
 export const CHANNELS = {
   phoneToServer: {
     hello,
     "phone.go": empty,
-    "phone.boost": z.object({ runId: z.string() }),
-    // Push held down (on) or let go (contracts §2g).
-    "phone.push": z.object({ runId: z.string(), on: z.boolean() }),
+    // The thumb on the steering pad (contracts §2g): the lane it asks for, null when it lets go.
+    "phone.steer": z.object({ runId: z.string(), x: LaneSchema.nullable() }),
     // Leave the line (contracts §2i).
     "phone.queue.leave": empty,
   },
@@ -100,7 +106,8 @@ export const CHANNELS = {
       progress,
       elapsedMs: ms,
       section: SectionIdSchema,
-      boostsLeft: z.number().int().nonnegative(),
+      lane: LaneSchema, // where the kart is across the road (§2g)
+      fork: ForkHintSchema.optional(), // the fork coming up, while it is near
       ...lapInfo,
     }),
     "game.run.section": z.object({ runId: z.string(), section: SectionIdSchema, splitMs: ms }),
@@ -114,6 +121,7 @@ export const CHANNELS = {
       stretches: z.array(StretchTimeSchema), // this lap's, in driving order; they add up to lapMs
       weatherSeen: z.array(WeatherKindSchema), // rain/wind active at any time on this lap
       isBest: z.boolean(),
+      routes: ForkChoiceSchema, // the ways this lap took (§2g)
     }),
     "game.run.finished": z.object({ ...runResult, trace: GhostTraceSchema }),
     "game.run.failed": z.object({
@@ -160,7 +168,8 @@ export const CHANNELS = {
       elapsedMs: ms,
       section: SectionIdSchema,
       deltaVsBestMs: z.number().int().optional(),
-      boostsLeft: z.number().int().nonnegative(),
+      lane: LaneSchema,
+      fork: ForkHintSchema.optional(),
       ...lapInfo,
     }),
     // Loop tracks: a lap completed. isLapBest = the player's fastest lap ever (session).
@@ -214,8 +223,8 @@ export const CHANNELS = {
     }),
     "roster.updated": z.array(RosterEntrySchema),
     "run.start": RunStartSchema,
-    "run.boost": z.object({ runId: z.string() }),
-    "run.push": z.object({ runId: z.string(), on: z.boolean() }), // Push held or let go (§2g)
+    // Relayed phone.steer (§2g); x null also when that phone disconnects.
+    "run.steer": z.object({ runId: z.string(), x: LaneSchema.nullable() }),
     "queue.updated": QueueStateSchema, // the line and the halves (§2i)
     "run.abort": z.object({ runId: z.string(), reason: z.string() }),
   },

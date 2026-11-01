@@ -1,6 +1,7 @@
 extends RefCounted
 ## Track maps for the phone (contracts §2e): the sim courses (sim/course.gd, sim/village_course.gd)
-## flattened to small 2D polylines per segment, each tagged with its stretch, written as JSON into
+## flattened to small 2D polylines per segment, each tagged with its stretch (and a fork's way with
+## the side a kid steers to for it), written as JSON into
 ## packages/shared/src/track-maps/<track>.json. tools/export_track_maps.gd writes them
 ## (`bun run maps:export`) or checks they are current (`-- --check`; village_laps.gd runs the check).
 ## Map coordinates: x = world x, y = -world z (north up), metres, rounded to 0.1.
@@ -8,6 +9,7 @@ extends RefCounted
 const Course = preload("res://sim/course.gd")
 const VillageCourse = preload("res://sim/village_course.gd")
 const Route = preload("res://sim/route.gd")
+const Forks = preload("res://sim/forks.gd")
 
 const STEP := 2.5  # metres between points
 const WINDY := 0.7  # a segment this exposed (sim exposure) is where wind hits
@@ -42,8 +44,12 @@ static func map_json(track: String, course) -> String:
 		# Where the weather bites (sim/racer.gd): rain on fords, mud and slick decks, wind on open ground.
 		var wet: bool = not (sg["water"] as Array).is_empty() or float(sg.get("grip", 1.0)) < 1.0 \
 			or float(sg.get("rain_slick", 1.0)) > 1.0
-		segs.append({"id": id, "stretch": sg["stretch"], "fork": sg["fork"], "choice": sg["choice"],
-			"rain": wet, "wind": float(sg["exposure"]) >= WINDY, "pts": pts})
+		# A fork's way: the side a kid steers to at the junction to take it (sim/forks.gd lean:
+		# -1 left, 1 right as the big screen shows it); 0 off the forks.
+		var fork: String = sg["fork"]
+		var steer := Forks.lean(course.forks[fork], sg["choice"]) if fork != "" else 0
+		segs.append({"id": id, "stretch": sg["stretch"], "fork": fork, "choice": sg["choice"], "steer": steer,
+			"arrows": (sg["boosts"] as Array).size(), "rain": wet, "wind": float(sg["exposure"]) >= WINDY, "pts": pts})
 	# The start line: across the first segment at s = 0, as wide as the road.
 	var first: Dictionary = course.segments[course.ordered_ids[0]]
 	var fr: Route = first["route"]

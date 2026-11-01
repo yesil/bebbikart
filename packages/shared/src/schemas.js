@@ -5,6 +5,7 @@ import {
   ABILITIES,
   DRAWING_KINDS,
   FAIL_REASONS,
+  FORK_CHOICES,
   FORK_IDS,
   GHOST_HZ,
   JOB_STAGES,
@@ -44,12 +45,38 @@ export const SideSchema = z.enum(SIDES);
 /** Partial<Record<SectionId, ms>> */
 export const SplitsSchema = z.partialRecord(SectionIdSchema, ms);
 
+/** The ways a lap or a run took at the forks it reached (contracts §2g: steered, or the stars'). */
+export const RoutesTakenSchema = ForkChoiceSchema.partial();
+
+/** The kart's lane across the road, -1 (left) .. 1 (right) as the big screen shows it (§2g). */
+export const LaneSchema = z.number().min(-1).max(1);
+
+/**
+ * The fork coming up (contracts §2g), in run.progress while it is near: the way steering to each
+ * side takes and the one the kart is heading for now.
+ */
+export const ForkHintSchema = z
+  .object({
+    id: ForkIdSchema,
+    inM: ms, // metres to the junction
+    left: z.string(),
+    right: z.string(),
+    way: z.string(),
+  })
+  .superRefine((h, ctx) => {
+    for (const k of ["left", "right", "way"]) {
+      if (!FORK_CHOICES[h.id].includes(h[k]))
+        ctx.addIssue({ code: "custom", path: [k], message: `"${h[k]}" is not a way at the ${h.id} fork` });
+    }
+  });
+
 /** Time on one stretch of one lap (contracts §2d), in driving order. lostMs: time-loss events. */
 export const StretchTimeSchema = z.object({ id: StretchIdSchema, ms, lostMs: ms });
 
 /**
- * The setup a time was set with (contracts §2f): the stars raced, the routes they chose (§2h)
- * and the weather on that lap (loop tracks: the lap's own weatherSeen; point to point: the run's).
+ * The setup a time was set with (contracts §2f): the stars raced, the ways taken on that lap
+ * (steered or the stars', §2g) and the weather on that lap (loop tracks: the lap's own
+ * weatherSeen; point to point: the run's).
  */
 export const SetupSchema = BuildInputSchema.extend({
   routes: ForkChoiceSchema,
@@ -132,6 +159,10 @@ export const RunSchema = z.object({
   stretches: z.array(StretchTimeSchema).optional(),
   lapStretches: z.array(z.array(StretchTimeSchema)).optional(), // loop tracks: every completed lap
   lapWeather: z.array(z.array(WeatherKindSchema)).optional(), // loop tracks: each lap's weatherSeen
+  // The ways taken (§2g): a point-to-point run's; on a loop the best lap's. Runs saved before
+  // steering have none: they took build.routes.
+  routes: RoutesTakenSchema.optional(),
+  lapRoutes: z.array(ForkChoiceSchema).optional(), // loop tracks: each completed lap's ways
   events: z.array(RunEventSchema).optional(),
   boostsUsed: z.number().int().nonnegative().optional(),
   weatherSeen: z.array(WeatherKindSchema).optional(),

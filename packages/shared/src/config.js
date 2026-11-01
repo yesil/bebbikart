@@ -8,7 +8,6 @@ export const DEFAULT_CONFIG = Object.freeze({
   maxConcurrentRuns: 20,
   starsTotal: 20,
   starsMaxPerAbility: 10,
-  boostsPerRun: 3,
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
   startCountdownMs: 3_000, // race start: Go opens a countdown; everyone who presses Go in it starts together (0 = instant)
@@ -53,7 +52,6 @@ export const ConfigSchema = z.object({
   maxConcurrentRuns: z.number().int().positive(),
   starsTotal: z.number().int().positive(),
   starsMaxPerAbility: z.number().int().positive(),
-  boostsPerRun: z.number().int().nonnegative(),
   runTimeCapMs: ms,
   stuckTimeoutMs: ms,
   startCountdownMs: ms,

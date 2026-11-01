@@ -109,13 +109,12 @@ export const RUN_EVENT_KINDS = /** @type {const} */ ([
   "wind_push",
   "bad_landing",
   "slow_corner",
-  "boost_perfect",
-  "boost_weak",
+  "boost_perfect", // drove over a boost arrow strip (contracts §2g)
   "bounce_wobble",
   "bumped",
   "bumped_other",
   "missed_exit", // loop tracks: went round the roundabout again
-  "push_slide", // slid wide in a bend taken too hot with Push held (contracts §2g)
+  "scrape", // held along a road's rail, e.g. blown or slid against it (contracts §2g)
 ]);
 /** Languages the game and phones speak. The game manager picks one on the big screen (config.language). */
 export const LANGUAGES = /** @type {const} */ (["en", "de"]);

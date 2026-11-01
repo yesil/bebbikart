@@ -4,25 +4,25 @@ import { CHANNELS, makeMsg, parseMsg } from "../src/index.js";
 import { GHOST_TRACE, ROSTER, RUNS, SESSION_RUNNING } from "../testing/fixtures.js";
 
 test("makeMsg builds a v1 envelope and parseMsg reads it back", () => {
-  const msg = makeMsg("phoneToServer", "phone.boost", { runId: "run_x" });
+  const msg = makeMsg("phoneToServer", "phone.steer", { runId: "run_x", x: -0.4 });
   expect(msg.v).toBe(1);
   expect(msg.id).toStartWith("msg_");
   const r = parseMsg("phoneToServer", JSON.stringify(msg));
   expect(r.ok).toBe(true);
-  expect(r.msg.payload).toEqual({ runId: "run_x" });
+  expect(r.msg.payload).toEqual({ runId: "run_x", x: -0.4 });
 });
 
 test("makeMsg throws on a payload that breaks the contract", () => {
-  expect(() => makeMsg("phoneToServer", "phone.boost", {})).toThrow();
+  expect(() => makeMsg("phoneToServer", "phone.steer", { runId: "run_x" })).toThrow();
   expect(() => makeMsg("phoneToServer", "game.weather", {})).toThrow("Unknown message type");
 });
 
 test("parseMsg rejects bad JSON, unknown types and wrong channels", () => {
   expect(parseMsg("gameToServer", "{").ok).toBe(false);
-  const boost = makeMsg("phoneToServer", "phone.boost", { runId: "run_x" });
-  const r = parseMsg("gameToServer", boost);
+  const steer = makeMsg("phoneToServer", "phone.steer", { runId: "run_x", x: null });
+  const r = parseMsg("gameToServer", steer);
   expect(r.ok).toBe(false);
-  expect(r.error).toMatchObject({ code: "bad_message", refId: boost.id });
+  expect(r.error).toMatchObject({ code: "bad_message", refId: steer.id });
 });
 
 test("hello per role", () => {
@@ -42,6 +42,7 @@ test("game messages round-trip with fixtures", () => {
     events: run.events,
     boostsUsed: run.boostsUsed,
     weatherSeen: run.weatherSeen,
+    routes: run.routes,
     trace: GHOST_TRACE,
   });
   expect(parseMsg("gameToServer", JSON.stringify(finished)).ok).toBe(true);
@@ -89,8 +90,13 @@ test("lap messages for loop tracks", () => {
     ],
     weatherSeen: ["rain"],
     isBest: true,
+    routes: { ramp: "around", pond: "bridge", crossing: "sheltered" },
   });
   expect(parseMsg("gameToServer", lap).ok).toBe(true);
+  // A lap drives through every fork, so it names a way at each.
+  expect(() =>
+    makeMsg("gameToServer", "game.run.lap", { ...lap.payload, routes: { ramp: "around" } }),
+  ).toThrow();
   expect(() =>
     makeMsg("gameToServer", "game.run.lap", { runId: "run_x", lap: 0, lapMs: 1 }),
   ).toThrow();
@@ -99,11 +105,13 @@ test("lap messages for loop tracks", () => {
     progress: 0.5,
     elapsedMs: 40_000,
     section: "pond",
-    boostsLeft: 1,
+    lane: -0.3,
+    fork: { id: "pond", inM: 42, left: "water", right: "bridge", way: "bridge" },
     lap: 2,
     lapMs: 9_000,
   });
   expect(progress.payload.lap).toBe(2);
+  expect(progress.payload.fork.way).toBe("bridge");
   const finished = makeMsg("gameToServer", "game.run.finished", {
     runId: "run_x",
     elapsedMs: 95_000,
@@ -114,6 +122,7 @@ test("lap messages for loop tracks", () => {
     events: [],
     boostsUsed: 3,
     weatherSeen: [],
+    routes: { ramp: "jump", pond: "water", crossing: "sheltered" },
     trace: { runId: "run_x", hz: 10, samples: [] },
   });
   expect(finished.payload.laps).toEqual([32_000, 31_250, 31_750]);
@@ -123,15 +132,32 @@ test("lap messages for loop tracks", () => {
   ).toBe(true);
 });
 
-test("the line, the halves and Push (contracts §2g, §2i); there is no game mode", () => {
+test("steering and the fork ahead (contracts §2g)", () => {
+  const ok = (ch, type, payload) => parseMsg(ch, makeMsg(ch, type, payload)).ok;
+  expect(ok("phoneToServer", "phone.steer", { runId: "run_x", x: 1 })).toBe(true);
+  expect(ok("phoneToServer", "phone.steer", { runId: "run_x", x: null })).toBe(true); // let go
+  expect(() => makeMsg("phoneToServer", "phone.steer", { runId: "run_x", x: 1.2 })).toThrow();
+  expect(ok("serverToGame", "run.steer", { runId: "run_x", x: -0.5 })).toBe(true);
+  for (const gone of ["phone.push", "phone.boost"])
+    expect(() => makeMsg("phoneToServer", gone, { runId: "run_x", on: true })).toThrow();
+  for (const gone of ["run.push", "run.boost"]) expect(CHANNELS.serverToGame[gone]).toBeUndefined();
+  const base = { runId: "run_x", progress: 0.2, elapsedMs: 5_000, section: "hills" };
+  expect(ok("serverToPhone", "run.progress", { ...base, lane: 0 })).toBe(true);
+  expect(() => makeMsg("serverToPhone", "run.progress", base)).toThrow(); // lane is always there
+  const fork = { id: "ramp", inM: 30, left: "around", right: "jump", way: "jump" };
+  expect(ok("serverToPhone", "run.progress", { ...base, lane: 0.6, fork })).toBe(true);
+  // A way that isn't at that fork is refused.
+  expect(() =>
+    makeMsg("serverToPhone", "run.progress", { ...base, lane: 0, fork: { ...fork, way: "bridge" } }),
+  ).toThrow();
+});
+
+test("the line and the halves (contracts §2i); there is no game mode", () => {
   expect(DEFAULT_CONFIG.mode).toBeUndefined();
   expect(DEFAULT_CONFIG.duelResultMs).toBe(5_000);
   expect(DEFAULT_CONFIG.splitHoldMs).toBe(30_000);
   const ok = (ch, type, payload) => parseMsg(ch, makeMsg(ch, type, payload)).ok;
-  expect(ok("phoneToServer", "phone.push", { runId: "run_x", on: true })).toBe(true);
-  expect(() => makeMsg("phoneToServer", "phone.push", { runId: "run_x" })).toThrow();
   expect(ok("phoneToServer", "phone.queue.leave", {})).toBe(true);
-  expect(ok("serverToGame", "run.push", { runId: "run_x", on: false })).toBe(true);
   expect(() => makeMsg("gameToServer", "game.config.set", { mode: "duel" })).toThrow();
   for (const gone of ["phone.stop", "phone.watch"])
     expect(() => makeMsg("phoneToServer", gone, { runId: "run_x" })).toThrow();

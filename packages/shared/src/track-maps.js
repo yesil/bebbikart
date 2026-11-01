@@ -21,6 +21,10 @@ export const TrackMapSchema = z.object({
         stretch: z.string(),
         fork: z.string(), // "" when not a fork piece
         choice: z.string(),
+        // A fork piece: the side a kid steers to at the junction to take it, -1 left or 1 right as
+        // the big screen shows it (contracts §2g); 0 off the forks.
+        steer: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+        arrows: z.number().int().nonnegative(), // boost arrow strips on it (§2g)
         rain: z.boolean(), // rain hits it hardest: a ford, mud or a slick deck (sim course data)
         wind: z.boolean(), // wind hits it hardest: open ground
         pts: z.array(point).min(2),

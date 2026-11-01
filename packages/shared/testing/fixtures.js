@@ -244,11 +244,12 @@ export const RUNS = [
       ["rainbow_bends", 7_600],
     ),
     events: [
-      { kind: "boost_perfect", section: "hills", stretch: "bumpy_road", atMs: 3_100 },
+      { kind: "boost_perfect", section: "hills", stretch: "hilltop", atMs: 7_000 },
       { kind: "slip", section: "pond", stretch: "stone_bridge", atMs: 11_000, timeLostMs: 1_200 },
     ],
-    boostsUsed: 2,
+    boostsUsed: 1,
     weatherSeen: [],
+    routes: { ramp: "around", pond: "bridge", crossing: "sheltered" },
   },
   {
     id: "run_fixture00002",
@@ -281,8 +282,9 @@ export const RUNS = [
         otherPlayerId: PLAYERS[1].id,
       },
     ],
-    boostsUsed: 3,
+    boostsUsed: 0,
     weatherSeen: ["rain"],
+    routes: { ramp: "around", pond: "bridge", crossing: "sheltered" },
   },
   {
     id: "run_fixture00003",
@@ -308,8 +310,9 @@ export const RUNS = [
     events: [
       { kind: "slip", section: "bends", stretch: "rainbow_bends", atMs: 24_500, timeLostMs: 900 },
     ],
-    boostsUsed: 1,
+    boostsUsed: 0,
     weatherSeen: ["rain"],
+    routes: { ramp: "around", pond: "bridge", crossing: "sheltered" }, // the forks it reached
   },
   {
     id: "run_fixture00004",
@@ -331,9 +334,13 @@ export const RUNS = [
       ["hedge_lane", 7_500],
       ["rainbow_bends", 7_800],
     ),
-    events: [{ kind: "boost_perfect", section: "pond", stretch: "ford", atMs: 9_200 }],
-    boostsUsed: 3,
+    events: [
+      { kind: "boost_perfect", section: "hills", stretch: "hilltop", atMs: 6_900 },
+      { kind: "boost_perfect", section: "bends", stretch: "rainbow_bends", atMs: 27_500 },
+    ],
+    boostsUsed: 2,
     weatherSeen: [],
+    routes: { ramp: "around", pond: "water", crossing: "sheltered" },
   },
 ];
 

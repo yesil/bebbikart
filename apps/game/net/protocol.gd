@@ -145,12 +145,11 @@ const RUN_EVENT_KINDS = [
 	"bad_landing",
 	"slow_corner",
 	"boost_perfect",
-	"boost_weak",
 	"bounce_wobble",
 	"bumped",
 	"bumped_other",
 	"missed_exit",
-	"push_slide"
+	"scrape"
 ]
 const RUN_OUTCOMES = [
 	"finished",
@@ -338,7 +337,6 @@ const DEFAULT_CONFIG = {
 	"maxConcurrentRuns": 20,
 	"starsTotal": 20,
 	"starsMaxPerAbility": 10,
-	"boostsPerRun": 3,
 	"runTimeCapMs": 90000,
 	"stuckTimeoutMs": 3000,
 	"startCountdownMs": 3000,
@@ -386,8 +384,7 @@ const DEFAULT_BUILD = {
 const MSG_PHONE_TO_SERVER = [
 	"hello",
 	"phone.go",
-	"phone.boost",
-	"phone.push",
+	"phone.steer",
 	"phone.queue.leave"
 ]
 const MSG_ADMIN_TO_SERVER = [
@@ -446,8 +443,7 @@ const MSG_SERVER_TO_GAME = [
 	"welcome",
 	"roster.updated",
 	"run.start",
-	"run.boost",
-	"run.push",
+	"run.steer",
 	"queue.updated",
 	"run.abort"
 ]
