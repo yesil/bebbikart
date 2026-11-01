@@ -237,6 +237,26 @@ interface QueueState {
 type Side = "left" | "right";
 ```
 
+## 2j. Village surprises
+
+On the village loop, cows wander onto the road and graze there, little flocks of sheep cross it,
+cheese wheels roll across from the dairy and a cart drops hay bales. They turn up at random times
+in random places of a few plain stretches (the church hill past the arrows, the farm track, the
+cobbles, the ridge, past the mountain stream; never on a fork's way, the start or a boost strip),
+never closer than 40 m ahead of a kart, and always leave room to pass. Like the weather they are
+shared by both halves and never equalised.
+
+- **Steering round them is free.** A kart that hits one loses most of its speed, hops and wobbles
+  for a moment (about 1.4 s lost); the cow gallops off, the flock scatters, the wheel tumbles away.
+- **Hands off**, the autopilot steers round them but slows down near one (about 0.5 s each), so a
+  kid who steers past early is faster.
+- Both the hit and the careful slowdown are `obstacle` events (`timeLostMs`) on the stretch where
+  they happened; the coach's tip for them is `loss_obstacle` ("Steer round!").
+- The big screen shows a "!" over each group and a warning on the racer's plate ("Cow on the
+  road!") while one is within 80 m ahead. The phone shows nothing extra.
+- The game turns them on (`--no-obstacles` turns them off); the sim's balance tools run without
+  them, so their baselines stay the same. `tools/obstacle_check.gd` checks them.
+
 ## 3. Enums
 
 ```ts
@@ -277,7 +297,8 @@ type RunEventKind =
   | "bumped"
   | "bumped_other" // collisions with other racers
   | "missed_exit" // village: missed the roundabout exit and went round again (timeLostMs)
-  | "scrape"; // steered into the rail and scraped along it (§2g)
+  | "scrape" // steered into the rail and scraped along it (§2g)
+  | "obstacle"; // village: hit a cow, sheep, cheese wheel or hay bale, or slowed down for one hands off (§2j)
 ```
 
 ## 4. Data model

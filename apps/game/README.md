@@ -172,6 +172,22 @@ godot --headless --path . --script res://tools/village_world_check.gd
 
 `world/village/village_decor.tscn` (optional) is loaded on top for hand-placed extras; the bake never touches it.
 
+### Village surprises
+
+Cows wander onto the road and graze there, sheep cross it in little flocks, cheese wheels roll across and a cart drops hay bales, at random times and places (contracts §2j). Steering round them costs nothing; hitting one knocks the kart about (about 1.4 s); hands off, the autopilot slows down and steers round them (about 0.5 s each). Both halves share them, like the weather.
+
+| File | What |
+|---|---|
+| `sim/obstacles.gd` | Where and when they turn up (`VillageCourse.obstacle_spots`), how they move, what a kart hits, what the autopilot sees ahead |
+| `world/obstacle_views.gd` | The animals (Poly Pizza cow and sheep, animated), cheese wheels, hay bales, the "!" over each group, the "MOO!" a hit pops up |
+| `tools/obstacle_check.gd` | Hands off, kid-steered and wild-thumbed karts with and without them: met and hit per lap, the time a hit and a careful pass cost, no new fails |
+
+`--no-obstacles` turns them off for a game run. The balance tools (sweep, village_laps, start_crowd_check) build their sims without them, so their baselines mean the same.
+
+```sh
+godot --headless --path . --script res://tools/obstacle_check.gd
+```
+
 Look: the Kenney kit's colour map is recoloured to a Swiss palette at every bake (`village_kit.gd` `_recolour`; the roof modules get a copy with wooden eaves). Trees and flowers are the countryside's prepared plant meshes (`world/vegetation/meshes/`, from `tools/bake_world.gd`), so they sway with the wind. The village roads use their own calmer asphalt (`world/village/materials/road_asphalt.tres`, `VILLAGE_ROAD` in the bake): the shared texture's stones and red flecks stood out in the village sun. Animals are skinned models posed on their rest pose for the MultiMesh (`instanced_model.gd`).
 
 ## Balance snapshot

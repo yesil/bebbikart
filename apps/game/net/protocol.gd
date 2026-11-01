@@ -149,7 +149,8 @@ const RUN_EVENT_KINDS = [
 	"bumped",
 	"bumped_other",
 	"missed_exit",
-	"scrape"
+	"scrape",
+	"obstacle"
 ]
 const RUN_OUTCOMES = [
 	"finished",

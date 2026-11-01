@@ -4,7 +4,8 @@ extends CanvasLayer
 ##    crown fits between them): a live face cam of the racer (face and hands, ui/face_cam.gd, on
 ##    the outer edge) beside its name on its side's colour (left red, right blue), the lap time,
 ##    their own best lap, the record to beat (once there is one), and under it BOOST! while a
-##    boost arrow the kid steered onto surges the kart (contracts §2g).
+##    boost arrow the kid steered onto surges the kart (contracts §2g), and a warning while a
+##    village surprise is on the road ahead ("Cow on the road!", sim/obstacles.gd).
 ##  - Each half's own start lights (a duel run never shares a countdown), then GO!.
 ##  - A finished lap's verdict in its half for duelResultMs: NEW CHAMPION!, or how far short of
 ##    whose record; a failed lap says oops and why.
@@ -25,12 +26,13 @@ const MARGIN := 18.0
 const PLATE_W := 300.0       # the plate's least width, so a right-aligned plate doesn't jiggle
 const FACE_PX := 200.0       # the racer's face cam on its plate
 const FACE_MAX_PX := 360     # the face cam's render size cap in pixels (big screens upscale it)
+const WARN_M := 80.0         # a surprise this far ahead on the racer's road shows its warning
 
 var result_s := 5.0          # how long a verdict stays (config.duelResultMs)
 var bests := {}              # playerId -> best lap in ms this session (main.gd keeps it)
 var _font: SystemFont
 var _queue := {}
-var _halves := {}            # side -> {root, plate, face, cam, name, time, record, boost, lights, verdict, verdict_big, verdict_small, idle}
+var _halves := {}            # side -> {root, plate, face, cam, name, time, record, boost, warn, warn_label, lights, verdict, verdict_big, verdict_small, idle}
 var _crown: PanelContainer
 var _crown_label: Label
 var _line_label: Label
@@ -117,6 +119,11 @@ func _build_half(side: String) -> Dictionary:
 	var boost := _panel(Color("#ff6b35"), 12, Color.WHITE, 3)
 	boost.add_child(_label(I18n.t("duel.boost"), 34, Color.WHITE))
 	root.add_child(boost)
+	var warn := _panel(Color("#ffc61a"), 12, Color(0.12, 0.08, 0.2), 3)
+	var warn_l := _label("", 30, Color(0.12, 0.08, 0.2))
+	warn_l.add_theme_constant_override("outline_size", 0)
+	warn.add_child(warn_l)
+	root.add_child(warn)
 	var lights := _label("", 150, Color("#ff4b4b"))
 	lights.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(lights)
@@ -136,7 +143,7 @@ func _build_half(side: String) -> Dictionary:
 	idle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(idle)
 	return {"root": root, "plate": plate, "face": face, "cam": cam, "name": name_l, "time": time_l, "best": best_l, "record": record_l,
-		"boost": boost, "lights": lights, "verdict": verdict,
+		"boost": boost, "warn": warn, "warn_label": warn_l, "lights": lights, "verdict": verdict,
 		"verdict_big": big, "verdict_small": small, "idle": idle}
 
 
@@ -211,6 +218,7 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		h["plate"].visible = r != null
 		h["idle"].visible = r == null and not verdict
 		h["boost"].visible = false
+		h["warn"].visible = false
 		h["lights"].visible = false
 		if r == null:
 			# Who is next; with nobody waiting the crown at the top already says to press Go.
@@ -244,12 +252,24 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		plate.reset_size()
 		plate.position = Vector2(MARGIN if side == "left" else rect.size.x - plate.size.x - MARGIN, MARGIN)
 		# BOOST! while a boost arrow surges the kart.
+		var below := plate.position.y + plate.size.y + 10.0
 		if r.boost_t > 0.0:
 			var boost: PanelContainer = h["boost"]
 			boost.visible = true
 			boost.reset_size()
-			var y := plate.position.y + plate.size.y + 10.0
-			boost.position = Vector2(MARGIN if side == "left" else rect.size.x - boost.size.x - MARGIN, y)
+			boost.position = Vector2(MARGIN if side == "left" else rect.size.x - boost.size.x - MARGIN, below)
+			below += boost.size.y + 10.0
+		# A cow, sheep, cheese wheel or hay bale on the road ahead (sim/obstacles.gd).
+		var ahead: String = sim.obstacles.kind_ahead(r, WARN_M) if sim.obstacles != null and r.state == "racing" else ""
+		if ahead != "":
+			var warn: PanelContainer = h["warn"]
+			h["warn_label"].text = I18n.t("duel.ahead." + ahead)
+			warn.visible = true
+			warn.reset_size()
+			# A gentle pulse so it catches the eye.
+			warn.pivot_offset = warn.size * 0.5
+			warn.scale = Vector2.ONE * (1.0 + 0.05 * sin(Time.get_ticks_msec() * 0.012))
+			warn.position = Vector2(MARGIN if side == "left" else rect.size.x - warn.size.x - MARGIN, below)
 		# The half's own start lights, then GO!.
 		var lights: Label = h["lights"]
 		if on_grid:

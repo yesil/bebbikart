@@ -11,6 +11,7 @@
 #   --screenshot=path.png [--shot-at=SEC], --log=none|summary|full,
 #   --kit (mock mode: fake racers built with the racer kit from res://racer_kit/samples, in turn),
 #   --quality=low|medium|high (default: last pick in the options menu, else medium),
+#   --no-obstacles (village: no cows, sheep, cheese wheels or hay bales turn up on the road),
 #   --language=en|de (default: last pick in the options menu, else config.language; server mode
 #   sends it to the server so every phone follows it)
 # One way to race (contracts §2i, king of the hill): the racers take turns from a line, one lap
@@ -51,6 +52,8 @@ const AudioDirector = preload("res://audio/audio_director.gd")
 const DuelScreen = preload("res://world/duel_screen.gd")
 const DuelHud = preload("res://ui/duel_hud.gd")
 const SteerMarks = preload("res://world/steer_marks.gd")
+const Obstacles = preload("res://sim/obstacles.gd")
+const ObstacleViews = preload("res://world/obstacle_views.gd")
 
 ## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
 ## resolution (0 = native; upscaled with MetalFX on Metal, FSR elsewhere), so a fullscreen 5K
@@ -123,6 +126,7 @@ var duel_sides := {}                 # runId -> "left" | "right" (run.start side
 var queue_state := {}                # last queue.updated
 var bests := {}                      # playerId -> best time (on a loop, best lap) in ms this session
 var _front_was := {}                 # side -> instance id of the racer view its camera showed from the front last frame, 0 if none
+var obstacle_views: ObstacleViews    # the village surprises on the road (sim/obstacles.gd), or null
 
 
 func _ready() -> void:
@@ -165,6 +169,14 @@ func _ready() -> void:
 		return
 	sim = Sim.new(course, config, seed_)
 	sim.solo = true  # every run has its own start lights in its half; karts pass through each other
+	# Village surprises: cows, sheep, cheese wheels and hay bales turn up on the road at random.
+	if course.get("obstacle_spots") != null and not args.has("no-obstacles"):
+		sim.obstacles = Obstacles.new(course, seed_ * 13 + 5)
+		var bad: String = sim.obstacles.check()
+		if bad != "":
+			push_error("village surprises: " + bad)
+			get_tree().quit(1)
+			return
 	if args.has("weather"):
 		var w: Array = FORCED.get(args["weather"], [0.0, 0.0])
 		sim.weather.force(w[0], w[1], 30.0)
@@ -233,6 +245,14 @@ func _build_scene() -> void:
 		push_error("steering marks: " + marks_err)
 		_result(("steering marks: " + marks_err).left(160))
 		hud.problem("steering marks: " + marks_err)
+	if sim.obstacles != null:
+		obstacle_views = ObstacleViews.new()
+		add_child(obstacle_views)
+		var ob_err := obstacle_views.setup(sim)
+		if ob_err != "":
+			push_error("village surprises: " + ob_err)
+			_result(("village surprises: " + ob_err).left(160))
+			hud.problem("village surprises: " + ob_err)
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)
@@ -848,7 +868,12 @@ func _on_racer_ready(player_id: String) -> void:
 
 func _outgoing(type: String, pl: Dictionary) -> void:
 	match type:
-		"sim.boost", "sim.bump", "sim.fork":
+		"sim.boost", "sim.bump", "sim.fork", "sim.obstacle_spawned":
+			return
+		"sim.obstacle":
+			print("surprise: %s hit a %s" % [_nick_of(pl["runId"]), pl["kind"]])
+			if obstacle_views != null:
+				obstacle_views.on_hit(pl)
 			return
 		"sim.removed":
 			var v: Node = views.get(pl["runId"])

@@ -52,6 +52,10 @@ var free_north := 0.0
 var roundabout := {}
 ## The forks' ways and the side each leaves on (sim/forks.gd ways()).
 var forks := {}
+## Village surprises (sim/obstacles.gd): where cows, sheep, cheese wheels and hay bales may turn
+## up, {seg, a, b (metres along it), kinds}. Plain stretches only, clear of the start, the boost
+## arrows and the run-in to each fork.
+var obstacle_spots: Array = []
 
 
 func _init() -> void:
@@ -74,6 +78,16 @@ func _init() -> void:
 		_error("loop misses the start line by %.2f m" % miss)
 	for e in Course.stretch_errors(segments, NAME):
 		_error(e)
+	# Over the church hill past the boost arrows, the farm track, the cobbles by the dairy, the
+	# alp ridge, past the mountain stream (a cheese wheel group runs up to 11 m past its own spot).
+	var hill_end: float = (segments["hills2"]["route"] as Route).length - Tuning.FORK_APPROACH_M - 5.0
+	obstacle_spots = [
+		{"seg": "hills2", "a": 48.0, "b": hill_end, "kinds": ["cow", "hay", "cheese"]},
+		{"seg": "farm", "a": 8.0, "b": 32.0, "kinds": ["cow", "sheep"]},
+		{"seg": "cobbles", "a": 5.0, "b": 12.0, "kinds": ["sheep", "cheese"]},
+		{"seg": "ridge", "a": 12.0, "b": 78.0, "kinds": ["cow", "sheep"]},
+		{"seg": "alpbach", "a": 24.0, "b": 40.0, "kinds": ["cow", "sheep"]},
+	]
 	forks = Forks.ways(self)
 	for e in Forks.errors(forks):
 		_error(e)

@@ -51,6 +51,10 @@ test("every key the game uses exists", () => {
       used.add(m[1]);
   }
   // Keys built from ids: "track." + id and the like.
+  const surprises = [
+    ...readFileSync(join(GAME, "sim/obstacles.gd"), "utf8").matchAll(/^\t"([a-z]+)": \{"half"/gm),
+  ].map((m) => m[1]);
+  expect(surprises.length, "sim/obstacles.gd KINDS").toBeGreaterThan(0);
   const families = {
     track: TRACK_IDS,
     section: SECTION_IDS,
@@ -61,6 +65,9 @@ test("every key the game uses exists", () => {
     session: [...SESSION_STATUSES, "unknown"],
     net: ["connecting", "online", "offline"],
     quality: ["low", "medium", "high"],
+    // The village surprises (sim/obstacles.gd KINDS): their warnings and the words a hit pops up.
+    "duel.ahead": surprises,
+    "obstacle.pop": surprises,
     way: Object.entries(FORK_CHOICES).flatMap(([fork, ways]) => ways.map((w) => `${fork}.${w}`)),
     bus: JSON.parse(
       readFileSync(join(GAME, "audio/audio_settings.gd"), "utf8").match(
