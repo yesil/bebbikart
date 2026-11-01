@@ -4,6 +4,9 @@ Phone → photos of two drawings → racer designed (asset pipeline) → server 
 
 ## One-time setup
 
+On a new Mac, first install Bun, Godot 4.7.2 with its export templates and the API key: see
+[Setting up a Mac](../README.md#setting-up-a-mac).
+
 ```bash
 bun install            # also links the asset pipeline into the server
 bun run kit:export     # Godot copies of the contracts
