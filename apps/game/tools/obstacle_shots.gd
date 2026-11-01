@@ -5,6 +5,9 @@ extends SceneTree
 ## Loads main.tscn (mock mode, with its own surprises off: --no-obstacles is passed on by the same
 ## arguments, so only the ones placed here show), freezes the race, then for each kind places a
 ## group at a fixed spot, lets it walk, roll or drop in, and shoots it at a few moments.
+## --hit: instead, lets the mock race run and drops a grazing cow (then sheep, cheese, hay) in the
+## lane of the first racer to reach a surprise spot, holds its thumb there so it can't dodge, and
+## shoots the race camera every 0.15 s round the hit (hit_<kind>_<n>.png).
 
 const VillageCourse = preload("res://sim/village_course.gd")
 const Obstacles = preload("res://sim/obstacles.gd")
@@ -21,6 +24,7 @@ const SHOTS := [
 ]
 
 var out := ""
+var hit_mode := false
 
 
 func _initialize() -> void:
@@ -28,6 +32,8 @@ func _initialize() -> void:
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		if kv[0] == "out":
 			out = kv[1]
+		if kv[0] == "hit":
+			hit_mode = true
 	if out == "" or not OS.get_cmdline_user_args().has("--no-obstacles"):
 		push_error("obstacle_shots: --out=DIR, --track=village and --no-obstacles are required")
 		quit(1)
@@ -48,6 +54,12 @@ func _run() -> void:
 	if sim == null or cam == null:
 		push_error("obstacle_shots: the game did not start (see errors above)")
 		quit(1)
+		return
+	if hit_mode:
+		await _hits(main, sim)
+		main.free()
+		await create_timer(0.3).timeout
+		quit(0)
 		return
 	main.set_physics_process(false)
 	main.call("_set_split", false)
@@ -91,3 +103,81 @@ func _run() -> void:
 	main.free()
 	await create_timer(0.3).timeout
 	quit(0)
+
+
+## The mock race runs on; each kind in turn is dropped in front of a racer in its own lane.
+func _hits(main: Node, sim) -> void:
+	sim.obstacles = Obstacles.new(sim.course, 2)
+	sim.obstacles.enabled = false  # only the ones placed here
+	var views := ObstacleViews.new()
+	main.add_child(views)
+	main.set("obstacle_views", views)
+	var err := views.setup(sim)
+	if err != "":
+		push_error("obstacle_shots: " + err)
+		return
+	for kind in ["cow", "sheep", "cheese", "hay"]:
+		var placed := false
+		var waited := 0.0
+		var hit_at := -1.0
+		var n := 0
+		var held := ""          # the racer whose thumb is held in its lane
+		var held_x := 0.0
+		var gid := -1
+		while waited < 90.0:
+			await process_frame
+			waited += main.get_process_delta_time()
+			if not placed:
+				for r in sim.racers:
+					var spot_i := -1
+					for i in sim.course.obstacle_spots.size():
+						var sp: Dictionary = sim.course.obstacle_spots[i]
+						if sp["seg"] == r.seg_id and r.ls < float(sp["b"]) - 25.0 and (kind in sp["kinds"] or kind == "hay"):
+							spot_i = i
+					if spot_i < 0:
+						continue
+					gid = sim.obstacles.place_group(sim, spot_i, kind, r.ls + 25.0, 1.0)
+					var first := true
+					for it in sim.obstacles.items:
+						if int(it["group"]) == gid:
+							# Right in its lane: a cow already grazing there, the first bale lying
+							# there; sheep and cheese about to cross it.
+							if kind == "cow" or (kind == "hay" and first):
+								it["d"] = r.d
+								it["target"] = r.d
+								it["state"] = "stay"
+								it["stay"] = 8.0
+								it["t"] = 0.0
+							first = false
+					held = r.run_id
+					held_x = r.lane_x()
+					placed = true
+					print("placed %s ahead of %s" % [kind, r.run_id])
+					break
+				continue
+			if hit_at < 0.0 and held != "":
+				sim.steer(held, held_x)  # over the mock player's own thumb
+			if hit_at < 0.0:
+				for it in sim.obstacles.items:
+					if int(it["group"]) == gid and it["hit"]:
+						hit_at = waited
+				if hit_at < 0.0 and waited > 60.0:
+					break
+				if hit_at < 0.0:
+					continue
+			if n < 14:
+				await RenderingServer.frame_post_draw
+				var path := out.path_join("hit_%s_%02d.png" % [kind, n])
+				get_root().get_texture().get_image().save_png(path)
+				print("shot ", path)
+				n += 1
+				var t0 := waited
+				while waited - t0 < 0.15:
+					await process_frame
+					waited += main.get_process_delta_time()
+			else:
+				break
+		for r in sim.racers:
+			sim.steer(r.run_id, null)
+		if hit_at < 0.0:
+			push_error("obstacle_shots: no racer hit the %s" % kind)

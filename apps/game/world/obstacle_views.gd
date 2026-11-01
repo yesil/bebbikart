@@ -2,7 +2,8 @@ extends Node3D
 ## Draws the village surprises (sim/obstacles.gd) on the road: cows (walking in, grazing, trotting
 ## off, galloping away when hit), sheep crossing in a little flock, cheese wheels rolling across,
 ## hay bales dropping off a cart and being picked up again. A bouncing "!" hangs over each group,
-## and a hit pops a word over the kart ("MOO!"). setup() returns "" or why it can't show them;
+## and a hit pops a word over the kart that rides along with it ("MOO!"). setup() returns "" or
+## why it can't show them;
 ## main.gd reports that on screen.
 
 const Course = preload("res://sim/course.gd")
@@ -29,6 +30,7 @@ const HAY_DROP_H := 1.8          # metres a bale falls from the cart
 const SIGN_UP := 2.7             # the "!" over a group
 const SIGN_SEEN_M := 90.0
 const POP_S := 1.1               # a hit's word floats up this long
+const POP_UP := 1.9              # metres over the kart it starts at
 const FONT_NAMES := ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue", "Arial"]
 
 var sim
@@ -36,7 +38,7 @@ var course
 var _scenes := {}                # kind -> PackedScene
 var _nodes := {}                 # item id -> {root, body, anim (AnimationPlayer or null), clip, roll}
 var _signs := {}                 # group id -> Label3D
-var _pops: Array = []            # [Label3D, age]
+var _pops: Array = []            # [Label3D, age, runId]
 var _cheese_mat: StandardMaterial3D
 var _rind_mat: StandardMaterial3D
 var _hay_mat: StandardMaterial3D
@@ -108,16 +110,16 @@ func on_hit(pl: Dictionary) -> void:
 	l.font = _font
 	l.text = I18n.t("obstacle.pop." + String(pl["kind"]))
 	l.font_size = 120
-	l.pixel_size = 0.012
+	l.pixel_size = 0.009
 	l.outline_size = 24
 	l.outline_modulate = Color(0.12, 0.08, 0.2)
 	l.modulate = Color(1.0, 0.95, 0.85)
 	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	l.no_depth_test = true
 	l.layers = SteerMarks.SIGN_LAYER
-	l.position = (pl["pos"] as Vector3) + Vector3.UP * 1.8
+	l.position = (pl["pos"] as Vector3) + Vector3.UP * POP_UP
 	add_child(l)
-	_pops.append([l, 0.0])
+	_pops.append([l, 0.0, String(pl["runId"])])
 
 
 func _process(delta: float) -> void:
@@ -296,7 +298,12 @@ func _update_pops(delta: float) -> void:
 		if f >= 1.0:
 			l.queue_free()
 			continue
-		l.position.y += delta * 1.2
+		# Over its kart as it drives on (the chase camera keeps it the same size), rising a little.
+		var r = sim.by_run.get(pop[2])
+		if r != null:
+			l.position = r.world_pos() + Vector3.UP * (POP_UP + f * 1.2)
+		else:
+			l.position.y += delta * 1.2
 		l.modulate.a = 1.0 - f * f
 		l.outline_modulate.a = l.modulate.a
 		l.scale = Vector3.ONE * (0.6 + 0.6 * minf(1.0, f * 5.0))

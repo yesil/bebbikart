@@ -871,7 +871,7 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 		"sim.boost", "sim.bump", "sim.fork", "sim.obstacle_spawned":
 			return
 		"sim.obstacle":
-			print("surprise: %s hit a %s" % [_nick_of(pl["runId"]), pl["kind"]])
+			print("surprise: %s hit a %s (%.1f s)" % [_nick_of(pl["runId"]), pl["kind"], run_time])
 			if obstacle_views != null:
 				obstacle_views.on_hit(pl)
 			return
