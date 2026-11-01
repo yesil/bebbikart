@@ -210,21 +210,20 @@ func _bake_terrain() -> void:
 const ROAD_STEP := 6.0
 const TAPER := 10.0
 const MAT_DIR := "res://world/materials/"
-const DETOURS := ["ramp_around", "pond_bridge", "cross_sheltered"]
 ## Route pieces: [container name, segment id, s0 or -1 (start), s1 or -1 (end), material, deck thickness]
 const ROAD_PIECES := [
 	["start", "start", -1, -1, "road_asphalt", -1.0],
 	["hills1", "hills1", -1, -1, "road_asphalt", -1.0],
-	["ramp_jump_run_up", "ramp_jump", -1, "lip", "road_asphalt", -1.0],
-	["ramp_jump_landing", "ramp_jump", "land", -1, "road_asphalt", -1.0],
-	["ramp_around", "ramp_around", -1, -1, "road_asphalt_detour", -1.0],
+	["ramp_jump_run_up", "ramp_jump", "jin", "lip", "road_asphalt", -1.0],
+	# From the landing on, the jump road is the merge junction's shared stretch (_junction_pieces).
+	["ramp_around", "ramp_around", "jin", "jout", "road_asphalt_detour", -1.0],
 	["hills2", "hills2", -1, -1, "road_asphalt", -1.0],
-	["pond_water_in", "pond_water", -1, "water_in", "road_asphalt", -1.0],
+	["pond_water_in", "pond_water", "jin", "water_in", "road_asphalt", -1.0],
 	["pond_ford", "pond_water", "water_in", "water_out", "road_ford", -1.0],
-	["pond_water_out", "pond_water", "water_out", -1, "road_asphalt", -1.0],
-	["pond_bridge", "pond_bridge", -1, -1, "road_asphalt_detour", 0.45],
-	["cross_exposed", "cross_exposed", -1, -1, "road_planks", 0.35],
-	["cross_sheltered", "cross_sheltered", -1, -1, "road_dirt_detour", -1.0],
+	["pond_water_out", "pond_water", "water_out", "jout", "road_asphalt", -1.0],
+	["pond_bridge", "pond_bridge", "jin", "jout", "road_asphalt_detour", 0.45],
+	["cross_exposed", "cross_exposed", "jin", "jout", "road_planks", 0.35],
+	["cross_sheltered", "cross_sheltered", "jin", "jout", "road_dirt_detour", -1.0],
 	["bends", "bends", -1, -1, "road_asphalt", -1.0],
 ]
 
@@ -305,19 +304,126 @@ func _piece_s(seg: Dictionary, key: String) -> float:
 			return float(seg["water"][0][0])
 		"water_out":
 			return float(seg["water"][0][1])
+		"jin":
+			return float(_junction[seg["id"]][0])
+		"jout":
+			return (seg["route"] as Route).length - float(_junction[seg["id"]][1])
 	_fail("unknown road piece split '%s'" % key)
 	return 0.0
+
+
+## Fork junctions: [direct branch, detour branch, material of the shared surface]. Near each
+## split and merge the two branches overlap; that stretch is ONE road (_junction_pieces) whose
+## edges follow the union of both branches, and each branch's own road starts only where it has
+## left the other ("jin") and ends where it meets it again ("jout"). No road lies on another, so
+## no edge line or shoulder crosses the road and nothing flickers.
+const FORKS := [
+	["ramp_jump", "ramp_around", "road_asphalt"],
+	["pond_water", "pond_bridge", "road_asphalt"],
+	["cross_exposed", "cross_sheltered", "road_dirt_detour"],
+]
+const JUNCTION_STEP := 1.0
+var _junction := {}   # segment id -> [split length, merge length]
+
+
+## Metres from a fork's split (or merge) until the two branches no longer overlap.
+func _junction_lengths() -> void:
+	for f in FORKS:
+		var a: Dictionary = course.segments[f[0]]
+		var b: Dictionary = course.segments[f[1]]
+		var ra: Route = a["route"]
+		var rb: Route = b["route"]
+		var need: float = float(a["half_width"]) + float(b["half_width"]) + 0.6
+		var lens := []
+		for from_end in [false, true]:
+			var s := 0.0
+			while s < minf(ra.length, rb.length) * 0.5:
+				var pa := ra.pos_at(ra.length - s if from_end else s)
+				var pb := rb.pos_at(rb.length - s if from_end else s)
+				if Vector2(pa.x - pb.x, pa.z - pb.z).length() >= need:
+					break
+				s += 0.5
+			lens.append(s)
+		# The jump road has no surface over its pit: the shared stretch starts at the landing.
+		if not (a["ramp"] as Dictionary).is_empty():
+			lens[0] = minf(lens[0], float(a["ramp"]["kick_a"]))
+			lens[1] = minf(lens[1], ra.length - float(a["ramp"]["land_s"]))
+		print("bake: fork %s junctions %.1f m / %.1f m" % [f[0], lens[0], lens[1]])
+		_junction[f[0]] = lens
+		_junction[f[1]] = lens
+
+
+## The shared stretches at each fork's split and merge, as single roads covering both branches.
+func _junction_pieces(mgr: Node) -> void:
+	for f in FORKS:
+		var a: Dictionary = course.segments[f[0]]
+		var b: Dictionary = course.segments[f[1]]
+		var ra: Route = a["route"]
+		var rb: Route = b["route"]
+		var lens: Array = _junction[f[0]]
+		for end in [0, 1]:
+			var length: float = lens[end]
+			var pts: Array = []
+			var n := maxi(2, int(ceil(length / JUNCTION_STEP)))
+			for i in n + 1:
+				var t := length * i / n
+				var sa := t if end == 0 else ra.length - length + t
+				var sb := t if end == 0 else rb.length - length + t
+				var ca := ra.pos_at(sa)
+				var nrm := ra.normal_at(sa)
+				var off := (rb.pos_at(sb) - ca).dot(nrm)
+				var lo := minf(-road_hw(a, sa), off - road_hw(b, sb))
+				var hi := maxf(road_hw(a, sa), off + road_hw(b, sb))
+				var dir := (ra.pos_at(minf(sa + 0.5, ra.length)) - ra.pos_at(maxf(sa - 0.5, 0.0))).normalized()
+				pts.append([ca + nrm * (lo + hi) * 0.5, dir, hi - lo, 0.45])
+			_container(mgr, "%s_%s" % [f[0], "split" if end == 0 else "merge"], f[2], -1.0, pts)
+
+
+## One Road Generator container through points [position, direction, width, shoulder].
+func _container(mgr: Node, name: String, material: String, thickness: float, pts: Array) -> void:
+	var cont := RoadContainer.new()
+	cont.name = name
+	_mark(cont)
+	cont.flatten_terrain = false
+	cont.material_resource = _res(MAT_DIR + material + ".tres")
+	cont.underside_thickness = thickness
+	mgr.add_child(cont)
+	var prev: RoadPoint = null
+	for i in pts.size():
+		var rp := RoadPoint.new()
+		rp.name = "RP_%03d" % i
+		_mark(rp)
+		cont.add_child(rp)
+		rp.transform = Transform3D(Basis.looking_at(-(pts[i][1] as Vector3), Vector3.UP), pts[i][0])
+		rp.auto_lanes = false
+		rp.traffic_dir = [RoadPoint.LaneDir.FORWARD]
+		rp.lanes = [RoadPoint.LaneType.ONE_WAY]
+		rp.lane_width = pts[i][2]
+		rp.shoulder_width_l = pts[i][3]
+		rp.shoulder_width_r = pts[i][3]
+		rp.gutter_profile = Vector2(0.45, -0.25)
+		var gap: float = (pts[mini(i + 1, pts.size() - 1)][0] as Vector3).distance_to(pts[maxi(i - 1, 0)][0]) * 0.5
+		rp.prior_mag = gap / 3.0
+		rp.next_mag = gap / 3.0
+		if prev != null:
+			prev.connect_roadpoint(RoadPoint.PointInit.NEXT, rp, RoadPoint.PointInit.PRIOR)
+		prev = rp
 
 
 func _bake_roads() -> void:
 	_road_materials()
 	var mgr := RoadManager.new()
 	_replace("Roads", mgr)
+	_junction_lengths()
+	_junction_pieces(mgr)
 	for piece in ROAD_PIECES:
 		var seg: Dictionary = course.segments[piece[1]]
 		var r: Route = seg["route"]
 		var s0 := 0.0 if typeof(piece[2]) == TYPE_INT else _piece_s(seg, piece[2])
 		var s1 := r.length if typeof(piece[3]) == TYPE_INT else _piece_s(seg, piece[3])
+		if s1 - s0 < 0.5:
+			_fail("road piece %s is empty (s %.1f..%.1f): a fork junction reaches past it" % [piece[0], s0, s1])
+			continue
 		var cont := RoadContainer.new()
 		cont.name = piece[0]
 		_mark(cont)
@@ -327,7 +433,6 @@ func _bake_roads() -> void:
 		mgr.add_child(cont)
 		var n := maxi(1, int(ceil((s1 - s0) / ROAD_STEP)))
 		var step := (s1 - s0) / n
-		var detour: bool = piece[1] in DETOURS
 		var prev: RoadPoint = null
 		for i in n + 1:
 			var s := s0 + i * step
@@ -342,9 +447,9 @@ func _bake_roads() -> void:
 			rp.traffic_dir = [RoadPoint.LaneDir.FORWARD]
 			rp.lanes = [RoadPoint.LaneType.ONE_WAY]
 			rp.lane_width = 2.0 * road_hw(seg, s)
-			# Detours start on top of the direct road: no shoulders until they have split off.
+			# A branch leaving or joining a fork's shared stretch: no shoulder lip on the join.
 			var sh := 0.45
-			if detour and (s < 16.0 or s > r.length - 16.0):
+			if (str(piece[2]) == "jin" and s < s0 + 6.0) or (str(piece[3]) == "jout" and s > s1 - 6.0):
 				sh = 0.0
 			rp.shoulder_width_l = sh
 			rp.shoulder_width_r = sh
