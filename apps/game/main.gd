@@ -830,7 +830,7 @@ func _on_racer_ready(player_id: String) -> void:
 
 func _outgoing(type: String, pl: Dictionary) -> void:
 	match type:
-		"sim.boost", "sim.bump":
+		"sim.boost", "sim.bump", "sim.push":
 			return
 		"sim.removed":
 			var v: Node = views.get(pl["runId"])
