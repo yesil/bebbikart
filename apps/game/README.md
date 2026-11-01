@@ -32,8 +32,8 @@ Game flags (after `--`):
 | `--speed=X` | Sim speed multiplier (raises the physics tick rate) |
 | `--duration=SEC` | Quit after SEC wall seconds and print a summary |
 | `--log=none\|summary\|full` | What outgoing messages to print |
-| `--screenshot=PATH [--shot-at=SEC]` | Save a screenshot (windowed only) |
-| `--shots=DIR [--shot-every=SEC]` | A screenshot every SEC seconds (2) while racers are on the track, named by time and racer count (windowed only; the multiplayer harness uses it) |
+| `--screenshot=PATH [--shot-at=SEC]` | Save a screenshot (windowed only: headless refuses it; one that can't be saved makes the run exit 1) |
+| `--shots=DIR [--shot-every=SEC]` | A screenshot every SEC seconds (2) while racers are on the track, named by time and racer count, into DIR (made if missing); a frame that can't be saved makes the run exit 1 (windowed only: headless refuses it; the multiplayer harness uses it) |
 | `--overlay` | Start with the debug text overlay shown (H toggles it); by default the halves' HUD is all you see |
 | `--track=countryside\|village` | Mock mode: the course (with `--server` the session config picks it) |
 | `--quality=low\|medium\|high` | Graphics preset (default: the options menu's last pick, else medium) |

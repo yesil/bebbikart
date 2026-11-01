@@ -104,6 +104,8 @@ var follow_run := ""        # the newest run on the track: the music and engines
 var run_time := 0.0
 var shot_taken := false
 var next_shot := 0.0       # --shots=DIR: time of the next periodic screenshot
+var shots_failed := 0      # screenshots that could not be saved: the run exits 1
+var _shots_pending := 0    # screenshots waiting for their frame to be drawn
 var forced_calm := false
 var menu: OptionsMenu
 var quitting := false
@@ -129,6 +131,17 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		var kv: PackedStringArray = a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
+	if (args.has("shots") or args.has("screenshot")) and DisplayServer.get_name() == "headless":
+		push_error("--shots and --screenshot need a window: headless draws no frames")
+		get_tree().quit(1)
+		return
+	# --shots=DIR is the output asked for: make the folder.
+	if args.has("shots"):
+		var mk := DirAccess.make_dir_recursive_absolute(String(args["shots"]))
+		if mk != OK:
+			push_error("shots: can't create the folder %s (%s)" % [args["shots"], error_string(mk)])
+			get_tree().quit(1)
+			return
 	var seed_ := int(args.get("seed", str(randi() % 100000)))
 	var n_racers := int(args.get("racers", "20"))
 	# Godot scales the physics delta (not the tick count) with time_scale, so speed up by ticking more often.
@@ -1137,16 +1150,20 @@ func _notification(what: int) -> void:
 			Engine.max_fps = FPS_CAP
 
 
+## Saves this frame once drawn. A screenshot that can't be saved (no image, a bad path)
+## is an error, and the run exits 1 (_quit).
 func _screenshot(path: String) -> void:
+	_shots_pending += 1
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
-	if img == null:
-		print("screenshot: no image (headless?)")
+	var err := ERR_UNAVAILABLE
+	if img != null:
+		err = img.save_jpg(path, 0.85) if path.ends_with(".jpg") else img.save_png(path)
+	_shots_pending -= 1
+	if err != OK:
+		shots_failed += 1
+		push_error("screenshot: can't save %s (%s)" % [path, "no image: windowed only" if img == null else error_string(err)])
 		return
-	if path.ends_with(".jpg"):
-		img.save_jpg(path, 0.85)
-	else:
-		img.save_png(path)
 	print("screenshot saved to ", path)
 
 
@@ -1168,4 +1185,16 @@ func _quit() -> void:
 	if args.has("screenshot") and not shot_taken:
 		shot_taken = true
 		await _screenshot(args["screenshot"])
+	# A shot saves once its frame is drawn: give the last ones a few frames.
+	for i in 30:
+		if _shots_pending == 0:
+			break
+		await get_tree().process_frame
+	if _shots_pending > 0:
+		shots_failed += _shots_pending
+		push_error("screenshots: %d never got a drawn frame" % _shots_pending)
+	if shots_failed > 0:
+		push_error("screenshots: %d could not be saved" % shots_failed)
+		get_tree().quit(1)
+		return
 	get_tree().quit()
