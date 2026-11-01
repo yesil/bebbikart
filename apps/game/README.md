@@ -54,19 +54,20 @@ Keys:
 The options menu is where the game manager sets the game options on the big screen (phones only
 join and quit). It does not pause the race.
 
-- **Track**: mock mode reloads on the new course. Server mode sends `game.config.set {track}` to
-  the server, then `game.session.start`; if a session is running the menu first asks for a
-  second click and sends `game.session.end` (new session, empty leaderboard). The course reloads on `config.updated` once the racers are off the track.
-  Refusals (`error`, e.g. `track_locked`) and a disconnected server show in red in the menu.
+- **Track** (one click, no question): mock mode reloads on the new course. Server mode sends
+  `game.session.end`, `game.config.set {track}` and `game.session.start`: the server stops the
+  karts on the track, so the course reloads on `config.updated` right away, and a new session
+  with an empty leaderboard runs on it (racers stay). Refusals (`error`) and a disconnected
+  server show in red in the menu.
 - **Language** (English / Deutsch; `--language=en|de`, saved in `user://settings.cfg`): switches
   every big-screen string at once (`data/strings.json`, read by `ui/i18n.gd`; same keys in each
   language, checked by `bun test`). Server mode sends `game.config.set {language}`, also after
   every `welcome` when the server says otherwise, and every phone follows via `config.updated`.
   A missing key shows as `⚠ de:key` on screen and in the log, never as English.
-- **Session** (server mode): **End session** at any time, with a second click to confirm. It
-  sends `game.session.end`: the line closes (a run already on the track finishes its lap), the
-  podium shows and the phones see the results. **Start a new session** then sends `game.session.start` (empty
-  leaderboard, the line opens again). Mock mode has no session and says so in the menu.
+- **Session** (server mode): **New session** (one click, any time) starts over on the same
+  track: `game.session.end` then `game.session.start`. The podium shows, the karts on the track
+  stop, the leaderboard starts empty, the racers stay. Mock mode has no session and says so.
+  `tools/session_check.gd` clicks New session and both track changes against a running server.
 - **Graphics** (`--quality=low|medium|high`, saved in `user://settings.cfg`, default Medium):
   caps the 3D resolution (Low 720p, Medium 1080p, High native; MetalFX upscaling on Metal, FSR
   elsewhere) and scales shadows, SSAO, glow and vegetation range. On a 5K Retina screen in
@@ -116,7 +117,8 @@ Sweep flags:
 - `tools/duel_check.gd`: headless check of the line: one player alone (full screen, left half only), then six who stop coming after a while (the split turns on once two play and off `splitHoldMs` after the last lap), the champion who rests, one-lap runs without bumps, Push reaching the racers, then the split screen and HUD driven for a few frames. Exit 1 on a broken rule: `godot --headless --path . --script res://tools/duel_check.gd`.
 - `tools/start_crowd_check.gd`: groups of 4, 6 and 8 pressing Go together on both tracks (with the start countdown), with early Boost taps: start bumps, early crashes and release spread; exits 1 if the crowd knocks racers off. `--boost=onetap` is the gameplay thread's one-tap regression mode.
 - `tools/hud_check.gd` (windowed): renders the podium from test data; exits 1 if it is missing or doesn't fit the screen.
-- `tools/menu_check.gd` (windowed): opens the options menu in English and German, mock and server mode (idle, running, confirming End session) and saves screenshots with `--out=DIR`; exits 1 if the menu doesn't fit the screen.
+- `tools/session_check.gd`: against a running server (`-- --server[=URL]`), clicks New session and switches the track there and back like the game manager; exits 1 if a step doesn't reach its state within 20 s.
+- `tools/menu_check.gd` (windowed): opens the options menu in English and German, mock and server mode (idle, running, starting a new session) and saves screenshots with `--out=DIR`; exits 1 if the menu doesn't fit the screen.
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
 - `world/landscape.gd`: the terrain features each fork alternative is built around (pond, inflow stream, jump dip, knoll, valley, hills), anchored to the course.
 

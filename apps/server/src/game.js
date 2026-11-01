@@ -736,6 +736,14 @@ export function createGame({ db, settings, hub, log = console.log }) {
     hub.toGame("run.boost", { runId: run.id });
     return true;
   }
+  /** The game manager starts over: every run on the track or on its way there stops now. */
+  function stopRuns(why) {
+    for (const r of runs.values()) {
+      if (r.status === "done") continue;
+      log(`[run] ${r.id} stopped (${why})`);
+      abortRun(r, "session_reset");
+    }
+  }
   function abortRun(run, reason) {
     if (run.status === "done") return;
     const done = { ...run, status: "done", outcome: "aborted", endedAt: now() };
@@ -1026,8 +1034,12 @@ export function createGame({ db, settings, hub, log = console.log }) {
     return session;
   }
   function patchConfig(next) {
-    if (next.track !== config.track && session.status === "running")
+    const newTrack = next.track !== config.track;
+    if (newTrack && session.status === "running")
       throw new ApiError("track_locked", "End the session before changing the track", 409);
+    // Runs on the old course can't finish on the new one: they stop, so the big screen can load
+    // the new world right away.
+    if (newTrack) stopRuns("track changed");
     config = next;
     hub.toPhones("config.updated", config);
     hub.toAdmins("config.updated", config);
@@ -1042,7 +1054,12 @@ export function createGame({ db, settings, hub, log = console.log }) {
       log(`[config] set from the game: ${JSON.stringify(pl)}`);
       return next;
     }
-    if (type === "game.session.end") return endSession();
+    if (type === "game.session.end") {
+      // From the big screen it is a fresh start (contracts §7): the karts on the track stop too.
+      endSession();
+      stopRuns("session ended on the big screen");
+      return session;
+    }
     if (type === "game.session.start") {
       if (session.status === "running")
         throw new ApiError("bad_request", "The session is already running", 400);

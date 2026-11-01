@@ -96,7 +96,7 @@ bun run sim-players -- --players 8 --url http://localhost:8090 --races 2
 
 ## Village loop (laps)
 
-The game manager picks the track in the game's options menu on the big screen and can end the session there at any time (phones never set options). Switching track ends the session and starts a new one with an empty leaderboard; racers stay. Scripts can do the same over the admin API (the track can't change while a session runs):
+The game manager picks the track in the game's options menu on the big screen, in one click (phones never set options). Switching track ends the session, stops the karts on the track and starts a new session on the new track with an empty leaderboard; racers stay. **New session** in the same menu starts over on the same track. Scripts can do the same over the admin API (the track can't change while a session runs):
 
 ```bash
 curl -X POST -H 'x-admin-pin: 1234' localhost:8080/api/admin/session/end

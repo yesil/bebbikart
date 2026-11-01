@@ -2,8 +2,9 @@
 # the session and quit.
 # The game manager sets the game options here, on the big screen; phones only join and quit.
 # It does not pause the sim: in server mode phones keep racing while it is open.
-# In server mode a track change during a running session ends that session (fresh
-# leaderboard), and so does "End session" (any time); both ask for a second click to confirm.
+# In server mode picking a track starts a new session on it right away, and "New session" starts
+# over on the same track: the karts on the track stop, the leaderboard starts empty, the racers
+# stay. Neither asks a question.
 # Every string comes from ui/i18n.gd; main.gd rebuilds the menu when the language changes.
 extends CanvasLayer
 
@@ -12,8 +13,7 @@ const I18n = preload("res://ui/i18n.gd")
 
 signal fullscreen_toggled
 signal track_chosen(id: String)
-signal session_end_pressed
-signal session_start_pressed
+signal new_session_pressed
 signal quit_pressed
 signal quality_chosen(id: String)
 signal language_chosen(id: String)
@@ -27,14 +27,12 @@ var _tracks := {}            # TrackId -> Button
 var _qualities := {}         # preset id -> Button
 var _volumes := {}           # audio bus -> HSlider
 var _track_note: Label
-var _session_btn: Button     # End session (running) or Start a new session
+var _session_btn: Button     # New session
 var _session_note: Label
-var _confirm_end := false    # End session waiting for its confirming second click
 var _resume: Button
 var _current_track := ""
 var _server := false
 var _session := "?"          # server session status (server mode)
-var _confirm := ""           # track waiting for its confirming second click
 
 
 func setup(current_track: String, server_mode: bool) -> void:
@@ -179,10 +177,10 @@ func setup(current_track: String, server_mode: bool) -> void:
 
 func set_session(status: String) -> void:
 	_session = status
-	if _confirm == "":
-		_set_track_note()
-	_confirm_end = false
 	_set_session_row()
+	# A track button waits for its reload; otherwise the note follows the session.
+	if not _tracks.values().all(func(b): return b.disabled):
+		_set_track_note()
 
 
 func set_quality(id: String) -> void:
@@ -197,7 +195,6 @@ func open() -> void:
 	_fullscreen.set_pressed_no_signal(_is_fullscreen())
 	for bus in _volumes:
 		_volumes[bus].set_value_no_signal(AudioSettings.get_volume(bus))
-	_cancel_confirm()
 	visible = true
 	_resume.grab_focus()
 
@@ -219,16 +216,8 @@ func show_error(text: String) -> void:
 		_tracks[k].disabled = k == _current_track
 
 
+## One click: a new session on that track (server mode) or the course reloaded (mock mode).
 func _on_track(id: String) -> void:
-	if _server and _session == "running" and _confirm != id:
-		_cancel_confirm()
-		_confirm = id
-		_tracks[id].text = I18n.f("menu.end_session_to", [_track_name(id)])
-		_tracks[id].set_pressed_no_signal(false)
-		_track_note.modulate = Color(1.0, 0.85, 0.4)
-		_track_note.text = I18n.f("menu.confirm_switch", [_track_name(id)])
-		return
-	_confirm = ""
 	for k in _tracks:
 		_tracks[k].disabled = true
 	_track_note.modulate = Color(1, 1, 1, 0.75)
@@ -236,51 +225,26 @@ func _on_track(id: String) -> void:
 	track_chosen.emit(id)
 
 
-func _cancel_confirm() -> void:
-	if _confirm != "":
-		_tracks[_confirm].text = _track_name(_confirm)
-		_confirm = ""
-	_set_track_note()
-	_confirm_end = false
-	_set_session_row()
-
-
-## End the running session (second click confirms) or start a new one.
+## One click: start over on the same track (the button waits for the new session).
 func _on_session() -> void:
-	if _session == "running":
-		if not _confirm_end:
-			_cancel_confirm()
-			_confirm_end = true
-			_session_btn.text = I18n.t("menu.end_session_confirm")
-			_session_note.modulate = Color(1.0, 0.85, 0.4)
-			_session_note.text = I18n.t("menu.end_session_note_confirm")
-			return
-		_confirm_end = false
-		_session_btn.disabled = true
-		_session_btn.text = I18n.t("menu.session_ending")
-		session_end_pressed.emit()
-		return
 	_session_btn.disabled = true
 	_session_btn.text = I18n.t("menu.session_starting")
-	session_start_pressed.emit()
+	new_session_pressed.emit()
 
 
-## The session button and its note for the session's status (waiting states keep their text
-## until set_session brings the new status).
+## The session button and its note for the session's status.
 func _set_session_row() -> void:
 	if _session_btn == null:
 		return
 	_session_btn.disabled = not _server
+	_session_btn.text = I18n.t("menu.new_session")
 	_session_note.modulate = Color(1, 1, 1, 0.75)
 	if not _server:
-		_session_btn.text = I18n.t("menu.end_session")
 		_session_note.text = I18n.t("menu.session_mock")
 	elif _session == "running":
-		_session_btn.text = I18n.t("menu.end_session")
-		_session_note.text = I18n.t("menu.end_session_note")
+		_session_note.text = I18n.f("menu.new_session_note", [_track_name(_current_track)])
 	else:
-		_session_btn.text = I18n.t("menu.start_session")
-		_session_note.text = I18n.f("menu.start_session_note", [I18n.t("session." + (_session if _session != "?" else "unknown"))])
+		_session_note.text = I18n.f("menu.session_idle_note", [I18n.t("session." + (_session if _session != "?" else "unknown"))])
 
 
 ## Ending or starting the session failed: show why, in red, until the menu is reopened.

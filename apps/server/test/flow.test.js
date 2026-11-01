@@ -851,3 +851,78 @@ test("after a track switch, the line waits until the big screen has loaded the n
   reloaded.close();
   s.stop();
 }, 30000);
+
+test("the big screen starts over: a new session or a new track stops the karts on the track", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey });
+  await game.start();
+  await game.wait("welcome");
+  const dev = await fetch(`${base}/api/device`, { method: "POST" });
+  const cookie = dev.headers.get("set-cookie").split(";")[0];
+  const created = await fetch(`${base}/api/players`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ nickname: "Restarter" }),
+  });
+  const playerId = (await created.json()).id;
+  const phone = client({ cookie }, { role: "phone" });
+  await phone.start();
+  await phone.wait("welcome");
+  const form = new FormData();
+  for (const [k, f] of [
+    ["character", "pair02-character-robot.jpg"],
+    ["vehicle", "pair02-vehicle-rocket-shoe.jpg"],
+  ])
+    form.append(k, new File([readFileSync(join(SAMPLES, f))], `${k}.jpg`, { type: "image/jpeg" }));
+  await fetch(`${base}/api/players/me/drawings`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  await phone.wait("player.updated", (p) => p.status === "ready", 20000);
+  const session = async () => (await (await fetch(`${base}/api/state`)).json()).session;
+  if ((await session()).status !== "running") {
+    game.send("gameToServer", "game.session.start", {});
+    await game.wait("session.updated", (s) => s.status === "running");
+  }
+
+  // A kart on the track; the big screen's New session: end + start, back to back.
+  const race = async () => {
+    phone.send("phoneToServer", "phone.go", {});
+    const start = await game.wait(
+      "run.start",
+      (p) => p.playerId === playerId && !game.done?.has(p.runId),
+    );
+    game.send("gameToServer", "game.run.started", { runId: start.payload.runId });
+    await phone.wait("run.started", (p) => p.run.id === start.payload.runId);
+    return start.payload.runId;
+  };
+  game.done = new Set();
+  const before = (await session()).id;
+  const run1 = await race();
+  game.done.add(run1);
+  game.send("gameToServer", "game.session.end", {});
+  game.send("gameToServer", "game.session.start", {});
+  const abort1 = await game.wait("run.abort", (p) => p.runId === run1);
+  expect(abort1.payload.reason).toBe("session_reset");
+  const ended1 = await phone.wait("run.ended", (p) => p.run.id === run1);
+  expect(ended1.payload.run.outcome).toBe("aborted");
+  await game.wait("session.updated", (s) => s.status === "running" && s.id !== before);
+
+  // A new track: end, set, start. The kart stops before the track changes.
+  const run2 = await race();
+  game.done.add(run2);
+  const track = (await (await fetch(`${base}/api/state`)).json()).config.track;
+  const other = track === "village" ? "countryside" : "village";
+  const mid = (await session()).id;
+  game.send("gameToServer", "game.session.end", {});
+  game.send("gameToServer", "game.config.set", { track: other });
+  game.send("gameToServer", "game.session.start", {});
+  const abort2 = await game.wait("run.abort", (p) => p.runId === run2);
+  expect(abort2.payload.reason).toBe("session_reset");
+  await game.wait("config.updated", (c) => c.track === other);
+  const fresh = await game.wait("session.updated", (s) => s.status === "running" && s.id !== mid);
+  expect(fresh.payload.id).not.toBe(before);
+  expect(game.msgs.some((m) => m.type === "error")).toBe(false);
+  game.ws.close();
+  phone.ws.close();
+}, 40000);

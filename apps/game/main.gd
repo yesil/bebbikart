@@ -272,8 +272,7 @@ func _make_menu() -> void:
 	menu.setup(track, assets != null)
 	menu.fullscreen_toggled.connect(_toggle_fullscreen)
 	menu.track_chosen.connect(_switch_track)
-	menu.session_end_pressed.connect(_end_session)
-	menu.session_start_pressed.connect(_start_session)
+	menu.new_session_pressed.connect(_new_session)
 	menu.quit_pressed.connect(_quit)
 	menu.quality_chosen.connect(func(id: String): apply_quality(id); _save_setting("graphics", "quality", id))
 	menu.language_chosen.connect(_choose_language)
@@ -443,9 +442,10 @@ func open_menu() -> void:
 	menu.open()
 
 
-## Track picked in the options menu. Mock mode reloads on it. Server mode asks the server
-## (the game manager owns the options): a running session is ended, the track set and a new
-## session started; config.updated then reloads the course via _check_track once it is empty.
+## Track picked in the options menu (one click, no question). Mock mode reloads on it. Server
+## mode asks the server (the game manager owns the options): the running session ends, the
+## track is set and a new session starts. The server stops the karts on the old track
+## (run.abort), so config.updated reloads the course via _check_track right away.
 func _switch_track(id: String) -> void:
 	if not Protocol.TRACK_IDS.has(id):
 		push_error("track switch: unknown track \"%s\"" % id)
@@ -468,32 +468,21 @@ func _switch_track(id: String) -> void:
 	net.send("game.session.start", {})
 
 
-## Options menu, any time: end the session for everyone. The line closes, the laps on the track
-## finish, the podium shows; the session stays ended until "Start a new session".
-func _end_session() -> void:
+## Options menu, any time, one click: start over on the same track. The running session ends
+## (the podium shows, the server stops the karts on the track) and a new one starts at once:
+## empty leaderboard, the racers stay.
+func _new_session() -> void:
 	if assets == null:
-		push_error("end session: mock mode has no server session")
+		push_error("new session: mock mode has no server session")
 		menu.show_session_error(I18n.t("menu.session_mock"))
 		return
 	if net.status != "online":
-		push_error("end session: server is %s" % net.status)
+		push_error("new session: server is %s" % net.status)
 		menu.show_session_error(I18n.f("error.offline_session", [I18n.t("net." + net.status)]))
 		return
-	print("session: ending %s (options menu)" % net.session_status)
-	net.send("game.session.end", {})
-
-
-## Options menu: a new session after an ended one (fresh leaderboard; racers stay).
-func _start_session() -> void:
-	if assets == null:
-		push_error("start session: mock mode has no server session")
-		menu.show_session_error(I18n.t("menu.session_mock"))
-		return
-	if net.status != "online":
-		push_error("start session: server is %s" % net.status)
-		menu.show_session_error(I18n.f("error.offline_session", [I18n.t("net." + net.status)]))
-		return
-	print("session: starting a new one (options menu)")
+	print("session: starting over on %s (options menu, session %s)" % [track, net.session_status])
+	if net.session_status == "running":
+		net.send("game.session.end", {})
 	net.send("game.session.start", {})
 
 
