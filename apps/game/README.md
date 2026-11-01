@@ -156,6 +156,8 @@ A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, 
 | `tools/bake_village.gd` | Bakes `world/village/village_world.tscn` (stages terrain, roads, water, structures, buildings, props) |
 | `tools/village_world_check.gd` | Checks the baked world: parts present, terrain under the roads, nothing on the track, nothing floating |
 | `tools/village_shots.gd` | Fixed-viewpoint screenshots (windowed, `-- --track=village --out=DIR`) |
+| `tools/seed_village_environment.gd` | Seeds `world/village/village_environment.tscn`: alpine sky (the Poly Haven panorama turned so its sun is in the north-east), sun, fog with aerial perspective (hand-editable; `-- --force` re-seeds) |
+| `tools/race_cam_shots.gd` | Race-camera screenshots of the real game for look comparisons (windowed, never takes keyboard focus): `-- --track=village --racers=1 --seed=3 --weather=calm --duration=62 --shots=DIR --shot-every=3 --mute` |
 
 After editing the village course or plan:
 
@@ -167,6 +169,8 @@ godot --headless --path . --script res://tools/village_world_check.gd
 ```
 
 `world/village/village_decor.tscn` (optional) is loaded on top for hand-placed extras; the bake never touches it.
+
+Look: the Kenney kit's colour map is recoloured to a Swiss palette at every bake (`village_kit.gd` `_recolour`; the roof modules get a copy with wooden eaves). Trees and flowers are the countryside's prepared plant meshes (`world/vegetation/meshes/`, from `tools/bake_world.gd`), so they sway with the wind. The village roads use their own calmer asphalt (`world/village/materials/road_asphalt.tres`, `VILLAGE_ROAD` in the bake): the shared texture's stones and red flecks stood out in the village sun. Animals are skinned models posed on their rest pose for the MultiMesh (`instanced_model.gd`).
 
 ## Balance snapshot
 
