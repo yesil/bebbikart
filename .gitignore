@@ -10,5 +10,7 @@ apps/game/.godot/
 .claude
 
 
-# Godot import settings for game assets (compression, mipmaps, normal maps) must travel with the repo.
-!apps/game/assets/**/*.import
+# Godot import settings (compression, mipmaps, normal maps) must travel with the repo, and so must
+# the resource UIDs they hold: a fresh clone that regenerates them gets new UIDs, and scenes that
+# point at the old ones (the village road texture) warn and fall back to the file path.
+!apps/game/**/*.import
