@@ -74,6 +74,7 @@ func _build_half(side: String) -> Dictionary:
 	row.add_theme_constant_override("separation", 12)
 	plate.add_child(row)
 	var cam := FaceCam.new()
+	cam.phase = 0 if side == "left" else 1  # the two cams draw on alternate frames
 	add_child(cam)
 	var face := Panel.new()
 	var fsb := StyleBoxFlat.new()

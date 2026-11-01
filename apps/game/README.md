@@ -239,7 +239,8 @@ through each other and the autopilot ignores the other kart.
   other half's racer out: two duelists can wait in the same grid spot.
 - **HUD** (`ui/duel_hud.gd`): per half a live face cam of the racer (`ui/face_cam.gd`: a small
   camera in front of the character framing its face and hands, so its gestures show while it
-  drives; the other half's racer is left out), name, lap time, best lap, record, BOOST! while a
+  drives; the other half's racer is left out; drawn at half rate, the two halves' cams taking
+  turns frame by frame), name, lap time, best lap, record, BOOST! while a
   boost arrow's boost lasts, its own start lights and the lap's verdict for
   `duelResultMs`; the crown and the line top centre. `ui/race_hud.gd` adds problems and the
   podium on top.
