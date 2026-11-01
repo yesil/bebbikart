@@ -29,7 +29,7 @@ export const DEFAULT_CONFIG = {
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
   startCountdownMs: 3_000, // race start countdown (§2c); 0 = each racer leaves as soon as there is room
-  track: "countryside", // TrackId; changes only while no session is running (409 track_locked)
+  track: "village", // TrackId; changes only while no session is running (409 track_locked)
   lapsPerRun: 3, // the game's tools without a server; the server's runs race one lap (§2i)
   language: "en", // Language; set on the big screen, every phone follows it (§2b)
   duelResultMs: 5_000, // how long a half shows its racer's result before the next in line starts there (§2i)

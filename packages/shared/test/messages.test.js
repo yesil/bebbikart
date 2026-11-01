@@ -68,7 +68,7 @@ test("game messages round-trip with fixtures", () => {
 });
 
 test("config carries the track and the lap cap", () => {
-  expect(DEFAULT_CONFIG.track).toBe("countryside");
+  expect(DEFAULT_CONFIG.track).toBe("village");
   expect(DEFAULT_CONFIG.lapsPerRun).toBe(3);
   expect(() =>
     makeMsg("serverToGame", "config.updated", { ...DEFAULT_CONFIG, track: "moon" }),

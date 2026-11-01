@@ -340,7 +340,7 @@ const DEFAULT_CONFIG = {
 	"runTimeCapMs": 90000,
 	"stuckTimeoutMs": 3000,
 	"startCountdownMs": 3000,
-	"track": "countryside",
+	"track": "village",
 	"lapsPerRun": 3,
 	"language": "en",
 	"duelResultMs": 5000,

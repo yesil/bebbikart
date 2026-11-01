@@ -21,7 +21,8 @@ beforeAll(() => {
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-test-")),
     designClient: createMockClient({ designId: "pair01" }),
-    config: { ...DEFAULT_CONFIG, duelResultMs: 50, splitHoldMs: 100 },
+    // The story starts on the countryside and switches to the village loop part way through.
+    config: { ...DEFAULT_CONFIG, track: "countryside", duelResultMs: 50, splitHoldMs: 100 },
   };
   settings.dbFile = ":memory:";
   srv = startServer(settings, { log: () => {} });

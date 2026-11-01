@@ -11,7 +11,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
   startCountdownMs: 3_000, // race start: Go opens a countdown; everyone who presses Go in it starts together (0 = instant)
-  track: "countryside", // TrackId; changes only while no session is running
+  track: "village", // TrackId; changes only while no session is running
   lapsPerRun: 3, // loop tracks: a run ends after this many laps (or earlier on "Pit in")
   language: "en", // Language: set on the big screen; every phone follows it
   duelResultMs: 5_000, // a half shows its racer's result this long, then the next in line starts there
