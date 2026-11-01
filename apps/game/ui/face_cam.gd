@@ -5,7 +5,10 @@ extends SubViewport
 ## A SubViewport on the main World3D, drawn only while it has a racer, and then on every other
 ## frame (`phase`): the two halves' cams take turns, so at most one draws a frame; the plate shows
 ## get_texture(). The other half's racer is left out (set_hide_layers): in a duel both racers
-## can sit in the same spot, and only this racer's face belongs here.
+## can sit in the same spot, and only this racer's face belongs here. The fork signs and steering
+## rings (SteerMarks.SIGN_LAYER) are always left out: they draw through everything, over the face.
+
+const SteerMarks = preload("res://world/steer_marks.gd")
 
 const FOV := 34.0
 const HEAD_R := 0.21        # head radius per unit of the head's scale (racer_kit/kit_parts.gd HEAD_PARAMS)
@@ -37,6 +40,7 @@ func _init() -> void:
 	_cam.fov = FOV
 	_cam.near = 0.05
 	_cam.far = 120.0
+	_cam.cull_mask = 0xFFFFF & ~SteerMarks.SIGN_LAYER
 	add_child(_cam)
 
 
@@ -48,9 +52,9 @@ func _ready() -> void:
 	_cam.current = true
 
 
-## Layers this camera leaves out (the other half's racer).
+## Layers this camera leaves out (the other half's racer), on top of the signs.
 func set_hide_layers(mask: int) -> void:
-	_cam.cull_mask = 0xFFFFF & ~mask
+	_cam.cull_mask = 0xFFFFF & ~(mask | SteerMarks.SIGN_LAYER)
 
 
 ## Per frame: frame `view`'s face and hands. Returns false (and stops drawing) when there is

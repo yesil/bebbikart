@@ -24,6 +24,10 @@ const SIGN_GAP := 1.6         # metres between the two signs, as the camera sees
 const SIGN_SEEN_M := 75.0     # signs show from this close (they draw over hills otherwise)
 const RING_AHEAD := 6.0       # metres ahead of the kart
 const FONT_NAMES := ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue", "Arial"]
+## The signs and the rings draw through everything (no_depth_test), so they sit on their own
+## render layer: the face cams (ui/face_cam.gd) and the front shot (world/camera_rig.gd) leave it
+## out, the chase view keeps it. Bits 10 and 11 are the duel halves' racers (DuelScreen.SIDE_LAYER).
+const SIGN_LAYER := 1 << 12
 
 var course
 var sim
@@ -144,6 +148,7 @@ func _build_signs() -> String:
 			l.modulate = Color(1.0, 0.86, 0.3)
 			l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 			l.no_depth_test = true
+			l.layers = SIGN_LAYER
 			l.fixed_size = false
 			l.visibility_range_end = SIGN_SEEN_M
 			l.visibility_range_end_margin = 10.0
@@ -181,6 +186,7 @@ func _process(_delta: float) -> void:
 			ring = MeshInstance3D.new()
 			ring.mesh = _ring_mesh
 			ring.material_override = _ring_mat
+			ring.layers = SIGN_LAYER
 			ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(ring)
 			_rings[r.run_id] = ring

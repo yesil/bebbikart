@@ -3,6 +3,8 @@ extends Camera3D
 ## vantage points at the three forks. Each half of the screen has one (world/duel_screen.gd says
 ## which racer it chases).
 
+const SteerMarks = preload("res://world/steer_marks.gd")
+
 enum Mode { FOLLOW, WIDE, FORKS }
 
 ## A cut to a racer whose chase spot is further than this from the camera jumps there; only a
@@ -138,7 +140,11 @@ func _process(delta: float) -> void:
 	if mode == Mode.FOLLOW and target != null and target.visible and _since_cut > SWOOP_S * 2.0 and _front_k == 0.0:
 		_chase_sum += position.distance_to(target.global_position) * delta
 		_chase_t += delta
-	cull_mask = 0xFFFFF & ~front_hide if _front_k > 0.0 else 0xFFFFF
+	# Round the front, the fork signs would float over the racer's face: leave them out with the
+	# other half's racer. The chase keeps them (they say where the fork goes), and so do the fork
+	# shots (an idle half's _front_k stays where its last racer left it).
+	var left_out := front_hide | SteerMarks.SIGN_LAYER if mode == Mode.FOLLOW and _front_k > 0.0 else 0
+	cull_mask = 0xFFFFF & ~left_out
 
 
 ## Where the follow camera wants to be: s 0 is the chase spot behind the racer, 1 the front spot;
