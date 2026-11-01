@@ -51,6 +51,20 @@ function lapWeather(run, lap) {
   }
   return run.weatherSeen ?? [];
 }
+/**
+ * The ways a lap of a run took (contracts §2f, §2g), steered or the stars': the lap's own on loop
+ * tracks, the run's on point-to-point ones. Runs recorded before karts could be steered went the
+ * stars' way at every fork, so the build's routes are the ways they took.
+ */
+function lapRoutes(run, lap, build) {
+  if (isLoop(run.track) ? run.lapRoutes : run.routes) {
+    const w = isLoop(run.track) ? run.lapRoutes[lap] : run.routes;
+    if (!w) throw new Error(`lapRoutes: run ${run.id} has no ways for lap ${lap}`);
+    return w;
+  }
+  if (!build.routes) throw new Error(`lapRoutes: run ${run.id} has no ways and its build none`);
+  return build.routes;
+}
 /** coachTip compares elapsedMs; on loops that is the best lap (a run that failed after laps
  * still gets the fail tip, naming where it ended). */
 function forCoach(run) {
@@ -430,7 +444,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function setDeviceOnline(deviceId, online) {
     const p = playerForDevice(deviceId);
     if (!p || p.connected === online) return;
-    if (!online) releasePush(p.id); // a thumb can't hold Push on a phone that is gone (§2g)
+    if (!online) releaseSteer(p.id); // a thumb can't steer from a phone that is gone (§2g)
     savePlayer({ ...p, connected: online });
     hub.toAdmins("player.updated", playerView(p.id));
     pushRoster();
@@ -517,20 +531,20 @@ export function createGame({ db, settings, hub, log = console.log }) {
     log(`[run] ${run.id} queued for "${p.nickname}" on the ${side}`);
     return run;
   }
-  // Push (contracts §2g): held down or let go on the phone, relayed to the game. The server
-  // remembers who holds it, so a phone that disconnects mid-hold lets go.
-  const pushing = new Set(); // runIds with Push held
-  function push(playerId, runId, on) {
+  // Steering (contracts §2g): the lane the thumb asks for, relayed to the game; null when it lets
+  // go. The server remembers whose thumb is down, so a phone that disconnects mid-steer lets go.
+  const steering = new Set(); // runIds with a thumb on the pad
+  function steer(playerId, runId, x) {
     const run = activeRun(playerId);
     if (!run || run.id !== runId) return false;
-    if (on) pushing.add(run.id);
-    else pushing.delete(run.id);
-    hub.toGame("run.push", { runId: run.id, on });
+    if (x === null) steering.delete(run.id);
+    else steering.add(run.id);
+    hub.toGame("run.steer", { runId: run.id, x });
     return true;
   }
-  function releasePush(playerId) {
+  function releaseSteer(playerId) {
     const run = activeRun(playerId);
-    if (run && pushing.delete(run.id)) hub.toGame("run.push", { runId: run.id, on: false });
+    if (run && steering.delete(run.id)) hub.toGame("run.steer", { runId: run.id, x: null });
   }
   // ------------------------------------------------------------------ the line (contracts §2i)
   // King of the hill: the champion (rank 1) rests; the others take turns in the line, one lap
@@ -695,7 +709,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   }
   /** A run ended: its half shows the result for duelResultMs, then takes the next in line. */
   function runDone(run, recordBefore) {
-    pushing.delete(run.id);
+    steering.delete(run.id);
     if (!run.side) return;
     const half = halves[run.side];
     if (half.runId !== run.id) return;
@@ -730,12 +744,6 @@ export function createGame({ db, settings, hub, log = console.log }) {
     return out;
   }
 
-  function boost(playerId, runId) {
-    const run = activeRun(playerId);
-    if (!run || (runId && run.id !== runId)) return false;
-    hub.toGame("run.boost", { runId: run.id });
-    return true;
-  }
   /** The game manager starts over: every run on the track or on its way there stops now. */
   function stopRuns(why) {
     for (const r of runs.values()) {
@@ -837,6 +845,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
         r.liveLaps = [...(r.liveLaps ?? []), pl.lapMs];
         r.liveLapStretches = [...(r.liveLapStretches ?? []), pl.stretches];
         r.liveLapWeather = [...(r.liveLapWeather ?? []), pl.weatherSeen];
+        r.liveLapRoutes = [...(r.liveLapRoutes ?? []), pl.routes];
         r.liveSplits = {}; // section splits restart each lap
         const out = {
           runId: pl.runId,
@@ -866,7 +875,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function finishRun(ok, pl) {
     const r = gameRun(pl.runId);
     if (!r) return;
-    const { liveSplits, liveLaps, liveLapStretches, liveLapWeather, ...base } = r;
+    const { liveSplits, liveLaps, liveLapStretches, liveLapWeather, liveLapRoutes, ...base } = r;
     const run = {
       ...base,
       status: "done",
@@ -878,6 +887,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
       events: pl.events,
       boostsUsed: pl.boostsUsed,
       weatherSeen: pl.weatherSeen,
+      routes: pl.routes,
     };
     if (ok) run.elapsedMs = pl.elapsedMs;
     else
@@ -889,6 +899,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     if (isLoop(run.track)) {
       run.lapStretches = liveLapStretches ?? [];
       run.lapWeather = liveLapWeather ?? [];
+      run.lapRoutes = liveLapRoutes ?? [];
     }
     if (pl.laps) run.laps = pl.laps;
     if (pl.bestLapMs !== undefined) run.bestLapMs = pl.bestLapMs;
@@ -935,13 +946,16 @@ export function createGame({ db, settings, hub, log = console.log }) {
       `[run] ${run.id} ${run.outcome} "${p?.nickname}" ${ok ? `${(run.elapsedMs / 1000).toFixed(2)} s` : `${run.failReason} @${run.failSection}`}${run.laps ? ` laps ${run.laps.map((l) => (l / 1000).toFixed(2)).join("/")}` : ""}${isPersonalBest ? " (best)" : ""}`,
     );
   }
-  /** The setup a lap of a run was raced with (contracts §2f): its build and that lap's weather. */
+  /**
+   * The setup a lap of a run was raced with (contracts §2f): its build's stars, and the ways and
+   * the weather of that lap.
+   */
   function setupOf(run, lap) {
     const b = builds.get(run.buildId);
     if (!b) throw new Error(`setupOf: run ${run.id} has no build ${run.buildId}`);
     return {
       stars: { ...b.stars },
-      routes: { ...(b.routes ?? routesFor(b.stars)) },
+      routes: { ...lapRoutes(run, lap, b) },
       weather: lapWeather(run, lap),
     };
   }
@@ -1144,8 +1158,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     setRender,
     // runs
     launch,
-    boost,
-    push,
+    steer,
     abortRun,
     abortAllRuns,
     onGameMessage,

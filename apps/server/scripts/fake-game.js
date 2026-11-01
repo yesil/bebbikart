@@ -1,7 +1,9 @@
 // Stand-in for the Godot game, for testing the phone flow without Godot:
 //   bun apps/server/scripts/fake-game.js [ws://localhost:8080/ws]
 // Connects as the game, prints the roster, and "races" every run.start in ~12 s with fake splits.
-import { LOOP_TRACKS, makeMsg, SECTION_IDS, TRACK_STRETCHES } from "@bebbikart/shared";
+// The phone's thumb steers it (contracts §2g): the side the kart is on at a fork picks the way;
+// hands off it takes the stars' way.
+import { LOOP_TRACKS, makeMsg, SECTION_IDS, TRACK_STRETCHES, trackMap } from "@bebbikart/shared";
 
 const url = process.argv[2] ?? "ws://localhost:8080/ws";
 const gameKey = process.env.BK_GAME_KEY ?? "bebbikart-dev";
@@ -27,16 +29,13 @@ ws.onmessage = (e) => {
     );
   } else if (type === "run.start") {
     race(payload);
-  } else if (type === "run.boost") {
+  } else if (type === "run.steer") {
     const r = runs.get(payload.runId);
-    if (r && r.boostsLeft > 0) {
-      r.boostsLeft--;
-      r.boosts++;
-      console.log(`[fake-game] boost ${payload.runId}`);
+    if (r) {
+      if ((r.drive.x === null) !== (payload.x === null))
+        console.log(`[fake-game] steer ${payload.x === null ? "let go" : "on"} ${payload.runId}`);
+      r.drive.x = payload.x;
     }
-  } else if (type === "run.push") {
-    if (runs.has(payload.runId))
-      console.log(`[fake-game] push ${payload.on ? "on" : "off"} ${payload.runId}`);
   } else if (type === "queue.updated") {
     const q = payload;
     console.log(
@@ -48,13 +47,65 @@ ws.onmessage = (e) => {
 };
 
 /**
- * Fake stretch times (contracts §2d) for a lap or run of `ms` on the build's route: every stretch
+ * A fake kart's lane and forks over a lap (contracts §2g): the lane follows the thumb (x, null
+ * when it lets go); hands off it leans toward the stars' way near a fork. The track's forks are
+ * spread evenly over the lap; passing one takes the way on the kart's side, or the stars' way.
+ */
+function driver(build) {
+  const forks = [];
+  for (const s of trackMap(config.track).segments) {
+    if (!s.fork) continue;
+    if (!forks.some((x) => x.id === s.fork)) forks.push({ id: s.fork, ways: {} });
+    forks.find((x) => x.id === s.fork).ways[s.choice] = s.steer;
+  }
+  forks.forEach((f, i) => {
+    f.at = (i + 1) / (forks.length + 1);
+  });
+  const wayTo = (f, side) => Object.keys(f.ways).find((c) => f.ways[c] === side);
+  const d = {
+    x: null,
+    lane: 0,
+    routes: {}, // the ways taken on this lap
+    lap() {
+      d.routes = {};
+    },
+    /** One tick of dt s at lap progress p; returns the fork hint while one is near. */
+    tick(p, dt) {
+      const f = forks.find((k) => d.routes[k.id] === undefined);
+      const near = f && f.at - p < 0.1;
+      const target = d.x ?? (near ? 0.5 * f.ways[build.routes[f.id]] : 0);
+      d.lane += Math.max(-2.5 * dt, Math.min(2.5 * dt, target - d.lane));
+      if (f && p >= f.at) {
+        const side = Math.abs(d.lane) > 0.25 ? Math.sign(d.lane) : 0;
+        d.routes[f.id] = (side && wayTo(f, side)) || build.routes[f.id];
+        return undefined;
+      }
+      if (!near) return undefined;
+      const way = Math.abs(d.lane) > 0.25 ? wayTo(f, Math.sign(d.lane)) : build.routes[f.id];
+      return {
+        id: f.id,
+        inM: Math.max(0, Math.round((f.at - p) * 600)),
+        left: wayTo(f, -1),
+        right: wayTo(f, 1),
+        way,
+      };
+    },
+  };
+  return d;
+}
+
+/** The progress payload's steering part (contracts §2g). */
+function steerInfo(r, p, dt) {
+  const fork = r.drive.tick(p, dt);
+  return { lane: Math.round(r.drive.lane * 100) / 100, ...(fork ? { fork } : {}) };
+}
+
+/**
+ * Fake stretch times (contracts §2d) for a lap or run of `ms` on the ways taken: every stretch
  * of the track except the fork pieces it didn't take, sharing `ms` at random; they add up to it.
  */
-function stretchesOf(build, ms) {
-  const list = TRACK_STRETCHES[config.track].filter(
-    (s) => !s.fork || build.routes[s.fork] === s.choice,
-  );
+function stretchesOf(routes, ms) {
+  const list = TRACK_STRETCHES[config.track].filter((s) => !s.fork || routes[s.fork] === s.choice);
   const weights = list.map(() => 0.6 + Math.random());
   const sum = weights.reduce((a, b) => a + b, 0);
   const out = list.map((s, i) => ({
@@ -68,7 +119,7 @@ function stretchesOf(build, ms) {
 
 function race(start) {
   if (LOOP_TRACKS.includes(config.track)) return raceLoop(start);
-  const r = { boostsLeft: 3, boosts: 0, stop: () => {} };
+  const r = { drive: driver(start.build), stop: () => {} };
   runs.set(start.runId, r);
   console.log(
     `[fake-game] run ${start.runId} for ${start.playerId}${start.side ? ` (${start.side})` : ""}`,
@@ -97,26 +148,27 @@ function race(start) {
       progress,
       elapsedMs: t,
       section,
-      boostsLeft: r.boostsLeft,
+      ...steerInfo(r, progress, 0.2),
     });
     if (progress >= 1) {
       clearInterval(timer);
       splits.bends = t - sectionStart;
-      const elapsedMs = Object.values(splits).reduce((a, b) => a + b, 0) - r.boosts * 400;
+      const elapsedMs = Object.values(splits).reduce((a, b) => a + b, 0);
       const fail = Math.random() < 0.15;
       const common = {
         runId: start.runId,
         splits,
         events: [],
-        boostsUsed: r.boosts,
+        boostsUsed: 0,
         weatherSeen: [],
+        routes: r.drive.routes,
       };
-      const stretches = stretchesOf(start.build, elapsedMs);
+      const stretches = stretchesOf(r.drive.routes, elapsedMs);
       if (fail)
         send("game.run.failed", {
           ...common,
           elapsedMs,
-          reason: "off_track",
+          reason: "flipped",
           section: "bends",
           stretches: stretches.slice(0, -1),
           stretch: stretches[stretches.length - 1].id,
@@ -139,7 +191,7 @@ function race(start) {
 
 // Loop track: 8 s laps; finishes after lapsPerRun laps (one, §2i).
 function raceLoop(start) {
-  const r = { boostsLeft: 3, boosts: 0, stop: () => {} };
+  const r = { drive: driver(start.build), stop: () => {} };
   runs.set(start.runId, r);
   const lapsPerRun = start.lapsPerRun;
   if (!lapsPerRun) {
@@ -164,15 +216,17 @@ function raceLoop(start) {
       progress,
       elapsedMs: t,
       section,
-      boostsLeft: r.boostsLeft,
+      ...steerInfo(r, progress, 0.2),
       lap: laps.length + 1,
       lapMs: lapT,
     });
     if (lapT < lapLen) return;
-    const lapMs = lapT - r.boosts * 300;
+    const lapMs = lapT;
     laps.push(lapMs);
-    const stretches = stretchesOf(start.build, lapMs);
-    if (lapMs === Math.min(...laps)) r.bestStretches = stretches;
+    const routes = r.drive.routes;
+    const stretches = stretchesOf(routes, lapMs);
+    if (lapMs === Math.min(...laps))
+      Object.assign(r, { bestStretches: stretches, bestRoutes: routes });
     send("game.run.lap", {
       runId: start.runId,
       lap: laps.length,
@@ -182,9 +236,10 @@ function raceLoop(start) {
       stretches,
       weatherSeen: [],
       isBest: lapMs === Math.min(...laps),
+      routes,
     });
     lapT = 0;
-    r.boosts = 0;
+    r.drive.lap();
     lapLen = lapTarget + Math.round(Math.random() * 1500);
     if (laps.length >= lapsPerRun) {
       clearInterval(timer);
@@ -199,6 +254,7 @@ function raceLoop(start) {
         events: [],
         boostsUsed: 0,
         weatherSeen: [],
+        routes: r.bestRoutes,
         trace: { runId: start.runId, hz: 10, samples: [0, 0, 0, 0, 0] },
       });
       runs.delete(start.runId);

@@ -1,6 +1,6 @@
-// The line (contracts §2i) and Push (§2g) over real HTTP + WebSockets: the two halves, the
-// champion who rests, judging, offline phones, the session end, when the screen splits; Push
-// relayed to the game.
+// The line (contracts §2i) and steering (§2g) over real HTTP + WebSockets: the two halves, the
+// champion who rests, judging, offline phones, the session end, when the screen splits; the
+// thumb's lane relayed to the game.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -99,6 +99,7 @@ async function racer(nickname) {
 }
 
 const stretches = (lapMs) => [{ id: "main_street", ms: lapMs, lostMs: 0 }];
+const routes = { ramp: "around", pond: "bridge", crossing: "exposed" };
 /** The game reports one finished lap (a duel run is one lap). */
 function finishLap(game, runId, lapMs) {
   game.send("gameToServer", "game.run.started", { runId });
@@ -111,6 +112,7 @@ function finishLap(game, runId, lapMs) {
     stretches: stretches(lapMs),
     weatherSeen: [],
     isBest: true,
+    routes,
   });
   game.send("gameToServer", "game.run.finished", {
     runId,
@@ -122,6 +124,7 @@ function finishLap(game, runId, lapMs) {
     events: [],
     boostsUsed: 0,
     weatherSeen: [],
+    routes,
     trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
   });
 }
@@ -200,13 +203,16 @@ test("duel: Go joins the line, a free half launches it, the champion rests, laps
   ).payload;
   expect(startA2.side).toBe("left");
 
-  // Push (§2g): relayed to the game; a phone that goes away lets go.
-  a.phone.send("phoneToServer", "phone.push", { runId: startA2.runId, on: true });
-  expect((await game.wait("run.push", (p) => p.runId === startA2.runId && p.on)).payload.on).toBe(
-    true,
-  );
+  // Steering (§2g): relayed to the game; a phone that goes away mid-steer lets go.
+  a.phone.send("phoneToServer", "phone.steer", { runId: startA2.runId, x: 0.7 });
+  expect((await game.wait("run.steer", (p) => p.runId === startA2.runId)).payload.x).toBe(0.7);
+  // Someone else's run can't be steered.
+  a.phone.send("phoneToServer", "phone.steer", { runId: startB2.runId, x: -1 });
   a.phone.ws.close();
-  await game.wait("run.push", (p) => p.runId === startA2.runId && !p.on);
+  await game.wait("run.steer", (p) => p.runId === startA2.runId && p.x === null);
+  expect(game.msgs.some((m) => m.type === "run.steer" && m.payload.runId === startB2.runId)).toBe(
+    false,
+  );
   game.send("gameToServer", "game.run.failed", {
     runId: startA2.runId,
     reason: "off_track",
@@ -218,6 +224,7 @@ test("duel: Go joins the line, a free half launches it, the champion rests, laps
     events: [],
     boostsUsed: 0,
     weatherSeen: [],
+    routes: {},
   });
   finishLap(game, startB2.runId, 51_000);
   await b.phone.wait("run.ended", (p) => p.run.id === startB2.runId);

@@ -4,9 +4,11 @@
 // Each phone gets a device cookie, creates a racer, uploads a sample drawing pair, waits for the
 // design job (real Claude) and the big screen's renders, sets a random build, presses Go (all at
 // once, or --stagger ms apart) to join the line (contracts §2i), waits for its turn on a half of
-// the big screen, taps Boost, waits for the result and races again (--races).
+// the big screen, steers (contracts §2g: a thumb to one side, then letting go), waits for the
+// result and races again (--races).
 // It logs a timeline and ends with timings (join → racer ready, Go → own half, Go → on track,
-// boost tap → seen, finish → result on the phone), message counts per phone and every error.
+// steer → the kart's lane moving on the phone, finish → result on the phone), message counts per
+// phone and every error.
 // Exit 1 on any error.
 //
 // Racers are kept between runs: device ids go to --state (default .sim-players.json next to the
@@ -19,7 +21,7 @@
 //   --state FILE --fresh (forget saved racers) --max-new N (8) --names A,B,C --seed N (1)
 //   --renders 0 (don't wait for the game's hero/avatar renders, e.g. with fake-game)
 //   --track countryside|village (switches via the admin API: ends the session, new leaderboard)
-//   --boosts N (taps per race, 3)
+//   --steers N (thumb moves per race, 3)
 //   --pin PIN (BK_ADMIN_PIN, 1234) --json FILE (write the full report) --quiet (no timeline)
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -57,7 +59,9 @@ const WAVE_GAP = Number(args["wave-gap"] ?? 20_000);
 const JOIN_STAGGER = Number(args["join-stagger"] ?? 0);
 const MAX_NEW = Number(args["max-new"] ?? 8);
 const WAIT_RENDERS = args.renders !== "0";
-const BOOST_TAPS = Number(args.boosts ?? 3);
+const STEERS = Number(args.steers ?? 3);
+const STEER_HOLD_MS = 1500; // how long the thumb stays to one side
+const STEER_SEEN_MS = 3000; // a lane that hasn't moved by then is a lost steer
 const PIN = args.pin ?? process.env.BK_ADMIN_PIN ?? "1234";
 const QUIET = !!args.quiet;
 const STATE = args.state ?? join(REPO_ROOT, "apps/server/data/.sim-players.json");
@@ -284,10 +288,10 @@ class Race {
   constructor(phone, n) {
     this.phone = phone;
     this.n = n;
-    this.r = { race: n, progress: 0, boosts: [], lostBoosts: 0, laps: 0 };
-    this.taps = [];
-    this.pending = null; // { at, before }
-    this.boostsLeft = phone.config.boostsPerRun;
+    this.r = { race: n, progress: 0, steers: [], lostSteers: 0, forks: 0, laps: 0 };
+    this.timers = [];
+    this.pending = null; // { at, x, from }: a steer whose lane move hasn't shown yet
+    this.lane = 0;
     this.loop = LOOP_TRACKS.includes(phone.config.track);
   }
 
@@ -320,33 +324,43 @@ class Race {
       phone.tag,
       `on track on the ${this.r.side} after ${(this.r.goToStartedMs / 1000).toFixed(2)} s${this.greenAt !== undefined ? ` (countdown, ${Math.round(this.r.greenToStartedMs)} ms after green)` : ""}`,
     );
-    this.scheduleTaps();
+    this.scheduleSteers();
     const ended = await phone.wait("run.ended", (p) => p.run.id === this.runId, capMs);
     this.onEnded(ended);
     phone.race = null;
     return this.r;
   }
 
-  scheduleTaps() {
-    // Spread the taps over the expected run (~25 s point to point, ~50 s for a lap on loops).
+  scheduleSteers() {
+    // Spread the steers over the expected run (~25 s point to point, ~50 s for a lap on loops).
     const span = this.loop ? 40_000 : 20_000;
-    for (let k = 0; k < BOOST_TAPS; k++) {
-      const at = 1500 + (span / BOOST_TAPS) * k + rand() * 2000;
-      this.taps.push(setTimeout(() => this.tap(), at));
+    for (let k = 0; k < STEERS; k++) {
+      const at = 1500 + (span / STEERS) * k + rand() * 2000;
+      this.timers.push(setTimeout(() => this.steer(), at));
     }
   }
 
-  tap() {
-    if (this.done || this.boostsLeft <= 0) return;
-    if (this.pending) {
-      this.r.lostBoosts++;
-      fail(
-        this.phone.tag,
-        `boost tap not seen by the game within ${(performance.now() - this.pending.at).toFixed(0)} ms`,
-      );
-    }
-    this.pending = { at: performance.now(), before: this.boostsLeft };
-    this.phone.send("phone.boost", { runId: this.runId });
+  steer() {
+    if (this.done) return;
+    // Toward the side the kart isn't on, so the lane has room to move.
+    const x = this.lane > 0 ? -0.8 : 0.8;
+    this.pending = { at: performance.now(), x, from: this.lane };
+    this.phone.send("phone.steer", { runId: this.runId, x });
+    this.timers.push(
+      setTimeout(() => {
+        if (this.pending?.x === x) {
+          this.r.lostSteers++;
+          fail(
+            this.phone.tag,
+            `steer to ${x} not seen in the kart's lane within ${STEER_SEEN_MS} ms`,
+          );
+          this.pending = null;
+        }
+      }, STEER_SEEN_MS),
+      setTimeout(() => {
+        if (!this.done) this.phone.send("phone.steer", { runId: this.runId, x: null });
+      }, STEER_HOLD_MS),
+    );
   }
 
   onMessage(m, at) {
@@ -360,11 +374,13 @@ class Race {
       this.r.progress++;
       this.lastProgressAt = at;
       this.firstProgressAt ??= at;
-      if (this.pending && p.boostsLeft < this.pending.before) {
-        this.r.boosts.push(at - this.pending.at);
+      this.lane = p.lane;
+      if (this.pending && (p.lane - this.pending.from) * Math.sign(this.pending.x) >= 0.05) {
+        this.r.steers.push(at - this.pending.at);
         this.pending = null;
       }
-      this.boostsLeft = p.boostsLeft;
+      if (p.fork && p.fork.id !== this.fork) this.r.forks++;
+      this.fork = p.fork?.id;
     } else if (m.type === "run.lap") {
       this.r.laps++;
       line(
@@ -379,7 +395,7 @@ class Race {
 
   onEnded(e) {
     this.done = true;
-    for (const t of this.taps) clearTimeout(t);
+    for (const t of this.timers) clearTimeout(t);
     const run = e.run;
     Object.assign(this.r, {
       outcome: run.outcome,
@@ -395,7 +411,7 @@ class Race {
         ? (this.r.progress * 1000) / Math.max(1, this.lastProgressAt - this.firstProgressAt)
         : 0,
     });
-    if (this.pending) this.r.lostBoosts++;
+    if (this.pending) this.r.lostSteers++;
     if (run.outcome === "aborted") fail(this.phone.tag, `race ${this.n} aborted`);
     const what =
       run.outcome === "finished" || (this.loop && run.bestLapMs !== undefined)
@@ -493,7 +509,7 @@ async function main() {
   console.log(`Go → on track (run.started)  ${stats(all.map((r) => r.goToStartedMs))}`);
   console.log(`countdown green → on track   ${stats(all.map((r) => r.greenToStartedMs))}`);
   console.log(
-    `boost tap → seen on phone    ${stats(all.flatMap((r) => r.boosts))}  (includes ≤200 ms progress interval)`,
+    `steer → lane moves on phone  ${stats(all.flatMap((r) => r.steers))}  (includes ≤200 ms progress interval)`,
   );
   console.log(`last progress → result       ${stats(all.map((r) => r.endedAfterLastProgressMs))}`);
   console.log(`run.ended wire latency       ${stats(all.map((r) => r.endedWireMs))}`);
@@ -520,7 +536,7 @@ async function main() {
   const outcomes = {};
   for (const r of all) outcomes[r.outcome] = (outcomes[r.outcome] ?? 0) + 1;
   console.log(
-    `\noutcomes: ${JSON.stringify(outcomes)} · lost boosts ${all.reduce((s, r) => s + r.lostBoosts, 0)}`,
+    `\noutcomes: ${JSON.stringify(outcomes)} · lost steers ${all.reduce((s, r) => s + r.lostSteers, 0)} · forks shown ${all.reduce((s, r) => s + r.forks, 0)}`,
   );
   if (args.json)
     writeFileSync(

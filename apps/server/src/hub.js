@@ -81,10 +81,8 @@ export function createHub({ settings, log = console.log }) {
             } catch (err) {
               sendError(ws, out, err.code ?? "bad_request", err.message, id);
             }
-          } else if (type === "phone.boost") {
-            game.boost(p.id, payload.runId);
-          } else if (type === "phone.push") {
-            game.push(p.id, payload.runId, payload.on);
+          } else if (type === "phone.steer") {
+            game.steer(p.id, payload.runId, payload.x);
           } else if (type === "phone.queue.leave") {
             game.leaveLine(p.id);
           }

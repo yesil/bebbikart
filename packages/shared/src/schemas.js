@@ -66,7 +66,11 @@ export const ForkHintSchema = z
   .superRefine((h, ctx) => {
     for (const k of ["left", "right", "way"]) {
       if (!FORK_CHOICES[h.id].includes(h[k]))
-        ctx.addIssue({ code: "custom", path: [k], message: `"${h[k]}" is not a way at the ${h.id} fork` });
+        ctx.addIssue({
+          code: "custom",
+          path: [k],
+          message: `"${h[k]}" is not a way at the ${h.id} fork`,
+        });
     }
   });
 

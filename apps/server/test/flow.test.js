@@ -176,8 +176,22 @@ test("phone → drawings → racer on the big screen → race → result", async
   expect(grid.payload).toEqual({ runId, goInMs: 3000 });
   game.send("gameToServer", "game.run.started", { runId });
   await phone.wait("run.started");
-  phone.send("phoneToServer", "phone.boost", { runId });
-  await game.wait("run.boost", (p) => p.runId === runId);
+  // Steering (§2g): the thumb's lane goes to the game, and letting go too.
+  phone.send("phoneToServer", "phone.steer", { runId, x: -0.6 });
+  expect((await game.wait("run.steer", (p) => p.runId === runId)).payload.x).toBe(-0.6);
+  phone.send("phoneToServer", "phone.steer", { runId, x: null });
+  await game.wait("run.steer", (p) => p.runId === runId && p.x === null);
+  // The kart's lane and the fork ahead reach the phone.
+  const fork = { id: "ramp", inM: 40, left: "around", right: "jump", way: "around" };
+  game.send("gameToServer", "game.run.progress", {
+    runId,
+    progress: 0.1,
+    elapsedMs: 3000,
+    section: "hills",
+    lane: -0.4,
+    fork,
+  });
+  expect((await phone.wait("run.progress")).payload).toMatchObject({ lane: -0.4, fork });
   game.send("gameToServer", "game.run.section", { runId, section: "hills", splitMs: 8000 });
   await phone.wait("run.section");
   game.send("gameToServer", "game.run.finished", {
@@ -192,9 +206,10 @@ test("phone → drawings → racer on the big screen → race → result", async
       { id: "hedge_lane", ms: 8000, lostMs: 0 },
       { id: "rainbow_bends", ms: 8100, lostMs: 0 },
     ],
-    events: [{ kind: "boost_perfect", section: "hills", stretch: "bumpy_road", atMs: 3000 }],
+    events: [{ kind: "boost_perfect", section: "hills", stretch: "hilltop", atMs: 3000 }],
     boostsUsed: 1,
     weatherSeen: [],
+    routes: { ramp: "around", pond: "bridge", crossing: "sheltered" },
     trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
   });
   const ended = await phone.wait("run.ended");
@@ -330,8 +345,9 @@ test("village loop: a lap per run, run.lap deltas, best lap ranks, a failed lap"
     { id: "farm", ms: farm, lostMs: 0 },
     { id: "square", ms: 2000, lostMs: 0 },
   ];
-  /** Go, then the game races one lap of `lapMs` (a run is one lap, §2i). */
-  const lapRun = async (lapMs, farm, weatherSeen) => {
+  const stars = { pond: "bridge", ramp: "around", crossing: "exposed" }; // the build's (§2h)
+  /** Go, then the game races one lap of `lapMs` (a run is one lap, §2i) the ways `routes`. */
+  const lapRun = async (lapMs, farm, weatherSeen, routes = stars) => {
     phone.send("phoneToServer", "phone.go", {});
     const start = await game.wait("run.start", (p) => !game.done.has(p.runId));
     const runId = start.payload.runId;
@@ -346,6 +362,7 @@ test("village loop: a lap per run, run.lap deltas, best lap ranks, a failed lap"
       stretches: lapStretches(lapMs, farm),
       weatherSeen,
       isBest: true,
+      routes,
     });
     const lap = (await phone.wait("run.lap", (p) => p.runId === runId)).payload;
     game.send("gameToServer", "game.run.finished", {
@@ -358,6 +375,7 @@ test("village loop: a lap per run, run.lap deltas, best lap ranks, a failed lap"
       events: [],
       boostsUsed: 0,
       weatherSeen,
+      routes,
       trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
     });
     const ended = (await phone.wait("run.ended", (p) => p.run.id === runId)).payload;
@@ -375,8 +393,11 @@ test("village loop: a lap per run, run.lap deltas, best lap ranks, a failed lap"
   expect(first.ended.run.laps).toEqual([20000]);
   expect(first.ended.run.lapStretches).toHaveLength(1);
 
-  // A faster lap next time: compared with the best lap, and it ranks.
-  const second = await lapRun(19000, 3500, ["rain"]);
+  // A faster lap next time, steered through the ford: compared with the best lap, and it ranks.
+  const ford = { ...stars, pond: "water" };
+  const second = await lapRun(19000, 3500, ["rain"], ford);
+  expect(second.ended.run.lapRoutes).toEqual([ford]);
+  expect(second.ended.run.routes).toEqual(ford);
   expect(second.lap.isLapBest).toBe(true);
   expect(second.lap.deltaVsBestLapMs).toBe(-1000);
   expect(second.ended.stretches.find((s) => s.id === "farm")).toMatchObject({
@@ -393,7 +414,7 @@ test("village loop: a lap per run, run.lap deltas, best lap ranks, a failed lap"
   expect(lb.find((e) => e.nickname === "Lapper").bestTimeMs).toBe(19000);
 
   // A failed lap has no time: no best, a tip about the fail, and its stretches against the
-  // laps so far (the session's fastest with that lap's setup: build and weather, §2f).
+  // laps so far (the session's fastest with that lap's setup: stars, ways and weather, §2f).
   phone.send("phoneToServer", "phone.go", {});
   const start3 = await game.wait("run.start", (p) => !game.done.has(p.runId));
   game.send("gameToServer", "game.run.started", { runId: start3.payload.runId });
@@ -408,6 +429,7 @@ test("village loop: a lap per run, run.lap deltas, best lap ranks, a failed lap"
     events: [{ kind: "slip", section: "crossing", stretch: "farm", atMs: 12400, timeLostMs: 900 }],
     boostsUsed: 0,
     weatherSeen: [],
+    routes: { ramp: "around", pond: "bridge" }, // the forks it reached
   });
   const ended3 = (await phone.wait("run.ended", (p) => p.run.id === start3.payload.runId)).payload;
   expect(ended3.run.outcome).toBe("failed");
@@ -416,7 +438,7 @@ test("village loop: a lap per run, run.lap deltas, best lap ranks, a failed lap"
   expect(ended3.coach).toMatchObject({ key: "fail_slip", stretch: "farm" });
   const setup = {
     stars: { speed: 4, jump: 4, grip: 4, water: 2, stability: 4, bounce: 2 },
-    routes: { pond: "bridge", ramp: "around", crossing: "exposed" }, // the stars' (§2h)
+    routes: ford, // the ways that lap took: steered through the ford (§2g)
   };
   expect(ended3.stretches).toEqual([
     {
@@ -737,6 +759,7 @@ test("two halves: a fork piece shows who was fastest the other way through it, a
   await game.wait("queue.updated", (q) => q.split && q.racing.length === 2);
   for (const runId of runIds) game.send("gameToServer", "game.run.started", { runId });
   const result = { splits: {}, stretches: [], events: [], boostsUsed: 0, weatherSeen: [] };
+  const fordWays = { ramp: "around", pond: "water", crossing: "sheltered" };
   // B goes through the pond's ford; A (below) takes the bridge and fails further on.
   const via = (pond, pondMs) => [
     { id: "bumpy_road", ms: 5000, lostMs: 0 },
@@ -754,6 +777,7 @@ test("two halves: a fork piece shows who was fastest the other way through it, a
       { id: "rainbow_bends", ms: 9000, lostMs: 0 },
     ],
     weatherSeen: ["rain"],
+    routes: fordWays, // steered there: the stars take the bridge (§2g)
     trace: { runId: runIds[1], hz: 10, samples: [] },
   });
   await b.phone.wait("run.ended", (p) => p.run.id === runIds[1]);
@@ -765,12 +789,17 @@ test("two halves: a fork piece shows who was fastest the other way through it, a
     stretch: "hedge_lane",
     ...result,
     stretches: via("stone_bridge", 9000),
+    routes: { ramp: "around", pond: "bridge" },
   });
   // A's bridge shows who was fastest the other way through the pond, and with what (§2f).
   const endedA = await a.phone.wait("run.ended", (p) => p.run.id === runIds[0]);
   const bridge = endedA.payload.stretches.find((st) => st.id === "stone_bridge");
   expect(bridge.other).toMatchObject({ id: "ford", ms: 6000, nickname: "Half B" });
-  expect(bridge.other.setup).toEqual({ ...structuredClone(DEFAULT_BUILD), weather: ["rain"] });
+  expect(bridge.other.setup).toEqual({
+    stars: DEFAULT_BUILD.stars,
+    routes: fordWays,
+    weather: ["rain"],
+  });
   expect(endedA.payload.stretches.find((st) => st.id === "bumpy_road").other).toBeUndefined();
   // Nobody races or waits any more: once the hold is over, the screen is whole again.
   await game.wait("queue.updated", (q) => !q.split && q.racing.length === 0);

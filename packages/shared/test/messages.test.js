@@ -148,7 +148,11 @@ test("steering and the fork ahead (contracts §2g)", () => {
   expect(ok("serverToPhone", "run.progress", { ...base, lane: 0.6, fork })).toBe(true);
   // A way that isn't at that fork is refused.
   expect(() =>
-    makeMsg("serverToPhone", "run.progress", { ...base, lane: 0, fork: { ...fork, way: "bridge" } }),
+    makeMsg("serverToPhone", "run.progress", {
+      ...base,
+      lane: 0,
+      fork: { ...fork, way: "bridge" },
+    }),
   ).toThrow();
 });
 

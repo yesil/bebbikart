@@ -54,7 +54,13 @@ test("each fork has a way to the left and one to the right; each lap has arrows"
       expect(sides, `${track} ${fork}`).toEqual([-1, 1]);
     }
     for (const s of segs.filter((s) => !s.fork)) expect(s.steer, `${track} ${s.id}`).toBe(0);
-    expect(segs.filter((s) => s.fork).every((s) => s.arrows === 0), `${track}: arrows on a fork`).toBe(true);
-    expect(segs.reduce((n, s) => n + s.arrows, 0), track).toBeGreaterThan(0);
+    expect(
+      segs.filter((s) => s.fork).every((s) => s.arrows === 0),
+      `${track}: arrows on a fork`,
+    ).toBe(true);
+    expect(
+      segs.reduce((n, s) => n + s.arrows, 0),
+      track,
+    ).toBeGreaterThan(0);
   }
 });
