@@ -64,8 +64,10 @@ func _init() -> void:
 		"stretch": "kicker",
 	})
 	_add("ramp_around", "hills", "ramp", "around", around_pts, 3.5, {"stretch": "knoll_road"})
+	# Boost arrows on the right early on the hilltop: a kart that caught them still has time to
+	# cross over for the ford before the pond fork.
 	p = _draw("hills2", _end("ramp_jump"), [["S", 25.0]], [[0.0, 0.0], [13.0, 1.0], [25.0, 0.4]])
-	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[10.0, 20.0, 1]], "stretch": "hilltop"})
+	_add("hills2", "hills", "", "", p, 4.0, {"boosts": [[3.0, 11.0, 1]], "stretch": "hilltop"})
 	# Water: a shallow stone ford straight through the pond. Bridge: a fenced lane that swings
 	# west round the pond and crosses its inflow stream on a humped stone bridge.
 	var j3 := _end("hills2")

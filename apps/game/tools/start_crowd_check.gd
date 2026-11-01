@@ -4,16 +4,12 @@ extends SceneTree
 ## flipped, stuck in the first EARLY_S seconds), how many of those were bumped just before, and
 ## how long the last racer of the group waits to be released. The same builds also drive alone,
 ## so a bad build is not blamed on the crowd.
-##   godot --headless --path apps/game --script res://tools/start_crowd_check.gd [-- --trials=40 --sizes=4,6,8 --boost=early|zones|none]
-## --boost=early (default): every racer taps its 3 boosts in the first seconds, like excited kids
-## (and the sim-players harness); zones: taps on the boost zones; none: no taps.
+##   godot --headless --path apps/game --script res://tools/start_crowd_check.gd [-- --trials=40 --sizes=4,6,8 --steer=wild|kid|off]
+## --steer=wild (default): every racer's thumb swipes to random lanes three times in the first
+## seconds, like excited kids; kid: Racer.bot_steer (onto the boost arrows, the stars' ways); off:
+## hands off.
 ## Exits 1 if crowd-caused early fails (bumped off, beyond what the same builds do alone) exceed
 ## MAX_CROWD_FAILS of all runs.
-## --boost=onetap: a separate regression check. Random builds drive alone and tap Boost once, off a
-## boost zone, at each of --tap-at seconds (default 3,6), in calm and in rain; counts the runs that
-## end within EARLY_S and the time the tap costs against the same build not tapping.
-##   ... -- --boost=onetap [--builds=200 --tap-at=3,6 --track=village]
-## Exits 1 if the fails exceed MAX_ONETAP_FAILS for that weather.
 
 const Course = preload("res://sim/course.gd")
 const VillageCourse = preload("res://sim/village_course.gd")
@@ -26,10 +22,10 @@ const Tuning = preload("res://sim/tuning.gd")
 const EARLY_S := 15.0
 const START_S := 4.0            # "start bumps": contacts this soon after Go
 const MAX_CROWD_FAILS := 0.02
-const MAX_ONETAP_FAILS := {"calm": 0.02, "rain": 0.10}
-const ONETAP_WEATHER := {"calm": 0.0, "rain": 1.0}
+const STEER_MODES := ["wild", "kid", "off"]
+const SWIPE_S := 1.0            # a wild swipe holds its lane this long, then lets go
 
-var boost_mode := "early"
+var steer_mode := "wild"
 
 
 func _init() -> void:
@@ -38,7 +34,11 @@ func _init() -> void:
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	var trials := int(args.get("trials", "40"))
-	boost_mode = String(args.get("boost", "early"))
+	steer_mode = String(args.get("steer", "wild"))
+	if not steer_mode in STEER_MODES:
+		push_error("start_crowd_check: --steer must be one of %s" % [STEER_MODES])
+		quit(1)
+		return
 	var sizes: Array = Array(String(args.get("sizes", "4,6,8")).split(",")).map(func(s): return int(s))
 	var village := VillageCourse.new()
 	if not village.errors.is_empty():
@@ -49,16 +49,6 @@ func _init() -> void:
 	var tracks := [["countryside", Course.new()], ["village", village]]
 	if args.has("track"):
 		tracks = tracks.filter(func(t): return t[0] == args["track"])
-	if boost_mode == "onetap":
-		var taps_at: Array = Array(String(args.get("tap-at", "3,6")).split(",")).map(func(s): return float(s))
-		var ok := true
-		for track in tracks:
-			for at in taps_at:
-				for w in ONETAP_WEATHER:
-					ok = _one_tap(track[0], track[1], int(args.get("builds", "200")), at, w) and ok
-		print("ONE-TAP CHECK PASSED" if ok else "ONE-TAP CHECK FAILED")
-		quit(0 if ok else 1)
-		return
 	for track in tracks:
 		for n in sizes:
 			var r := _group(track[0], track[1], n, trials)
@@ -114,12 +104,17 @@ func _drive(course, builds: Array, seed_: int, crowd: bool) -> Dictionary:
 	sim.emit_messages = false
 	sim.weather.force(0.0, 0.0, 600.0)
 	var mine := {}
-	var taps := {}  # runId -> ticks after its release at which it taps Boost
+	var swipes := {}  # runId -> [[tick after its release, lane], ...]: wild thumbs
 	var trng := RandomNumberGenerator.new()
 	trng.seed = seed_ * 31 + builds.size()
 	for i in builds.size():
 		mine["r%d" % i] = sim.add_run("r%d" % i, "p%d" % i, builds[i], Tuning.DEFAULT_SIZE)
-		taps["r%d" % i] = [int((1.5 + trng.randf() * 2.0) * Tuning.HZ), int((8.0 + trng.randf() * 2.0) * Tuning.HZ), int((14.0 + trng.randf() * 2.0) * Tuning.HZ)]
+		var sw: Array = []
+		for at in [1.5, 8.0, 14.0]:
+			var tick := int((at + trng.randf() * 2.0) * Tuning.HZ)
+			sw.append([tick, trng.randf_range(-1.0, 1.0)])
+			sw.append([tick + int(SWIPE_S * Tuning.HZ), null])
+		swipes["r%d" % i] = sw
 	var out := {"early": 0, "early_bumped": 0, "bumps": 0, "start_bumps": 0, "start_loss": 0, "release_last": 0.0, "reasons": {}}
 	var released := 0
 	# The start countdown (config.startCountdownMs) holds the group on the grid first: the early
@@ -131,10 +126,12 @@ func _drive(course, builds: Array, seed_: int, crowd: bool) -> Dictionary:
 			break
 		for o in sim.racers:
 			var r: Racer = o
-			if boost_mode == "early" and (taps[r.run_id] as Array).has(r.ticks):
-				r.boost(sim)
-			elif boost_mode == "zones" and r.boosts_left > 0 and r.boost_t <= 0.0 and not r.airborne and Course.in_ranges(r.seg["boosts"], r.ls):
-				r.boost(sim)
+			if steer_mode == "kid":
+				r.bot_steer()
+			elif steer_mode == "wild":
+				for sw in swipes[r.run_id]:
+					if int(sw[0]) == r.ticks:
+						r.set_steer(sw[1])
 		sim.step()
 		for m in sim.outbox:
 			var p: Dictionary = m["payload"]
@@ -166,66 +163,4 @@ func _drive(course, builds: Array, seed_: int, crowd: bool) -> Dictionary:
 				out["start_loss"] += int(e.get("timeLostMs", 0))
 	if not crowd:
 		out["early_bumped"] = out["early"]
-	return out
-
-
-## One off-zone Boost tap per build, alone. Returns false if too many runs end early.
-func _one_tap(track: String, course, n: int, at: float, weather: String) -> bool:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7000
-	var fails := 0
-	var fails_no_tap := 0
-	var reasons := {}
-	var lost: Array = []
-	var slips := 0
-	for i in n:
-		var b := Builds.random_build(rng)
-		var base := _drive_one(course, b, 900 + i, weather, -1.0)
-		var tap := _drive_one(course, b, 900 + i, weather, at)
-		fails_no_tap += 1 if base["failed"] != "" else 0
-		if tap["failed"] != "":
-			fails += 1
-			reasons[tap["failed"]] = int(reasons.get(tap["failed"], 0)) + 1
-		elif base["failed"] == "" and tap["tapped"]:
-			# Distance short of the untapped run at EARLY_S, in seconds at the untapped speed.
-			lost.append((base["gs"] - tap["gs"]) / maxf(1.0, base["v"]))
-		slips += 1 if tap["slipped"] else 0
-	lost.sort()
-	var share := float(fails) / n
-	var ok := share <= float(MAX_ONETAP_FAILS[weather])
-	var med: float = lost[lost.size() / 2] if not lost.is_empty() else NAN
-	var p90: float = lost[int(lost.size() * 0.9)] if not lost.is_empty() else NAN
-	print("%-11s one tap at %.0f s, %-4s: fails %3d/%d (%.1f%%, max %.0f%%) · no tap %d · %s · time vs no tap: median %+.2f s, p90 %+.2f s · slipped %d%s" % [
-		track, at, weather, fails, n, 100.0 * share, 100.0 * float(MAX_ONETAP_FAILS[weather]), fails_no_tap,
-		reasons, med, p90, slips, "" if ok else "  <-- FAIL"])
-	return ok
-
-
-## Drives one build alone for EARLY_S. tap_at < 0: no tap; otherwise taps Boost at the first
-## tick from tap_at seconds after its release that is off every boost zone and on the ground.
-func _drive_one(course, build: Dictionary, seed_: int, weather: String, tap_at: float) -> Dictionary:
-	var cfg: Dictionary = Messages.default_config()
-	cfg["lapsPerRun"] = 1
-	cfg["startCountdownMs"] = 0  # released at once: EARLY_S and tap_at count from Go
-	var sim := Sim.new(course, cfg, seed_)
-	sim.emit_messages = false
-	sim.weather.force(float(ONETAP_WEATHER[weather]), 0.0, 600.0)
-	var r: Racer = sim.add_run("r0", "p0", build, Tuning.DEFAULT_SIZE)
-	var out := {"failed": "", "tapped": false, "slipped": false, "gs": 0.0, "v": 0.0}
-	for t in int(EARLY_S * Tuning.HZ):
-		if tap_at >= 0.0 and not out["tapped"] and r.is_active() and r.ticks >= int(tap_at * Tuning.HZ) \
-				and not r.airborne and not Course.in_ranges(r.seg["boosts"], r.ls):
-			r.boost(sim)
-			out["tapped"] = true
-		sim.step()
-		if out["tapped"] and r.slipping:
-			out["slipped"] = true
-		for m in sim.outbox:
-			if m["type"] == "game.run.failed":
-				out["failed"] = "%s@%s" % [m["payload"]["reason"], m["payload"]["section"]]
-		sim.outbox.clear()
-		if sim.active_count() == 0:
-			break
-	out["gs"] = r.gs()
-	out["v"] = r.v
 	return out

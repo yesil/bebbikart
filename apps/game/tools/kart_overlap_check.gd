@@ -83,9 +83,7 @@ func _run(track: String, course, weather: Array, seconds: float) -> void:
 			body[id] = smp
 			launched += 1
 		for o in sim.racers:
-			var r: Racer = o
-			if r.boosts_left > 0 and r.boost_t <= 0.0 and not r.airborne and Course.in_ranges(r.seg["boosts"], r.ls):
-				r.boost(sim)
+			(o as Racer).bot_steer()  # onto the boost arrows, the stars' ways
 		sim.step()
 		for m in sim.outbox:
 			if m["type"] == "game.run.failed":

@@ -2,11 +2,14 @@ extends SceneTree
 ## Headless balance sweep (game.md task #5).
 ##   godot --headless --path apps/game --script res://tools/sweep.gd -- --builds=200 --seeds=3
 ## Options: --builds=N random builds (default 200), --seeds=N repeats per measurement (default 3),
-##          --boost=perfect|none, --push=wise|always|never (how the bots drive Push, default wise:
-##          held except where a bend within reach needs braking, Racer.push_wise),
+##          --steer=kid|off (the bots' thumbs, contracts §2g; default kid: onto every boost arrow
+##          strip, and towards the stars' way at each fork, Racer.bot_lane; off: hands off, the
+##          autopilot takes the stars' ways and no arrows),
 ##          --quick (smaller run), --json=path (dump raw results)
-##          --trace=jump:3,ramp:jump[,weather:rain][,push:always]  run one build and print its splits + events
-## Village loop balance (lap 2 of 2, solo, boosts on the zones), a few minutes:
+##          --trace=jump:3,ramp:jump[,weather:rain][,steer:off]  run one build and print its splits + events
+## A kid bot whose kart ends up on another way than its stars' is reported (a fork it could not
+## reach after an arrow strip).
+## Village loop balance (lap 2 of 2, solo, kid thumbs), a few minutes:
 ##   godot --headless --path apps/game --script res://tools/sweep.gd -- --track=village [--builds=300 --seeds=3]
 ## Builds are ranked by their expected lap: the mean over the seeds of the clean lap 2 (slips
 ## included, a missed exit's extra circle taken out) plus the missed-exit risk priced exactly (the
@@ -14,7 +17,7 @@ extends SceneTree
 ## runTimeCapMs. Best build per weather (random
 ## screen + hill-climb: move stars; the stars choose the routes, contracts §2h), a cross table of
 ## those builds in every weather, the best build held to each fork choice (the route forced) and
-## driven with each Push habit, with its gap to the best, each stretch's 0-vs-10-star gain for the
+## driven with each steering habit, with its gap to the best, each stretch's 0-vs-10-star gain for the
 ## ability it tests, the fork-by-stars tables (where ROUTE_STARS comes from), fail rates and how
 ## much slower than calm each weather is.
 
@@ -36,9 +39,10 @@ const WEATHERS := {
 
 var course: Course
 var cfg: Dictionary
-var boost_mode := "perfect"
-var push_mode := "wise"
-const PUSH_MODES := ["never", "always", "wise"]
+var steer_mode := "kid"
+const STEER_MODES := ["off", "kid"]
+var off_way := 0                   # kid bots that ended up on another way than their stars'
+var off_way_seen := {}             # "build|fork" printed once
 var seeds := 3
 var n_builds := 200
 var raw: Array = []
@@ -51,10 +55,9 @@ func _init() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	n_builds = int(args.get("builds", "200"))
 	seeds = int(args.get("seeds", "3"))
-	boost_mode = String(args.get("boost", "perfect"))
-	push_mode = String(args.get("push", "wise"))
-	if not push_mode in PUSH_MODES:
-		push_error("sweep: --push must be one of %s" % [PUSH_MODES])
+	steer_mode = String(args.get("steer", "kid"))
+	if not steer_mode in STEER_MODES:
+		push_error("sweep: --steer must be one of %s" % [STEER_MODES])
 		quit(1)
 		return
 	if args.has("quick"):
@@ -66,33 +69,35 @@ func _init() -> void:
 	if args.get("track", "countryside") == "village":
 		n_builds = int(args.get("builds", "300"))
 		seeds = int(args.get("seeds", "3"))
-		if args.get("section", "") == "push":
-			_village_push()
+		if args.get("section", "") == "steer":
+			_village_steer()
 			quit()
 			return
 		if not _village():
 			quit(1)
 			return
-		print("\nvillage sweep done in %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
+		print("\n%d kid-bot forks off their stars' way" % off_way)
+		print("village sweep done in %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
 		quit()
 		return
 	if args.has("trace"):
 		_trace_one(String(args["trace"]))
 		quit()
 		return
-	if args.get("section", "") == "push":
-		_section_push()
+	if args.get("section", "") == "steer":
+		_section_steer()
 		quit()
 		return
 
 	_section_routes()
 	_section_default()
-	_section_push()
+	_section_steer()
 	_section_random()
 	_section_forks()
 	_section_crowd()
 
-	print("\nsweep done in %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
+	print("\n%d kid-bot forks off their stars' way" % off_way)
+	print("sweep done in %.1f s" % ((Time.get_ticks_msec() - t0) / 1000.0))
 	if args.has("json"):
 		var f := FileAccess.open(String(args["json"]), FileAccess.WRITE)
 		f.store_string(JSON.stringify(raw))
@@ -120,20 +125,17 @@ func run_group(builds: Array, weather: String, seed_: int, collisions: bool) -> 
 	var habit := {}
 	for i in ids.size():
 		racers[ids[i]] = sim.by_run[ids[i]]
-		habit[ids[i]] = String(builds[i].get("push", push_mode))
+		habit[ids[i]] = String(builds[i].get("steer", steer_mode))
 	var guard := 0
 	while results.size() < ids.size() and guard < 60 * 120:
 		guard += 1
 		for r in sim.racers:
-			drive_push(r, habit[r.run_id])
-		if boost_mode == "perfect":
-			for r in sim.racers:
-				var rc: Racer = r
-				if rc.boosts_left > 0 and rc.boost_t <= 0.0 and not rc.airborne and Course.in_ranges(rc.seg["boosts"], rc.ls):
-					rc.boost(sim)
+			drive_steer(r, habit[r.run_id])
 		sim.step()
 		for m in sim.outbox:
 			var p: Dictionary = m["payload"]
+			if m["type"] == "sim.fork":
+				_check_way(racers[p["runId"]], p)
 			if m["type"] == "game.run.finished":
 				results[p["runId"]] = {"ms": int(p["elapsedMs"]), "reason": "", "events": p["events"]}
 			elif m["type"] == "game.run.failed":
@@ -178,11 +180,23 @@ func fmt(m: Dictionary) -> String:
 	return s
 
 
-## The bot's thumb on Push (contracts §2g): never, always, or wise (Racer.push_wise).
-static func drive_push(r: Racer, habit: String) -> void:
-	var want := habit == "always" or (habit == "wise" and r.push_wise())
-	if r.pushing != want:
-		r.set_push(want)
+## The bot's thumb (contracts §2g): kid (Racer.bot_lane: onto the arrows, towards the stars' way at
+## each fork) or off (hands off).
+static func drive_steer(r: Racer, habit: String) -> void:
+	if habit == "kid":
+		r.bot_steer()
+
+
+## A sim.fork: report a kid bot that took another way than its stars' (once per build and fork).
+func _check_way(r: Racer, p: Dictionary) -> void:
+	var star: String = r.build["routes"].get(p["fork"], "")
+	if star == "" or star == p["choice"]:
+		return
+	off_way += 1
+	var key := "%s|%s" % [Builds.describe(r.build), p["fork"]]
+	if not off_way_seen.has(key):
+		off_way_seen[key] = true
+		print("  note: %s took %s at %s, its stars' way is %s" % [Builds.describe(r.build), p["choice"], p["fork"], star])
 
 
 # ---------------------------------------------------------------- sections
@@ -198,20 +212,20 @@ func _section_routes() -> void:
 
 
 func _section_default() -> void:
-	print("\n== Default build (%s), solo, boost=%s ==" % [Builds.describe(Builds.default_build()), boost_mode])
+	print("\n== Default build (%s), solo, steer=%s ==" % [Builds.describe(Builds.default_build()), steer_mode])
 	for w in WEATHERS:
 		print("  %-6s %s" % [w, fmt(measure(Builds.default_build(), w))])
 
 
-func _section_push() -> void:
-	print("\n== Push habit (default build): never / always / wise (held except before bends that need braking) ==")
+func _section_steer() -> void:
+	print("\n== Steering habit (default build): off (hands off) / kid (onto the arrows, the stars' ways) ==")
 	var line := "  %-9s" % ""
 	for w in WEATHERS:
 		line += "%-24s" % w
 	print(line)
-	for habit in PUSH_MODES:
+	for habit in STEER_MODES:
 		var b := Builds.default_build()
-		b["push"] = habit
+		b["steer"] = habit
 		line = "  %-9s" % habit
 		for w in WEATHERS:
 			line += "%-24s" % fmt(measure(b, w))
@@ -344,8 +358,8 @@ func _trace_one(spec: String) -> void:
 			continue
 		if kv[0] == "weather":
 			weather = kv[1]
-		elif kv[0] == "push":
-			b["push"] = kv[1]
+		elif kv[0] == "steer":
+			b["steer"] = kv[1]
 		elif b["routes"].has(kv[0]):
 			b["routes"][kv[0]] = kv[1]
 		else:
@@ -354,16 +368,13 @@ func _trace_one(spec: String) -> void:
 	var w: Array = WEATHERS[weather]
 	sim.weather.force(w[0], w[1], 90.0)
 	sim.add_run("r0", "p0", b, Tuning.DEFAULT_SIZE)
-	print(Builds.describe(b), "  weather ", weather, "  push ", b.get("push", push_mode))
+	print(Builds.describe(b), "  weather ", weather, "  steer ", b.get("steer", steer_mode))
 	for i in 60 * 120:
 		for r in sim.racers:
-			var rc: Racer = r
-			drive_push(rc, String(b.get("push", push_mode)))
-			if rc.boosts_left > 0 and rc.boost_t <= 0.0 and not rc.airborne and Course.in_ranges(rc.seg["boosts"], rc.ls):
-				rc.boost(sim)
+			drive_steer(r, String(b.get("steer", steer_mode)))
 		sim.step()
 		for m in sim.outbox:
-			if m["type"] in ["game.run.section", "game.run.finished", "game.run.failed"]:
+			if m["type"] in ["game.run.section", "game.run.finished", "game.run.failed", "sim.fork", "sim.boost"]:
 				var p: Dictionary = m["payload"].duplicate()
 				p.erase("trace")
 				print(m["type"], " ", JSON.stringify(p))
@@ -405,12 +416,10 @@ func vrun(build: Dictionary, weather: String, k: int) -> Dictionary:
 	var detour_ticks := 0
 	var risk_ms := 0.0
 	var loop_len: float = (village.segments["roundabout_loop"]["route"] as Route).length
-	var habit := String(build.get("push", push_mode))
+	var habit := String(build.get("steer", steer_mode))
 	for i in 60 * 400:
 		if r.state == "racing":
-			drive_push(r, habit)
-		if r.boosts_left > 0 and r.boost_t <= 0.0 and not r.airborne and Course.in_ranges(r.seg["boosts"], r.ls):
-			r.boost(sim)
+			drive_steer(r, habit)
 		sim.step()
 		if r.lap == 1 and not r.detour.is_empty():
 			detour_ticks += 1
@@ -426,6 +435,8 @@ func vrun(build: Dictionary, weather: String, k: int) -> Dictionary:
 			cur_t = r.ticks
 		for m in sim.outbox:
 			var p: Dictionary = m["payload"]
+			if m["type"] == "sim.fork":
+				_check_way(r, p)
 			if m["type"] == "game.run.finished":
 				# "clean": a missed roundabout exit's extra circle taken out.
 				var dms := detour_ticks * 1000.0 / Tuning.HZ
@@ -480,14 +491,14 @@ func vfmt(m: Dictionary) -> String:
 	return "%6.2f%s" % [float(m["mean"]) / 1000.0, "*" if int(m["fails"]) > 0 else ("~" if int(m["missed"]) > 0 else " ")]
 
 
-## Short form of a build: stars s/j/g/w/st/b, routes, and its Push habit when not the sweep's.
+## Short form of a build: stars s/j/g/w/st/b, routes, and its steering habit when not the sweep's.
 func vdesc(b: Dictionary) -> String:
 	var st: Dictionary = b["stars"]
 	var r: Dictionary = b["routes"]
-	var habit := String(b.get("push", push_mode))
+	var habit := String(b.get("steer", steer_mode))
 	return "spd%d jmp%d grp%d wat%d stb%d bnc%d %s/%s/%s%s" % [int(st["speed"]), int(st["jump"]), int(st["grip"]),
 		int(st["water"]), int(st["stability"]), int(st["bounce"]), r["ramp"], r["pond"], r["crossing"],
-		"" if habit == push_mode else " push:" + habit]
+		"" if habit == steer_mode else " steer:" + habit]
 
 
 ## Builds one move away: `step` stars from one ability to another. The stars choose the routes
@@ -534,8 +545,8 @@ func climb(start: Dictionary, weather: String, max_steps: int, lock_fork: String
 	return best
 
 
-## Village: the default build and a few random ones driven with each Push habit (quick tuning).
-func _village_push() -> void:
+## Village: the default build and a few random ones driven with each steering habit (quick tuning).
+func _village_steer() -> void:
 	village = VillageCourse.new()
 	vcfg = Messages.default_config()
 	vcfg["lapsPerRun"] = 2
@@ -545,14 +556,14 @@ func _village_push() -> void:
 	var pool: Array = [Builds.default_build()]
 	for i in 5:
 		pool.append(Builds.random_build(rng))
-	print("== Village: lap 2 by Push habit (%d seeds; * = a fail) ==" % seeds)
+	print("== Village: lap 2 by steering habit (%d seeds; * = a fail) ==" % seeds)
 	for b in pool:
 		print("  %s" % vdesc(b))
-		for habit in PUSH_MODES:
+		for habit in STEER_MODES:
 			var line := "    %-7s" % habit
 			for w in WEATHERS:
 				var hb: Dictionary = b.duplicate(true)
-				hb["push"] = habit
+				hb["steer"] = habit
 				line += "  %s %s" % [w, vfmt(vmeasure(hb, w))]
 			print(line)
 
@@ -565,7 +576,7 @@ func _village() -> bool:
 	vcfg = Messages.default_config()
 	vcfg["lapsPerRun"] = 2
 	vcfg["startCountdownMs"] = 0
-	print("== Village loop: expected lap 2 of 2 (missed-exit risk priced in; * = a fail in it, priced as a %.0f s lap; ~ = a missed exit happened), solo, boosts on the zones, %d seeds, wind %.1f from spread directions ==" % [float(vcfg["runTimeCapMs"]) / 1000.0, seeds, WEATHERS["wind"][1]])
+	print("== Village loop: expected lap 2 of 2 (missed-exit risk priced in; * = a fail in it, priced as a %.0f s lap; ~ = a missed exit happened), solo, steer=%s, %d seeds, wind %.1f from spread directions ==" % [float(vcfg["runTimeCapMs"]) / 1000.0, steer_mode, seeds, WEATHERS["wind"][1]])
 	var weathers: Array = WEATHERS.keys()
 	var line := ""
 	# Single-ability tables keep speed and grip at default and trade the other abilities first.
@@ -655,13 +666,13 @@ func _village() -> bool:
 					builds += "\n      %-6s %s" % [w, vdesc(held)]
 			print(line + builds)
 
-	# Push: the best build driven with each habit (contracts §2g), gap to the weather's best.
-	print("\n== Push: best build driven never / always / wise, gap to the weather's best (s) ==")
-	for habit in PUSH_MODES:
+	# Steering: the best build driven with each habit (contracts §2g), gap to the weather's best.
+	print("\n== Steering: best build driven off / kid, gap to the weather's best (s) ==")
+	for habit in STEER_MODES:
 		line = "  %-9s" % habit
 		for w in weathers:
 			var held: Dictionary = best[w].duplicate(true)
-			held["push"] = habit
+			held["steer"] = habit
 			var gap := (vscore(vmeasure(held, w)) - vscore(vmeasure(best[w], w))) / 1000.0
 			line += "  %s %s (%+.2f)" % [w, vfmt(vmeasure(held, w)), gap]
 		print(line)

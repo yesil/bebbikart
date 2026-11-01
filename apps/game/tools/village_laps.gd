@@ -52,7 +52,7 @@ func _init() -> void:
 		quit(1)
 
 
-## Runs builds in one world, perfect boosts. Returns per run {laps, best, reason, finished}.
+## Runs builds in one world, steered onto the boost arrows (Racer.bot_steer). Returns per run {laps, best, reason, finished}.
 func run_group(builds: Array, weather: String, seed_: int, collisions: bool, launch_gap_ticks := 0) -> Array:
 	var sim := Sim.new(course, cfg, seed_)
 	sim.collisions_enabled = collisions
@@ -71,9 +71,7 @@ func run_group(builds: Array, weather: String, seed_: int, collisions: bool, lau
 			added += 1
 		guard += 1
 		for r in sim.racers:
-			var rc: Racer = r
-			if rc.boosts_left > 0 and rc.boost_t <= 0.0 and not rc.airborne and Course.in_ranges(rc.seg["boosts"], rc.ls):
-				rc.boost(sim)
+			(r as Racer).bot_steer()  # onto the boost arrows, the stars' ways
 		sim.step()
 		for m in sim.outbox:
 			var p: Dictionary = m["payload"]

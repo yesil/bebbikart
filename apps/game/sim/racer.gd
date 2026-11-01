@@ -28,6 +28,9 @@ var star_path: Array[String] = []
 var routes_taken := {}         # this lap's ways, {fork id: choice}
 var best_routes := {}          # the best lap's
 var arrows_taken := {}         # boost arrows caught, "segment id:index" -> lap
+## The lane the autopilot keeps along a fork's way: the one the kart came in on (swinging back
+## across a narrow way, the causeway in a crosswind, tipped karts over its low wall).
+var way_lane := 0.0
 
 var state := "queued"  # queued | racing | finished | failed | aborted
 var fail_reason := ""
@@ -226,15 +229,26 @@ func kid_steering() -> bool:
 	return steer_x != null or steer_hold_t > 0.0 or steer_hold_fork
 
 
-## How far from the middle the kart's centre can go here (the rails stop it).
+## How far from the middle the kart's centre can go here (the rails stop it). Over the last
+## Tuning.FUNNEL_M before a narrower road (a fork's way, a lane after a wide square) the limit
+## narrows smoothly to that road's, so the kart is guided in and never jumps sideways.
 func rail_lim() -> float:
-	return Course.rail_lim(seg)
+	var lim := Course.rail_lim(seg)
+	if not detour.is_empty() or seg_idx >= segs.size() - 1:
+		return lim
+	var next := Course.rail_lim(segs[seg_idx + 1])
+	var to_go := route().length - ls
+	if next < lim and to_go < Tuning.FUNNEL_M:
+		lim = lerpf(next, lim, to_go / Tuning.FUNNEL_M)
+	return lim
 
 
 ## The lane a full-lock thumb steers to: just inside the rails (further in at a low rail).
 func steer_lim() -> float:
-	var margin := Tuning.STEER_LANE_MARGIN_LOW if bool(seg.get("low_rails", false)) else Tuning.STEER_LANE_MARGIN
-	return rail_lim() - margin
+	var low := bool(seg.get("low_rails", false))
+	if not low and seg_idx < segs.size() - 1 and route().length - ls < Tuning.FUNNEL_M:
+		low = bool(segs[seg_idx + 1].get("low_rails", false))
+	return rail_lim() - (Tuning.STEER_LANE_MARGIN_LOW if low else Tuning.STEER_LANE_MARGIN)
 
 
 ## The kart's lane as the phone shows it, -1 (left) .. 1 (right).
@@ -301,18 +315,28 @@ func fork_hint() -> Dictionary:
 
 
 ## The next boost arrow strip ahead within `reach` metres on this segment or the next, or the one
-## the kart is on: [lateral centre, side], or [] when none.
+## the kart is on, not caught yet on this lap: [lateral centre, side], or [] when none.
 func _arrow_ahead(reach: float) -> Array:
 	if not detour.is_empty():
 		return []
 	var base := -ls  # from the kart to the start of segment j
 	for j in range(seg_idx, mini(seg_idx + 2, segs.size())):
 		var sg: Dictionary = segs[j]
-		for b in sg["boosts"]:
-			if base + float(b[1]) >= 0.0 and base + float(b[0]) <= reach:
+		var strips: Array = sg["boosts"]
+		for i in strips.size():
+			var b: Array = strips[i]
+			if base + float(b[1]) >= 0.0 and base + float(b[0]) <= reach \
+					and int(arrows_taken.get("%s:%d" % [sg["id"], i], -1)) != lap:
 				return [Course.arrow_d(sg, int(b[2])), int(b[2])]
 		base += (sg["route"] as Route).length
 	return []
+
+
+## Bots (the sweep and the other headless tools): steer this tick like a kid who knows the track.
+func bot_steer(arrows := true, forks := true) -> void:
+	var x = bot_lane(arrows, forks)
+	if x != steer_x:
+		set_steer(x)
 
 
 ## Bots (mock players, the sweep): the lane a kid who knows the track steers to, or null to leave
@@ -376,6 +400,8 @@ func _replan_lane(sim) -> void:
 	var home := lane_home * hw
 	if lap == 0 and gs() < Tuning.START_HOLD_M:
 		home = lane
+	if String(seg["fork"]) != "":
+		home = way_lane
 	# Near a fork, lean towards the stars' way, so the big screen shows which way it is going.
 	if fork_ahead_m() <= Tuning.FORK_APPROACH_M:
 		var star: Dictionary = course_ref.segments[star_path[next_fork_idx()]]
@@ -540,7 +566,10 @@ func step(sim) -> void:
 	wind_lat = wind_a * exp_now
 	vd += wind_lat * dt
 	if not airborne:
+		var steered := kid_steering()
 		var corr_max: float = (Tuning.LAT_CORR_BASE + Tuning.LAT_CORR_PER_GRIP * st["grip"]) * rain_true
+		if steered:
+			corr_max = (Tuning.STEER_LAT_ACCEL + Tuning.STEER_LAT_ACCEL_PER_GRIP * st["grip"]) * rain_true
 		var ak := absf(k)
 		if ak > Tuning.CORNER_MIN_K:
 			var vlim := sqrt(Tuning.CORNER_ACCEL / ak) * grip_f * rain_true * Tuning.SLIP_MARGIN
@@ -550,8 +579,8 @@ func step(sim) -> void:
 				vd += signf(k) * excess * Tuning.SLIP_DRIFT * dt
 				v -= excess * Tuning.SLIP_SCRUB * dt
 				corr_max *= 0.5
-		var vmax := Tuning.STEER_LAT_VMAX if kid_steering() else Tuning.LAT_VMAX
-		var want := clampf((d_target - d) * Tuning.LAT_P, -vmax, vmax)
+		var vmax := Tuning.STEER_LAT_VMAX if steered else Tuning.LAT_VMAX
+		var want := clampf((d_target - d) * (Tuning.STEER_LAT_P if steered else Tuning.LAT_P), -vmax, vmax)
 		var corr := clampf((want - vd) * Tuning.LAT_D, -corr_max, corr_max)
 		vd += corr * dt
 		# Bouncy racers wobble in tight bends.
@@ -619,6 +648,9 @@ func step(sim) -> void:
 			_set_way(seg_idx, choice)
 			routes_taken[fork] = choice
 			steer_hold_fork = false
+			var way: Dictionary = segs[seg_idx]
+			var keep := (Course.rail_lim(way) - (Tuning.STEER_LANE_MARGIN_LOW if bool(way.get("low_rails", false)) else 0.0)) * 0.6
+			way_lane = clampf(d, -keep, keep)
 			sim.emit("sim.fork", {"runId": run_id, "fork": fork, "choice": choice, "steered": kid_steering()})
 		seg = segs[seg_idx]
 		seg_id = seg["id"]
@@ -629,6 +661,8 @@ func step(sim) -> void:
 			section = new_section
 		if absf(d) > rail_lim():
 			d = signf(d) * rail_lim()
+			if vd * d > 0.0:
+				vd = 0.0
 	# Water entry splash
 	if not was_water and not airborne and Course.in_ranges(seg["water"], ls):
 		v *= 1.0 - maxf(0.0, Tuning.WATER_ENTRY_DRAG - 0.025 * st["water"])

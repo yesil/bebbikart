@@ -40,7 +40,13 @@ const STYLE_WIND_CAUTION := {"careful": 0.15, "balanced": 0.1, "daring": 0.05}
 const STEER_LANE_MARGIN := 0.15   # m inside the rail limit the full-lock lane sits
 const STEER_LANE_MARGIN_LOW := 0.6  # on a low rail (the causeway), so a gust there doesn't tip it over
 const STEER_HOLD_S := 1.2
-const STEER_LAT_VMAX := 4.5       # m/s sideways towards a steered lane (the autopilot: LAT_VMAX)
+# A steered kart follows the thumb more tightly than the autopilot drives its own lines (LAT_*):
+# sideways speed (target - d) x STEER_LAT_P up to STEER_LAT_VMAX, reached at up to
+# STEER_LAT_ACCEL (+ per grip level; rain and mud take their share, a slide half of it).
+const STEER_LAT_P := 2.5
+const STEER_LAT_VMAX := 6.0
+const STEER_LAT_ACCEL := 9.0
+const STEER_LAT_ACCEL_PER_GRIP := 0.8
 const STEER_DEADBAND := 0.25      # m from the middle at a fork: no side, the stars choose
 const FORK_APPROACH_M := 60.0
 const FORK_LEAN := 0.5            # share of the lane the autopilot leans towards its way
@@ -49,6 +55,7 @@ const FORK_LEAN := 0.5            # share of the lane the autopilot leans toward
 # inside half_width (its body overhangs onto the shoulder); railed lanes stop it at
 # Course.RAIL_INSET. Scraping along one costs speed.
 const OPEN_RAIL_INSET := 0.2
+const FUNNEL_M := 10.0            # metres over which the limit narrows before a narrower road
 const RAIL_SCRAPE_DRAG := 0.8     # share of speed lost per second scraping
 
 # Rain: real grip vs. what the autopilot assumes (it under-reacts, careful less so)

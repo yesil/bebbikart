@@ -160,9 +160,7 @@ func _drive() -> void:
 			sim.add_run("r%d" % launched, "p%d" % launched, Builds.random_build(rng), Tuning.DEFAULT_SIZE)
 			launched += 1
 		for o in sim.racers:
-			var r: Racer = o
-			if r.boosts_left > 0 and r.boost_t <= 0.0 and not r.airborne and Course.in_ranges(r.seg["boosts"], r.ls):
-				r.boost(sim)
+			(o as Racer).bot_steer()  # onto the boost arrows, the stars' ways
 		sim.step()
 		sim.outbox.clear()
 		if t % every != 0:
