@@ -101,9 +101,9 @@ func _end() -> void:
 	_huds(true)
 
 
-## The race HUD, the camera HUD and the overlay cover the close-ups: off while one runs.
+## The race HUD, the halves' HUD and the overlay cover the close-ups: off while one runs.
 func _huds(on: bool) -> void:
-	for n in [main.hud, main.cam_hud, main.overlay]:
+	for n in [main.hud, main.duel_hud, main.overlay]:
 		if n == null:
 			continue
 		if on:

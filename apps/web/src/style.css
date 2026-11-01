@@ -243,22 +243,6 @@ h2 {
   border-radius: 50%;
   padding: 1px 3px;
 }
-/* An open start countdown others are on: join that race */
-.grid-call {
-  text-align: center;
-  font-weight: 800;
-  background: #fff1c2;
-  border: 2px solid var(--accent-2);
-  border-radius: 14px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
-  animation: grid-pulse 0.8s ease-in-out infinite alternate;
-}
-@keyframes grid-pulse {
-  to {
-    transform: scale(1.04);
-  }
-}
 
 /* create */
 .field {
@@ -744,24 +728,6 @@ h2 {
   font-variant-numeric: tabular-nums;
   min-height: 3.2rem;
 }
-/* Place right now among the racers who left together (run.progress place/of) */
-.live-place {
-  align-self: center;
-  font-size: 1.5rem;
-  font-weight: 900;
-  padding: 4px 16px;
-  border-radius: 99px;
-  background: var(--line);
-}
-.live-place.p1 {
-  background: #ffd23f;
-}
-.live-place.p2 {
-  background: #e3e8ef;
-}
-.live-place.p3 {
-  background: #f0c49a;
-}
 .get-ready {
   text-align: center;
   font-size: 1.3rem;
@@ -1173,47 +1139,6 @@ h2 {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--ink);
-}
-.lap-head {
-  display: flex;
-  justify-content: space-between;
-  font-weight: 800;
-  font-size: 1.2rem;
-}
-.lap-result {
-  text-align: center;
-  font-weight: 800;
-  font-size: 1.2rem;
-}
-.pit {
-  margin-top: 0;
-}
-.watch:disabled {
-  opacity: 0.6;
-}
-.watch.on,
-.watch.on:disabled {
-  opacity: 1;
-  border-color: var(--good);
-  color: var(--good);
-  background: #eafaf0;
-  animation: on-screen 1.2s ease-in-out infinite;
-}
-@keyframes on-screen {
-  50% {
-    transform: scale(1.03);
-  }
-}
-.laps {
-  margin: 0;
-  padding-left: 1.6em;
-  font-variant-numeric: tabular-nums;
-  font-size: 1.1rem;
-  line-height: 1.8;
-}
-.laps li.best {
-  color: var(--good);
-  font-weight: 800;
 }
 .hint {
   color: var(--muted);

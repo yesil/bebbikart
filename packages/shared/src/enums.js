@@ -9,9 +9,7 @@ export const ABILITIES = /** @type {const} */ ([
   "stability",
   "bounce",
 ]);
-/** Session modes (contracts §2i): free races, or a duel for the champion's time. */
-export const GAME_MODES = /** @type {const} */ (["race", "duel"]);
-/** Duel mode: the halves of the big screen (contracts §2i). Left races in red, right in blue. */
+/** The halves of the big screen (contracts §2i). Left races in red, right in blue. */
 export const SIDES = /** @type {const} */ (["left", "right"]);
 /** Timed sections, in course order. */
 export const SECTION_IDS = /** @type {const} */ (["hills", "pond", "crossing", "bends"]);
@@ -148,14 +146,10 @@ export const ERROR_CODES = /** @type {const} */ ([
   "player_exists",
   "server_full",
   "run_in_progress",
-  "cooldown",
   "session_not_running",
   "not_ready",
-  "game_offline",
   "reroll_limit",
   "track_locked",
-  "track_changing",
-  "mode_locked",
   "in_line",
 ]);
 

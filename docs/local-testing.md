@@ -71,17 +71,18 @@ bun run sim-players -- --players 8 --url http://localhost:8090 --races 2
 - Racers are kept between runs (`--state`, default `apps/server/data/.sim-players.json`): the second
   run reuses them and designs nothing. `--fresh` makes new ones; `--max-new` (8) caps how many real
   Claude designs one run may start.
-- `--stagger 700` presses Go 0.7 s apart (they still start together in the 3 s countdown);
-  `--join-stagger` spreads the joins; `--names Mia,Mia,Noah` tests duplicate names;
-  `--track village --pit` switches track over the admin API (new session) and taps Pit in.
+- Every Go joins the line (contracts §2i): two race at a time, one per half of the big screen,
+  each with its own start lights. `--stagger 700` presses Go 0.7 s apart; `--join-stagger`
+  spreads the joins; `--names Mia,Mia,Noah` tests duplicate names; `--track village` switches
+  track over the admin API (new session).
 - With `bun run fake-game` instead of Godot, add `--renders 0` (the stand-in renders nothing).
 - `--shots=DIR` on the game saves a screenshot every `--shot-every` seconds while racers are on the
-  track or the grid (start, mid-race, finish).
+  track (start, mid-lap, finish).
 - Findings and numbers from the multiplayer rounds: [multiplayer-findings.md](multiplayer-findings.md).
 
 ## Village loop (laps)
 
-The game manager picks the track, laps and session length in the game's options menu on the big screen (phones never set options). Switching track ends the session and starts a new one with an empty leaderboard; racers stay. Scripts can do the same over the admin API (the track can't change while a session runs):
+The game manager picks the track in the game's options menu on the big screen and can end the session there at any time (phones never set options). Switching track ends the session and starts a new one with an empty leaderboard; racers stay. Scripts can do the same over the admin API (the track can't change while a session runs):
 
 ```bash
 curl -X POST -H 'x-admin-pin: 1234' localhost:8080/api/admin/session/end
@@ -89,7 +90,7 @@ curl -X PATCH -H 'x-admin-pin: 1234' -H 'content-type: application/json' -d '{"t
 curl -X POST -H 'x-admin-pin: 1234' -H 'content-type: application/json' -d '{}' localhost:8080/api/admin/session/start
 ```
 
-Or set `"track": "village"` in `bebbikart.config.json` at the repo root before starting. On the village the phone shows "Lap 2 of 3", the lap timer, each lap's time vs your best lap, and a **Pit in** button (finish at the next line). The best lap ranks. `bun run fake-game` races laps too.
+Or set `"track": "village"` in `bebbikart.config.json` at the repo root before starting. On the village each run is one lap: the phone shows the lap timer and the lap's time vs your best lap, and the best lap ranks. `bun run fake-game` races laps too.
 
 ## Claude API key (required, no fallbacks)
 

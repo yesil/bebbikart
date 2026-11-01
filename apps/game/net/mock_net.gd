@@ -3,14 +3,14 @@ extends RefCounted
 ## runs with no backend. Same shape as a real client: `poll()` returns server -> game
 ## messages (envelopes per contracts §7), `send()` takes game -> server messages and logs them.
 ##
-## Fake players get random builds, launch runs after the cooldown, tap Boost (skilled
-## players aim for boost zones using the progress they are sent, others tap at random),
-## hold Push (skilled players let go before the bends, contracts §2g) and sometimes re-roll
-## their build between runs.
-## Duel mode (contracts §2i, `duel` set by main): Go joins a line instead of launching; the
-## two halves each take the first in line when free (left first), one lap each, with the
-## result held for duelResultMs; the champion (best lap) waits behind everyone else. The game
-## gets queue.updated like from the server.
+## Fake players get random builds, join the line (contracts §2i) a few seconds after their
+## last lap, tap Boost (skilled players aim for boost zones using the progress they are sent,
+## others tap at random), hold Push (skilled players let go before the bends, §2g) and sometimes
+## re-roll their build between runs.
+## Like the server: the two halves each take the first in line when free (left first; only the
+## left while the screen isn't split), one lap each, with the result held for duelResultMs; the
+## champion (best lap) waits behind everyone else. The screen splits once two players play and
+## stays split until nobody has for splitHoldMs. The game gets queue.updated like from the server.
 
 const Messages = preload("res://net/messages.gd")
 const Builds = preload("res://sim/builds.gd")
@@ -34,13 +34,12 @@ var failed := 0
 var course = null
 ## Optional sim (sim/sim.gd): mock players read their racer to know where pushing is safe.
 var sim = null
-## Duel mode: the line, the halves, the champion (main sets it from config.mode).
-var duel := false
-## Nobody launches or joins the line while main switches the game mode (the track must empty).
-var hold := false
+## The line, the halves, the champion (contracts §2i).
 var line: Array = []              # player dicts waiting, in the order they joined
 var halves := {"left": {"run": "", "free_at": 0.0}, "right": {"run": "", "free_at": 0.0}}
 var record := {"key": "", "tries": 0}
+var last_lap := {}                # playerId -> mock time their last lap ended
+var split := false                # queue.updated split
 var _queue_json := ""
 
 
@@ -116,32 +115,27 @@ func _make_build(pid: String) -> Dictionary:
 	return b
 
 
-## Advance mock time and return server -> game messages that are due.
-func poll(dt: float, free_slots: int) -> Array:
+## Advance mock time and return server -> game messages that are due. (free_slots: the
+## server's interface; the two halves are the only limit here.)
+func poll(dt: float, _free_slots: int) -> Array:
 	time += dt
 	for p in players:
 		if p["status"] == "racing":
 			_drive_push(p, dt)
 			continue
-		if hold or (duel and line.has(p)):
+		if line.has(p):
 			continue
 		p["wait"] = float(p["wait"]) - dt
 		if float(p["wait"]) <= 0.0:
-			if duel:
-				line.append(p)  # Go joins the line
-			elif free_slots > 0:
-				free_slots -= 1
-				_launch(p)
-	if duel and not hold:
-		_fill_halves()
-	if duel:
-		_push_queue()
+			line.append(p)  # Go joins the line
+	_fill_halves()
+	_push_queue()
 	var out := inbox
 	inbox = []
 	return out
 
 
-func _launch(p: Dictionary, side := "") -> void:
+func _launch(p: Dictionary, side: String) -> void:
 	var run_id := Messages.make_id("run", rng)
 	p["status"] = "racing"
 	p["runId"] = run_id
@@ -150,12 +144,9 @@ func _launch(p: Dictionary, side := "") -> void:
 	p["pushing"] = false
 	p["push_t"] = 0.0
 	by_run[run_id] = p
-	var payload := {"runId": run_id, "playerId": p["playerId"], "build": p["build"]}
+	var payload := {"runId": run_id, "playerId": p["playerId"], "build": p["build"], "side": side}
 	if course != null and course.get("loop") == true:
-		# Like the server: the laps travel with the run; a duel is one lap.
-		payload["lapsPerRun"] = 1 if side != "" else int(cfg.get("lapsPerRun", 0))
-	if side != "":
-		payload["side"] = side
+		payload["lapsPerRun"] = 1  # like the server: the laps travel with the run, one lap (§2i)
 	inbox.append(Messages.make_msg(Messages.RUN_START, payload))
 
 
@@ -184,7 +175,7 @@ func _drive_push(p: Dictionary, dt: float) -> void:
 		inbox.append(Messages.make_msg(Messages.RUN_PUSH, {"runId": p["runId"], "on": want}))
 
 
-# ---------------------------------------------------------------- duel (contracts §2i)
+# ---------------------------------------------------------------- the line (contracts §2i)
 
 ## The champion: the best time (on a loop, the best lap), the first to set it on a tie.
 func _champion() -> Dictionary:
@@ -207,9 +198,40 @@ func _line_order() -> Array:
 	return out
 
 
-## A free half (its result shown for duelResultMs) takes the first in line; left first.
+## Who plays: on a half, in the line, or back from a lap less than splitHoldMs ago.
+func _playing() -> int:
+	var ids := {}
+	for p in line:
+		ids[p["playerId"]] = true
+	for side in Protocol.SIDES:
+		var rid: String = halves[side]["run"]
+		if rid != "" and by_run.has(rid):
+			ids[by_run[rid]["playerId"]] = true
+	var hold_s := maxf(float(cfg.get("splitHoldMs", 30000)), float(cfg.get("duelResultMs", 5000))) / 1000.0
+	for pid in last_lap.keys():
+		if time - float(last_lap[pid]) < hold_s:
+			ids[pid] = true
+		else:
+			last_lap.erase(pid)
+	return ids.size()
+
+
+## Split once a second player plays; whole again only when nobody does.
+func _update_split() -> bool:
+	var n := _playing()
+	if n >= 2:
+		split = true
+	elif n == 0:
+		split = false
+	return split
+
+
+## A free half (its result shown for duelResultMs) takes the first in line; left first, and
+## only the left while the screen isn't split.
 func _fill_halves() -> void:
 	for side in Protocol.SIDES:
+		if side != "left" and not _update_split():
+			break
 		var h: Dictionary = halves[side]
 		if h["run"] != "" or time < float(h["free_at"]) or line.is_empty():
 			continue
@@ -229,7 +251,7 @@ func _queue_state() -> Dictionary:
 	var q := {
 		"line": _line_order().map(func(p): return {"playerId": p["playerId"], "nickname": p["nickname"]}),
 		"racing": racing,
-		"split": players.size() >= 2,
+		"split": _update_split(),
 		"skipped": [],
 	}
 	var champ := _champion()
@@ -252,10 +274,11 @@ func _push_queue() -> void:
 	inbox.append(Messages.make_msg(Messages.QUEUE_UPDATED, q))
 
 
-## A duel run ended: its half shows the result for duelResultMs; a lap by someone else than the
+## A run ended: its half shows the result for duelResultMs; a lap by someone else than the
 ## champion counts as a try.
 func _duel_done(p: Dictionary, run_id: String) -> void:
 	var champ := _champion()
+	last_lap[p["playerId"]] = time
 	for side in Protocol.SIDES:
 		var h: Dictionary = halves[side]
 		if h["run"] == run_id:
@@ -317,8 +340,7 @@ func _maybe_boost(p: Dictionary, progress: float, boosts_left: int) -> void:
 
 func _run_over(p: Dictionary, ok: bool, payload: Dictionary) -> void:
 	var run_id: String = p["runId"]
-	if duel:
-		_duel_done(p, run_id)
+	_duel_done(p, run_id)
 	by_run.erase(run_id)
 	p["status"] = "ready"
 	p["runId"] = ""
@@ -331,7 +353,7 @@ func _run_over(p: Dictionary, ok: bool, payload: Dictionary) -> void:
 		finished += 1
 	else:
 		failed += 1
-	p["wait"] = float(cfg.get("launchCooldownMs", 2000)) / 1000.0 + rng.randf_range(1.0, 6.0)
+	p["wait"] = rng.randf_range(3.0, 8.0)  # setting the stars, then Go again
 	if rng.randf() < 0.3:
 		p["build"] = _make_build(p["playerId"])
 
@@ -354,10 +376,6 @@ func _log(msg: Dictionary) -> void:
 			copy["trace"]["samples"] = "<%d floats>" % (copy["trace"]["samples"] as Array).size()
 		print("[mock<-game] ", JSON.stringify({"v": msg["v"], "type": type, "id": msg["id"], "ts": msg["ts"], "payload": copy}))
 		return
-	var who := ""
-	var p: Dictionary = by_run.get(String(pl.get("runId", "")), {})
-	if not p.is_empty():
-		who = String(p["nickname"])
 	match type:
 		Messages.GAME_RUN_PROGRESS, Messages.GAME_RUN_SECTION, Messages.GAME_RUN_STARTED:
 			pass
@@ -370,8 +388,6 @@ func _log(msg: Dictionary) -> void:
 				pl["runId"], _nick(pl), pl["reason"], pl["section"], int(pl["elapsedMs"]) / 1000.0, JSON.stringify(pl["events"])])
 		Messages.GAME_WEATHER:
 			print("[mock<-game] weather ", JSON.stringify(pl))
-		Messages.GAME_CAMERA:
-			print("[mock<-game] camera on %s" % (who if who != "" else "nobody"))
 		_:
 			print("[mock<-game] %s %s" % [type, JSON.stringify(pl)])
 

@@ -5,7 +5,6 @@ extends Node3D
 ## racer a moment for its finish cheer or crash slump. Weather and overtakes: race_reactions.gd.
 
 const I18n = preload("res://ui/i18n.gd")
-const CameraHud = preload("res://ui/camera_hud.gd")
 
 var racer = null   # sim/racer.gd
 var nickname := ""
@@ -41,7 +40,6 @@ var _braced := false
 var _body: Node3D
 var _was_air := false
 var _was_bumped := false
-var _box := AABB()   # the toy's bounds at rest, in its own space (frames the inset camera)
 
 
 func setup(p_racer, spec: Dictionary, drawing: Texture2D, p_nickname: String) -> void:
@@ -68,40 +66,15 @@ func setup(p_racer, spec: Dictionary, drawing: Texture2D, p_nickname: String) ->
 	_body.add_child(toy)
 	toy.set_name_tag(nickname)
 	toy.show_name_tag(true)
-	toy.name_tag.layers = CameraHud.NAME_TAG_LAYER  # not drawn in the picture-in-picture inset
-	_box = RacerBuilder._aabb(toy, Transform3D.IDENTITY)
 	set_process(false)
 	sync()
 	_yaw_prev = racer.yaw()
 
 
-## Where the big-screen HUD puts this racer's tag: just above the toy's head (its 3D name tag
-## spot), or above the error text for an invalid spec.
-func tag_anchor() -> Vector3:
-	if toy != null and toy.name_tag != null:
-		return toy.name_tag.global_position
-	return global_position + Vector3(0, 1.8, 0)
-
-
-## The HUD draws its own tags (place + name, never overlapping); the 3D one is off then.
+## The halves' HUD shows the names; the 3D name tag is off then.
 func show_name_tag(on: bool) -> void:
 	if toy != null:
 		toy.show_name_tag(on)
-
-
-## Where the second camera (ui/camera_hud.gd) looks, in world space; {} without a built toy.
-func shot_frame() -> Dictionary:
-	if toy == null:
-		return {}
-	var head := toy.head_pivot.get_child(0) as Node3D
-	return {
-		"root": global_position,
-		"head": head.global_position,
-		"head_r": 0.42 * head.global_basis.get_scale().y,  # as the avatar renderer frames it
-		"center": toy.global_transform * _box.get_center(),
-		"radius": _box.size.length() * 0.5 * toy.global_basis.get_scale().x,
-		"fwd": _body.global_basis.z.normalized(),
-	}
 
 
 func sync() -> void:
@@ -158,11 +131,6 @@ func nudge(side: float, back: float) -> void:
 	_leave_d = clampf(_leave_d + side, -hw, hw)
 	_leave_ls -= back
 	_nudged = 0.15  # crowded: no pulling over for a moment
-
-
-## How strongly the driver is mid-reaction (ToyRacer.reaction_weight); 0 without a built toy.
-func reaction_weight() -> float:
-	return toy.reaction_weight() if toy != null else 0.0
 
 
 ## Forward on the road (world, unit).

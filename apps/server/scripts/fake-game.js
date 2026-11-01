@@ -34,19 +34,13 @@ ws.onmessage = (e) => {
       r.boosts++;
       console.log(`[fake-game] boost ${payload.runId}`);
     }
-  } else if (type === "run.stop") {
-    const r = runs.get(payload.runId);
-    if (r) {
-      r.pitIn = true;
-      console.log(`[fake-game] pit in ${payload.runId}`);
-    }
   } else if (type === "run.push") {
     if (runs.has(payload.runId))
       console.log(`[fake-game] push ${payload.on ? "on" : "off"} ${payload.runId}`);
   } else if (type === "queue.updated") {
     const q = payload;
     console.log(
-      `[fake-game] duel: racing ${q.racing.map((r) => `${r.side}:${r.nickname}`).join(" ") || "-"} · line ${q.line.map((e) => e.nickname).join(", ") || "-"} · champion ${q.champion ? `${q.champion.nickname} ${q.champion.timeMs} ms` : "-"}`,
+      `[fake-game] halves (${q.split ? "split" : "full screen"}): racing ${q.racing.map((r) => `${r.side}:${r.nickname}`).join(" ") || "-"} · line ${q.line.map((e) => e.nickname).join(", ") || "-"} · champion ${q.champion ? `${q.champion.nickname} ${q.champion.timeMs} ms` : "-"}`,
     );
   } else if (type === "run.abort") {
     runs.get(payload.runId)?.stop();
@@ -143,9 +137,9 @@ function race(start) {
   };
 }
 
-// Loop track: 8 s laps; finishes after lapsPerRun laps, or at the next line after Pit in.
+// Loop track: 8 s laps; finishes after lapsPerRun laps (one, §2i).
 function raceLoop(start) {
-  const r = { boostsLeft: 3, boosts: 0, pitIn: false, stop: () => {} };
+  const r = { boostsLeft: 3, boosts: 0, stop: () => {} };
   runs.set(start.runId, r);
   const lapsPerRun = start.lapsPerRun;
   if (!lapsPerRun) {
@@ -192,7 +186,7 @@ function raceLoop(start) {
     lapT = 0;
     r.boosts = 0;
     lapLen = lapTarget + Math.round(Math.random() * 1500);
-    if (laps.length >= lapsPerRun || r.pitIn) {
+    if (laps.length >= lapsPerRun) {
       clearInterval(timer);
       const best = Math.min(...laps);
       send("game.run.finished", {

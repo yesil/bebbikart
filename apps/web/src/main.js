@@ -18,11 +18,8 @@ const initial = {
   leaderboard: [],
   live: null, // { runId, progress, elapsedMs, section, boostsLeft, deltaVsBestMs, sections: {s: {splitMs, bestSplitMs}} }
   result: null, // run.ended payload, plus prevBest splits
-  heat: null, // run.heat: everyone who left the start with my last run, places so far
-  grid: null, // grid.updated: an open start countdown { goAt, racers } anyone can still join
   paddock: [], // paddock.updated: everyone in the session (friends' racers being made, racing)
-  camera: null, // camera.updated: { playerId?, runId? } of the racer on the big screen
-  queue: null, // queue.updated (duel mode, contracts §2i): the line, the two halves, the champion
+  queue: null, // queue.updated (contracts §2i): the line, the two halves, the champion
   tab: "garage",
   revealSeen: readRevealSeen(),
   toast: null,
@@ -75,7 +72,6 @@ function left(s) {
     me: null,
     live: null,
     result: null,
-    heat: null,
     redo: false,
     quitting: false,
     tab: "garage",
@@ -92,7 +88,6 @@ function onWs(s, type, p) {
         config: p.config,
         me: p.me ?? null, // no me = this device has no racer (e.g. it quit)
         weather: p.weather,
-        queue: p.config.mode === "duel" ? s.queue : null,
       };
     case "player.updated":
       return { ...s, me: p };
@@ -101,21 +96,18 @@ function onWs(s, type, p) {
     case "session.updated":
       return { ...s, session: p };
     case "config.updated":
-      return { ...s, config: p, queue: p.mode === "duel" ? s.queue : null };
+      return { ...s, config: p };
     case "queue.updated":
       return { ...s, queue: p };
     case "weather.updated":
       return { ...s, weather: p };
     case "leaderboard.updated":
       return { ...s, leaderboard: p };
-    case "camera.updated":
-      return { ...s, camera: p };
     case "run.queued":
     case "run.started":
       return {
         ...s,
         result: null,
-        heat: s.live?.runId === p.run.id ? s.heat : null,
         live:
           s.live?.runId === p.run.id
             ? s.live
@@ -130,13 +122,8 @@ function onWs(s, type, p) {
       };
     case "paddock.updated":
       return { ...s, paddock: p };
-    case "grid.updated":
-      return { ...s, grid: { goAt: Date.now() + p.goInMs, racers: p.racers } };
-    case "run.heat":
-      // My heat's places so far (contracts §7 "Heats"); updates as the others come home.
-      return p.entries.some((e) => e.playerId === s.me?.id) ? { ...s, heat: p } : s;
     case "run.grid":
-      // On the start grid: the big screen's lights go green in goInMs (contracts §2c).
+      // On the start grid in its half: the lights go green in goInMs (contracts §2c).
       if (!s.live || s.live.runId !== p.runId) return s;
       return { ...s, live: { ...s.live, goAt: Date.now() + p.goInMs } };
     case "run.progress":

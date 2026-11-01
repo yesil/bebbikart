@@ -1,10 +1,11 @@
 extends SceneTree
 ## FPS benchmark of the real game: main.tscn with 20 mock racers, windowed 1920x1080, vsync off.
-##   godot --path apps/game --resolution 1920x1080 --script res://tools/bench.gd -- [--seconds=30] [--cam=follow|wide|forks]
+##   godot --path apps/game --resolution 1920x1080 --script res://tools/bench.gd -- [--seconds=30]
 ## Warms up for 3 s, then records every frame for --seconds and prints the average fps and the
 ## 1% low (fps at the 99th-percentile frame time). Exits 1 if the average is below 60.
-## Every other option goes to main.gd, e.g. the duel's split screen (two halves, two cameras):
-##   ... --script res://tools/bench.gd -- --seconds=60 --mode=duel --racers=4 --track=village --quality=medium
+## Every other option goes to main.gd; two or more mock racers race the split screen (two halves,
+## two cameras), one races full screen:
+##   ... --script res://tools/bench.gd -- --seconds=60 --racers=4 --track=village --quality=medium
 
 var seconds := 30.0
 var warmup := 3.0
@@ -47,8 +48,8 @@ func _run() -> void:
 	var size := get_root().get_visible_rect().size
 	var duel = main.get("duel_screen")
 	var layout := "split screen" if duel != null and duel.split else "full screen"
-	print("bench: %dx%d, %s mode, %s, quality %s, %d frames over %.1f s, %d racers on track at the end" % [
-		size.x, size.y, main.get("mode"), layout, main.get("quality"), frames.size(), total, racing])
+	print("bench: %dx%d, %s, quality %s, %d frames over %.1f s, %d racers on track at the end" % [
+		size.x, size.y, layout, main.get("quality"), frames.size(), total, racing])
 	print("bench: average %.1f fps, 1%% low %.1f fps (p99 frame %.1f ms), worst frame %.1f ms" % [
 		avg_fps, 1.0 / p99, p99 * 1000.0, frames[frames.size() - 1] * 1000.0])
 	quit(0 if avg_fps >= 60.0 else 1)

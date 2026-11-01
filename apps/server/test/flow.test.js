@@ -1,5 +1,6 @@
 // End-to-end over real HTTP + WebSockets: phone creates a racer, uploads drawings (a fake design client stands in for Claude),
-// the game gets the roster, the phone presses Go, the game races and reports, the phone gets the result.
+// the game gets the roster, the phone presses Go (joins the line, a free half launches it), the game
+// races and reports, the phone gets the result. The line itself: duel.test.js.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +21,7 @@ beforeAll(() => {
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-test-")),
     designClient: createMockClient({ designId: "pair01" }),
-    config: { ...DEFAULT_CONFIG, launchCooldownMs: 0 },
+    config: { ...DEFAULT_CONFIG, duelResultMs: 50, splitHoldMs: 100 },
   };
   settings.dbFile = ":memory:";
   srv = startServer(settings, { log: () => {} });
@@ -159,34 +160,24 @@ test("phone → drawings → racer on the big screen → race → result", async
   expect(put.status).toBe(204);
   await phone.wait("player.updated", (p) => !!p.asset?.renders?.hero);
 
-  // Go! over WS.
+  // Go! over WS: alone, the racer gets the left half and the whole screen.
   phone.send("phoneToServer", "phone.go", {});
   const start = await game.wait("run.start");
   const runId = start.payload.runId;
   expect(start.payload.build.stars.speed).toBe(DEFAULT_BUILD.stars.speed);
+  expect(start.payload.side).toBe("left");
   await phone.wait("run.queued");
-  // The start countdown: the phone hears when the lights go green.
+  expect((await game.wait("queue.updated", (q) => q.racing.length === 1)).payload.split).toBe(
+    false,
+  );
+  // The start lights in its half: the phone hears when they go green.
   game.send("gameToServer", "game.run.grid", { runId, goInMs: 3000 });
   const grid = await phone.wait("run.grid");
   expect(grid.payload).toEqual({ runId, goInMs: 3000 });
-  // Every phone hears who is on the grid (friends can join the countdown).
-  const call = await phone.wait("grid.updated");
-  expect(call.payload).toEqual({
-    goInMs: 3000,
-    racers: [{ playerId: player.id, nickname: "Mila" }],
-  });
   game.send("gameToServer", "game.run.started", { runId });
   await phone.wait("run.started");
   phone.send("phoneToServer", "phone.boost", { runId });
   await game.wait("run.boost", (p) => p.runId === runId);
-  // "Show me on the big screen" reaches the game; the game's camera cut reaches the phones.
-  phone.send("phoneToServer", "phone.watch", { runId });
-  await game.wait("run.watch", (p) => p.runId === runId);
-  game.send("gameToServer", "game.camera", { runId });
-  const onCamera = await phone.wait("camera.updated", (p) => p.runId === runId);
-  expect(onCamera.payload.playerId).toBe(player.id);
-  game.send("gameToServer", "game.camera", {});
-  await phone.wait("camera.updated", (p) => p.playerId === undefined);
   game.send("gameToServer", "game.run.section", { runId, section: "hills", splitMs: 8000 });
   await phone.wait("run.section");
   game.send("gameToServer", "game.run.finished", {
@@ -229,12 +220,14 @@ test("phone → drawings → racer on the big screen → race → result", async
   expect(start2.payload.bestTrace.runId).toBe(runId);
   expect(start2.payload.bestSplits.hills).toBe(8000);
 
-  // Game disconnects → active run aborted.
+  // Game disconnects → active run aborted; Go still joins the line, which waits for the game.
   game.ws.close();
   const aborted = await phone.wait("run.ended", (p) => p.run.outcome === "aborted");
   expect(aborted.payload.run.id).toBe(start2.payload.runId);
   const offline = await fetch(`${base}/api/players/me/runs`, { method: "POST", headers: h });
-  expect((await offline.json()).error.code).toBe("game_offline");
+  expect(offline.status).toBe(202);
+  expect((await offline.json()).line.map((e) => e.nickname)).toEqual(["Mila"]);
+  await fetch(`${base}/api/players/me/queue`, { method: "DELETE", headers: h });
   phone.ws.close();
 }, 40000);
 
@@ -285,7 +278,7 @@ test("a design API failure fails the job loudly: no sample design, phone sees th
   expect(me.asset).toBeUndefined();
 });
 
-test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
+test("village loop: a lap per run, run.lap deltas, best lap ranks, a failed lap", async () => {
   settings.designClient.complete = createMockClient({ designId: "pair02" }).complete;
   const admin = { "x-admin-pin": settings.adminPin, "content-type": "application/json" };
   const locked = await fetch(`${base}/api/admin/config`, {
@@ -330,15 +323,6 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
   });
   await phone.wait("player.updated", (p) => p.status === "ready", 20000);
 
-  phone.send("phoneToServer", "phone.go", {});
-  const start = await game.wait("run.start", (p) => p.playerId !== undefined);
-  const runId = start.payload.runId;
-  const queued = await phone.wait("run.queued");
-  expect(queued.payload.run.track).toBe("village");
-  // The laps travel with the run, to the big screen and the phone.
-  expect(start.payload.lapsPerRun).toBe(DEFAULT_CONFIG.lapsPerRun);
-  expect(queued.payload.run.lapsPerRun).toBe(DEFAULT_CONFIG.lapsPerRun);
-  game.send("gameToServer", "game.run.started", { runId });
   const splits = { hills: 5000, pond: 5000, crossing: 5000, bends: 5000 };
   // Village stretches of a lap of `ms`: the farm takes `farm` of it.
   const lapStretches = (ms, farm) => [
@@ -346,126 +330,115 @@ test("village loop: laps, run.lap deltas, Pit in, best lap ranks", async () => {
     { id: "farm", ms: farm, lostMs: 0 },
     { id: "square", ms: 2000, lostMs: 0 },
   ];
-  game.send("gameToServer", "game.run.lap", {
-    runId,
-    lap: 1,
-    lapMs: 20000,
-    elapsedMs: 20000,
-    splits,
-    stretches: lapStretches(20000, 4000),
-    weatherSeen: [],
-    isBest: true,
-  });
-  const lap1 = await phone.wait("run.lap", (p) => p.lap === 1);
-  expect(lap1.payload.isLapBest).toBe(true);
-  expect(lap1.payload.deltaVsBestLapMs).toBeUndefined();
-  game.send("gameToServer", "game.run.lap", {
-    runId,
-    lap: 2,
-    lapMs: 19000,
-    elapsedMs: 39000,
-    splits,
-    stretches: lapStretches(19000, 3500),
-    weatherSeen: ["rain"],
-    isBest: true,
-  });
-  const lap2 = await phone.wait("run.lap", (p) => p.lap === 2);
-  expect(lap2.payload.isLapBest).toBe(true);
-  expect(lap2.payload.deltaVsBestLapMs).toBe(-1000);
+  /** Go, then the game races one lap of `lapMs` (a run is one lap, §2i). */
+  const lapRun = async (lapMs, farm, weatherSeen) => {
+    phone.send("phoneToServer", "phone.go", {});
+    const start = await game.wait("run.start", (p) => !game.done.has(p.runId));
+    const runId = start.payload.runId;
+    game.done.add(runId);
+    game.send("gameToServer", "game.run.started", { runId });
+    game.send("gameToServer", "game.run.lap", {
+      runId,
+      lap: 1,
+      lapMs,
+      elapsedMs: lapMs,
+      splits,
+      stretches: lapStretches(lapMs, farm),
+      weatherSeen,
+      isBest: true,
+    });
+    const lap = (await phone.wait("run.lap", (p) => p.runId === runId)).payload;
+    game.send("gameToServer", "game.run.finished", {
+      runId,
+      elapsedMs: lapMs,
+      laps: [lapMs],
+      bestLapMs: lapMs,
+      splits,
+      stretches: lapStretches(lapMs, farm),
+      events: [],
+      boostsUsed: 0,
+      weatherSeen,
+      trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
+    });
+    const ended = (await phone.wait("run.ended", (p) => p.run.id === runId)).payload;
+    return { start: start.payload, lap, ended };
+  };
+  game.done = new Set();
 
-  phone.send("phoneToServer", "phone.stop", { runId });
-  await game.wait("run.stop", (p) => p.runId === runId);
-  game.send("gameToServer", "game.run.finished", {
-    runId,
-    elapsedMs: 60000,
-    laps: [20000, 19000, 21000],
-    bestLapMs: 19000,
-    splits,
-    stretches: lapStretches(19000, 3500),
-    events: [],
-    boostsUsed: 0,
-    weatherSeen: [],
-    trace: { runId, hz: 10, samples: [0, 0, 0, 0, 0] },
-  });
-  const ended = await phone.wait("run.ended", (p) => p.run.id === runId);
-  expect(ended.payload.run.lapStretches).toHaveLength(2); // the laps the game reported
-  expect(ended.payload.stretches.find((s) => s.id === "farm")).toMatchObject({
+  // One lap per run; the laps travel with the run, to the big screen and the phone.
+  const first = await lapRun(20000, 4000, []);
+  expect(first.start.lapsPerRun).toBe(1);
+  const queued = (await phone.wait("run.queued")).payload.run;
+  expect([queued.track, queued.lapsPerRun]).toEqual(["village", 1]);
+  expect(first.lap.isLapBest).toBe(true);
+  expect(first.lap.deltaVsBestLapMs).toBeUndefined();
+  expect(first.ended.run.laps).toEqual([20000]);
+  expect(first.ended.run.lapStretches).toHaveLength(1);
+
+  // A faster lap next time: compared with the best lap, and it ranks.
+  const second = await lapRun(19000, 3500, ["rain"]);
+  expect(second.lap.isLapBest).toBe(true);
+  expect(second.lap.deltaVsBestLapMs).toBe(-1000);
+  expect(second.ended.stretches.find((s) => s.id === "farm")).toMatchObject({
     ms: 3500,
     ability: "grip",
+    bestMs: 4000,
     fastestMs: 3500,
   });
-  expect(ended.payload.run.laps).toEqual([20000, 19000, 21000]);
-  expect(ended.payload.run.bestLapMs).toBe(19000);
-  expect(ended.payload.isPersonalBest).toBe(true);
+  expect(second.ended.run.bestLapMs).toBe(19000);
+  expect(second.ended.isPersonalBest).toBe(true);
   const me = await phone.wait("player.updated", (p) => p.bestTimeMs === 19000);
-  expect(me.payload.bestRun.id).toBe(runId);
+  expect(me.payload.bestRun.id).toBe(second.start.runId);
   const lb = await (await fetch(`${base}/api/leaderboard`)).json();
   expect(lb.find((e) => e.nickname === "Lapper").bestTimeMs).toBe(19000);
 
-  // A failed run that still completed a faster lap counts.
-  await Bun.sleep(10);
+  // A failed lap has no time: no best, a tip about the fail, and its stretches against the
+  // laps so far (the session's fastest with that lap's setup: build and weather, §2f).
   phone.send("phoneToServer", "phone.go", {});
-  const start2 = await game.wait("run.start", (p) => p.runId !== runId);
-  // Every lap reaches the server as game.run.lap before the run ends (contracts §2d, §2f).
-  game.send("gameToServer", "game.run.lap", {
-    runId: start2.payload.runId,
-    lap: 1,
-    lapMs: 18000,
-    elapsedMs: 18000,
-    splits,
-    stretches: lapStretches(18000, 3000),
-    weatherSeen: ["wind"],
-    isBest: true,
-  });
-  await phone.wait("run.lap", (p) => p.runId === start2.payload.runId);
+  const start3 = await game.wait("run.start", (p) => !game.done.has(p.runId));
+  game.send("gameToServer", "game.run.started", { runId: start3.payload.runId });
   game.send("gameToServer", "game.run.failed", {
-    runId: start2.payload.runId,
+    runId: start3.payload.runId,
     reason: "off_track",
     section: "bends",
-    elapsedMs: 30000,
-    laps: [18000],
-    bestLapMs: 18000,
+    elapsedMs: 12500,
     splits,
     stretches: [{ id: "main_street", ms: 12000, lostMs: 0 }],
     stretch: "farm",
-    events: [{ kind: "slip", section: "crossing", stretch: "farm", atMs: 29000, timeLostMs: 900 }],
+    events: [{ kind: "slip", section: "crossing", stretch: "farm", atMs: 12400, timeLostMs: 900 }],
     boostsUsed: 0,
     weatherSeen: [],
   });
-  const ended2 = await phone.wait("run.ended", (p) => p.run.id === start2.payload.runId);
-  expect(ended2.payload.run.outcome).toBe("failed");
-  expect(ended2.payload.isPersonalBest).toBe(true);
-  expect(ended2.payload.run.failStretch).toBe("farm");
-  expect(ended2.payload.coach).toMatchObject({ key: "fail_slip", stretch: "farm" });
-  // The player's best on main street comes from the earlier run's laps (19000 - 3500 - 2000);
-  // the session's fastest is this run's own lap (18000 - 3000 - 2000), with that lap's setup:
-  // the build and the weather on that lap (contracts §2f).
+  const ended3 = (await phone.wait("run.ended", (p) => p.run.id === start3.payload.runId)).payload;
+  expect(ended3.run.outcome).toBe("failed");
+  expect(ended3.isPersonalBest).toBe(false);
+  expect(ended3.run.failStretch).toBe("farm");
+  expect(ended3.coach).toMatchObject({ key: "fail_slip", stretch: "farm" });
   const setup = {
     stars: { speed: 4, jump: 4, grip: 4, water: 2, stability: 4, bounce: 2 },
     routes: { pond: "bridge", ramp: "around", crossing: "exposed" }, // the stars' (§2h)
   };
-  expect(ended2.payload.stretches).toEqual([
+  expect(ended3.stretches).toEqual([
     {
       id: "main_street",
       ms: 12000,
       lostMs: 0,
       ability: "grip",
       bestMs: 13500,
-      fastestMs: 13000,
+      fastestMs: 13500,
       fastestPlayerId: me.payload.id,
       fastestNickname: "Lapper",
-      fastestSetup: { ...setup, weather: ["wind"] },
+      fastestSetup: { ...setup, weather: ["rain"] },
     },
   ]);
-  await phone.wait("player.updated", (p) => p.bestTimeMs === 18000);
   // The leaderboard shows what the best lap was set with, in that lap's weather.
   const lb2 = await (await fetch(`${base}/api/leaderboard`)).json();
-  expect(lb2.find((e) => e.nickname === "Lapper").setup).toEqual({ ...setup, weather: ["wind"] });
+  expect(lb2.find((e) => e.nickname === "Lapper").setup).toEqual({ ...setup, weather: ["rain"] });
   game.ws.close();
   phone.ws.close();
 }, 40000);
 
-test("game manager sets track and laps from the big screen; a new session starts clean", async () => {
+test("game manager sets the track from the big screen; a new session starts clean", async () => {
   const game = client({}, { role: "game", gameKey: settings.gameKey });
   await game.start();
   const welcome = await game.wait("welcome");
@@ -482,26 +455,23 @@ test("game manager sets track and laps from the big screen; a new session starts
   const err = await game.wait("error", (p) => p.refId === refused.id);
   expect(err.payload.code).toBe("track_locked");
 
-  // Unknown or player-only fields are rejected by the contract.
-  const bad = {
-    v: 1,
-    type: "game.config.set",
-    id: "m1",
-    ts: new Date().toISOString(),
-    payload: { maxPlayers: 1 },
-  };
-  game.ws.send(JSON.stringify(bad));
-  expect((await game.wait("error", (p) => p.code === "bad_message")).payload.code).toBe(
-    "bad_message",
-  );
+  // Unknown or player-only fields are rejected by the contract; so is a game mode (there is one).
+  for (const [id, payload] of [
+    ["m1", { maxPlayers: 1 }],
+    ["m2", { mode: "race" }],
+  ]) {
+    game.ws.send(
+      JSON.stringify({ v: 1, type: "game.config.set", id, ts: new Date().toISOString(), payload }),
+    );
+    expect((await game.wait("error", (p) => p.refId === id)).payload.code).toBe("bad_message");
+  }
 
   // Switch track: end, set, start (back to back).
   game.send("gameToServer", "game.session.end", {});
-  game.send("gameToServer", "game.config.set", { track: "countryside", lapsPerRun: 5 });
+  game.send("gameToServer", "game.config.set", { track: "countryside" });
   game.send("gameToServer", "game.session.start", {});
   await game.wait("session.updated", (s) => s.status === "ended");
-  const cfg = await phone.wait("config.updated", (c) => c.track === "countryside");
-  expect(cfg.payload.lapsPerRun).toBe(5);
+  await phone.wait("config.updated", (c) => c.track === "countryside");
   const fresh = await phone.wait("session.updated", (s) => s.status === "running");
   expect(fresh.payload.id).not.toBe(oldSession);
   expect(await (await fetch(`${base}/api/leaderboard`)).json()).toEqual([]);
@@ -720,7 +690,7 @@ test("two racers with the same name: the second is 'Mia 2' everywhere, renaming 
   expect((await rename(b, "Sixteen chars ok")).nickname).toBe("Sixteen chars 2");
 });
 
-test("a heat: racers who left together see each other's places on their phones, done when all are home", async () => {
+test("two halves: a fork piece shows who was fastest the other way through it, and with what", async () => {
   const game = client({}, { role: "game", gameKey: settings.gameKey });
   await game.start();
   await game.wait("welcome");
@@ -754,30 +724,18 @@ test("a heat: racers who left together see each other's places on their phones, 
     await phone.wait("player.updated", (p) => p.status === "ready", 20000);
     return { me, phone };
   };
-  const a = await racer("Heat A", "pair01");
-  const b = await racer("Heat B", "pair01");
+  const a = await racer("Half A", "pair01");
+  const b = await racer("Half B", "pair01");
   const runIds = [];
   for (const r of [a, b]) {
     r.phone.send("phoneToServer", "phone.go", {});
-    runIds.push((await game.wait("run.start", (p) => p.playerId === r.me.id)).payload.runId);
+    const start = (await game.wait("run.start", (p) => p.playerId === r.me.id)).payload;
+    runIds.push(start.runId);
+    expect(start.side).toBe(r === a ? "left" : "right");
   }
+  // Two people play: the screen splits.
+  await game.wait("queue.updated", (q) => q.split && q.racing.length === 2);
   for (const runId of runIds) game.send("gameToServer", "game.run.started", { runId });
-  // Live place in the heat: A is further along than B.
-  for (const [runId, progress] of [
-    [runIds[0], 0.5],
-    [runIds[1], 0.3],
-  ])
-    game.send("gameToServer", "game.run.progress", {
-      runId,
-      progress,
-      elapsedMs: 9000,
-      section: "pond",
-      boostsLeft: 3,
-    });
-  const pa = await a.phone.wait("run.progress", (p) => p.runId === runIds[0] && p.progress === 0.5);
-  expect([pa.payload.place, pa.payload.of]).toEqual([1, 2]);
-  const pb = await b.phone.wait("run.progress", (p) => p.runId === runIds[1] && p.progress === 0.3);
-  expect([pb.payload.place, pb.payload.of]).toEqual([2, 2]);
   const result = { splits: {}, stretches: [], events: [], boostsUsed: 0, weatherSeen: [] };
   // B goes through the pond's ford; A (below) takes the bridge and fails further on.
   const via = (pond, pondMs) => [
@@ -798,15 +756,7 @@ test("a heat: racers who left together see each other's places on their phones, 
     weatherSeen: ["rain"],
     trace: { runId: runIds[1], hz: 10, samples: [] },
   });
-  // B is home first: both phones hear it, A is still racing.
-  for (const r of [a, b]) {
-    const h = (await r.phone.wait("run.heat", (p) => !p.done)).payload;
-    expect(h.heatId).toBe(runIds[0]);
-    expect(h.entries.map((e) => [e.nickname, e.place, e.timeMs, e.outcome])).toEqual([
-      ["Heat B", 1, 31000, "finished"],
-      ["Heat A", undefined, undefined, undefined],
-    ]);
-  }
+  await b.phone.wait("run.ended", (p) => p.run.id === runIds[1]);
   game.send("gameToServer", "game.run.failed", {
     runId: runIds[0],
     elapsedMs: 8000,
@@ -819,22 +769,17 @@ test("a heat: racers who left together see each other's places on their phones, 
   // A's bridge shows who was fastest the other way through the pond, and with what (§2f).
   const endedA = await a.phone.wait("run.ended", (p) => p.run.id === runIds[0]);
   const bridge = endedA.payload.stretches.find((st) => st.id === "stone_bridge");
-  expect(bridge.other).toMatchObject({ id: "ford", ms: 6000, nickname: "Heat B" });
+  expect(bridge.other).toMatchObject({ id: "ford", ms: 6000, nickname: "Half B" });
   expect(bridge.other.setup).toEqual({ ...structuredClone(DEFAULT_BUILD), weather: ["rain"] });
   expect(endedA.payload.stretches.find((st) => st.id === "bumpy_road").other).toBeUndefined();
-  for (const r of [a, b]) {
-    const h = (await r.phone.wait("run.heat", (p) => p.done)).payload;
-    expect(h.entries.map((e) => [e.nickname, e.place, e.outcome, e.failReason])).toEqual([
-      ["Heat B", 1, "finished", undefined],
-      ["Heat A", undefined, "failed", "flipped"],
-    ]);
-  }
+  // Nobody races or waits any more: once the hold is over, the screen is whole again.
+  await game.wait("queue.updated", (q) => !q.split && q.racing.length === 0);
   game.ws.close();
   a.phone.ws.close();
   b.phone.ws.close();
 }, 30000);
 
-test("after a track switch, Go waits until the big screen has loaded the new track (track_changing)", async () => {
+test("after a track switch, the line waits until the big screen has loaded the new track", async () => {
   const s = startServer({ ...settings, port: 0, dbFile: ":memory:" }, { log: () => {} });
   const sBase = `http://localhost:${s.server.port}`;
   const admin = { "x-admin-pin": settings.adminPin, "content-type": "application/json" };
@@ -880,18 +825,28 @@ test("after a track switch, Go waits until the big screen has loaded the new tra
     body: JSON.stringify({ track: "village" }),
   });
   await fetch(`${sBase}/api/admin/session/start`, { method: "POST", headers: admin, body: "{}" });
-  // The game still has the countryside loaded: a run now would race the old course.
+  // The racer's phone is online (an offline phone would lose its turn).
+  const phone = new WebSocket(`${sBase.replace("http", "ws")}/ws`, { headers: { cookie } });
+  await new Promise((r) => (phone.onopen = r));
+  phone.send(JSON.stringify(makeMsg("phoneToServer", "hello", { role: "phone" })));
+  await Bun.sleep(50);
+  // The game still has the countryside loaded: a run now would race the old course, so Go
+  // joins the line and the line holds.
   const early = await fetch(`${sBase}/api/players/me/runs`, {
     method: "POST",
     headers: { cookie },
   });
-  expect(early.status).toBe(409);
-  expect((await early.json()).error.code).toBe("track_changing");
-  // It reloads and says hello with the village: Go works.
+  expect(early.status).toBe(202);
+  expect((await early.json()).line.map((e) => e.nickname)).toEqual(["Switcher"]);
+  await Bun.sleep(100);
+  const state = async () =>
+    (await (await fetch(`${sBase}/api/state`, { headers: { cookie } })).json()).me;
+  expect((await state()).currentRun).toBeUndefined();
+  // It reloads and says hello with the village: the racer goes, on the new track.
   const reloaded = await gameHello("village");
-  const ok = await fetch(`${sBase}/api/players/me/runs`, { method: "POST", headers: { cookie } });
-  expect(ok.status).toBe(201);
-  expect((await ok.json()).track).toBe("village");
+  const run = (await state()).currentRun;
+  expect([run?.track, run?.side]).toEqual(["village", "left"]);
+  phone.close();
   game.close();
   reloaded.close();
   s.stop();

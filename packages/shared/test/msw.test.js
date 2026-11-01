@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { setupServer } from "msw/node";
-import { DEFAULT_BUILD, PlayerViewSchema, RunSchema } from "../src/index.js";
+import { DEFAULT_BUILD, PlayerViewSchema, QueueStateSchema } from "../src/index.js";
 import { mockHandlers } from "../testing/msw-handlers.js";
 
 const server = setupServer(...mockHandlers({ delayMs: 0, baseUrl: "http://localhost" }));
@@ -28,8 +28,9 @@ test("state, build and launch", async () => {
 
   expect((await api("/api/players/me/build", json("PUT", DEFAULT_BUILD))).status).toBe(200);
 
-  const run = await api("/api/players/me/runs", { method: "POST" });
-  expect(RunSchema.safeParse(await run.json()).success).toBe(true);
+  const go = await api("/api/players/me/runs", { method: "POST" });
+  expect(go.status).toBe(202);
+  expect(QueueStateSchema.safeParse(await go.json()).success).toBe(true);
   const again = await api("/api/players/me/runs", { method: "POST" });
   expect((await again.json()).error.code).toBe("run_in_progress");
 });

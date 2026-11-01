@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { DEFAULT_CONFIG } from "../src/config.js";
-import { makeMsg, parseMsg } from "../src/index.js";
+import { CHANNELS, makeMsg, parseMsg } from "../src/index.js";
 import { GHOST_TRACE, ROSTER, RUNS, SESSION_RUNNING } from "../testing/fixtures.js";
 
 test("makeMsg builds a v1 envelope and parseMsg reads it back", () => {
@@ -118,27 +118,25 @@ test("lap messages for loop tracks", () => {
   });
   expect(finished.payload.laps).toEqual([32_000, 31_250, 31_750]);
   expect(
-    parseMsg("phoneToServer", makeMsg("phoneToServer", "phone.stop", { runId: "run_x" })).ok,
-  ).toBe(true);
-  expect(makeMsg("serverToGame", "run.stop", { runId: "run_x" }).payload).toEqual({
-    runId: "run_x",
-  });
-  expect(
     makeMsg("serverToPhone", "run.lap", { runId: "run_x", lap: 1, lapMs: 32_000, isLapBest: true })
       .payload.isLapBest,
   ).toBe(true);
 });
 
-test("duel mode and Push (contracts §2g, §2i)", () => {
-  expect(DEFAULT_CONFIG.mode).toBe("race");
+test("the line, the halves and Push (contracts §2g, §2i); there is no game mode", () => {
+  expect(DEFAULT_CONFIG.mode).toBeUndefined();
   expect(DEFAULT_CONFIG.duelResultMs).toBe(5_000);
+  expect(DEFAULT_CONFIG.splitHoldMs).toBe(30_000);
   const ok = (ch, type, payload) => parseMsg(ch, makeMsg(ch, type, payload)).ok;
   expect(ok("phoneToServer", "phone.push", { runId: "run_x", on: true })).toBe(true);
   expect(() => makeMsg("phoneToServer", "phone.push", { runId: "run_x" })).toThrow();
   expect(ok("phoneToServer", "phone.queue.leave", {})).toBe(true);
   expect(ok("serverToGame", "run.push", { runId: "run_x", on: false })).toBe(true);
-  expect(ok("gameToServer", "game.config.set", { mode: "duel" })).toBe(true);
-  expect(() => makeMsg("gameToServer", "game.config.set", { mode: "cup" })).toThrow();
+  expect(() => makeMsg("gameToServer", "game.config.set", { mode: "duel" })).toThrow();
+  for (const gone of ["phone.stop", "phone.watch"])
+    expect(() => makeMsg("phoneToServer", gone, { runId: "run_x" })).toThrow();
+  for (const gone of ["run.heat", "grid.updated", "camera.updated"])
+    expect(CHANNELS.serverToPhone[gone]).toBeUndefined();
   const queue = {
     line: [{ playerId: "ply_a", nickname: "Ava" }],
     racing: [{ side: "left", playerId: "ply_b", nickname: "Ben", runId: "run_b" }],

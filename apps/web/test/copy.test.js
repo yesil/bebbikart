@@ -56,7 +56,7 @@ test("no fallbacks: reading before the language is known, a missing key or an un
   expect(copy.COPY.reveal.go).toBe("Los geht's!");
   expect(copy.COPY.garage.starsLeft(2)).toBe("Sterne übrig: 2");
   expect(() => copy.COPY.reveal.nope).toThrow(/no text for "de.reveal.nope"/);
-  expect(errorText({ code: "cooldown", message: "x" })).toBe(COPY_TABLES.de.errors.cooldown);
+  expect(errorText({ code: "in_line", message: "x" })).toBe(COPY_TABLES.de.errors.in_line);
   expect(errorText({ code: "weird", message: "boom" })).toBe(
     `${COPY_TABLES.de.errors.generic} (weird: boom)`,
   );

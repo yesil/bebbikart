@@ -1,13 +1,14 @@
 extends Node
-## Duel mode's big screen (contracts §2i): one world, one world clock, a camera per half.
-##  - Split (queue.updated split: 2+ racers in the session): the screen is cut down the middle,
+## The big screen (contracts §2i): one world, one world clock, a camera per half.
+##  - Split (queue.updated split: two people play, racing or waiting in the line; it stays split
+##    while anyone plays, see the server): the screen is cut down the middle,
 ##    the left racer (red) on the left half, the right racer (blue) on the right. Each half is a
 ##    SubViewport on the main viewport's World3D with its own CameraRig chasing its racer; an idle
 ##    half cycles through the fork shots. The main viewport stops drawing 3D (no third render),
 ##    and its camera moves to the middle of the two halves' cameras: the terrain's level of
 ##    detail and the audio's distances centre there.
-##  - Full screen (one racer in the session): the main camera chases whoever is racing, or shows
-##    the fork shots while nobody is.
+##  - Full screen (one person playing, or nobody): the main camera chases whoever is racing, or
+##    shows the fork shots while nobody is.
 ## The halves render at the window's pixel size (TextureRect with the SubViewport's texture, so the
 ## canvas_items stretch doesn't upscale a 960x1080 picture), capped by the quality's render height
 ## and upscaled with MetalFX on Metal (FSR elsewhere), like the main viewport.

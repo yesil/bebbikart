@@ -21,34 +21,29 @@ Game flags (after `--`):
 | `--mock` | Mock network. This is the default. |
 | `--server[=URL]` | Real server (default `ws://localhost:8080/ws`): phone players race; their racers are built from their `RacerSpec` with the racer kit, and the game renders and uploads their hero/avatar PNGs |
 | `--game-key=KEY` | Must match the server's `BK_GAME_KEY` (default `bebbikart-dev`; env `BK_GAME_KEY` also works) |
-| `--racers=N` | Number of fake players (default 20) |
+| `--racers=N` | Number of fake players in the line (default 20; 1 races full screen) |
 | `--kit` | Mock mode: build the fake racers with the racer kit from `racer_kit/samples` (in turn) instead of placeholder boxes |
 | `--seed=N` | RNG seed for mock players and weather |
 | `--weather=calm\|rain\|wind\|storm` | Force the weather (default: the state machine) |
 | `--speed=X` | Sim speed multiplier (raises the physics tick rate) |
 | `--duration=SEC` | Quit after SEC wall seconds and print a summary |
 | `--log=none\|summary\|full` | What outgoing messages to print |
-| `--screenshot=PATH [--shot-at=SEC] [--cam=follow\|wide\|forks]` | Save a screenshot (windowed only) |
+| `--screenshot=PATH [--shot-at=SEC]` | Save a screenshot (windowed only) |
 | `--shots=DIR [--shot-every=SEC]` | A screenshot every SEC seconds (2) while racers are on the track, named by time and racer count (windowed only; the multiplayer harness uses it) |
-| `--overlay` | Start with the debug text overlay shown (H toggles it); by default the race HUD is all you see |
-| `--cam-cycle=SEC` | Switch the followed racer every SEC seconds, 0 = never (default: the options menu's pick, else 8) |
-| `--inset=face\|side\|off` | Second camera, picture in picture (default: the options menu's pick, else face) |
-| `--mode=race\|duel` | Mock mode: free races (default) or king of the hill (see **Duel mode**); with `--server` the session config picks it and the options menu switches it |
+| `--overlay` | Start with the debug text overlay shown (H toggles it); by default the halves' HUD is all you see |
+| `--track=countryside\|village` | Mock mode: the course (with `--server` the session config picks it) |
+| `--quality=low\|medium\|high` | Graphics preset (default: the options menu's last pick, else medium) |
+| `--language=en\|de` | Big-screen language (default: the options menu's last pick, else the config's) |
 
 Keys:
 
 | Key | Action |
 |---|---|
-| C | Camera mode (follow / wide / forks) |
-| Tab / Shift+Tab | Follow the next / previous racer (the automatic switching carries on from there) |
-| A | Automatic racer switching off (stay on this racer) / on |
-| V | Second camera: face / side / off |
-| F | Fork shot |
-| B | Boost the followed racer |
+| B | Boost the newest racer |
 | R / W | Advance the rain / wind phase |
 | K | Toggle forced calm |
-| H | Show / hide the debug overlay (hidden at start; the race HUD shows names, places, results and problems) |
-| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, camera, sound, language, track, quit |
+| H | Show / hide the debug overlay (hidden at start) |
+| Esc, or Cmd+, (also in the app menu as "Options…") | Options menu: fullscreen, graphics, sound, language, track, session, quit |
 | Ctrl+Cmd+F, or F11 | Toggle fullscreen (on a Mac keyboard F11 may need fn) |
 | Cmd+Q, or closing the window | Quit (prints the run summary) |
 
@@ -64,8 +59,10 @@ join and quit). It does not pause the race.
   language, checked by `bun test`). Server mode sends `game.config.set {language}`, also after
   every `welcome` when the server says otherwise, and every phone follows via `config.updated`.
   A missing key shows as `⚠ de:key` on screen and in the log, never as English.
-- **Camera** (saved in `user://settings.cfg`): **Switch racer every** Never / 5 / 8 / 10 / 15 s
-  (default 8) and **Second camera** Face / Side / Off. See **Camera director** below.
+- **Session** (server mode): **End session** at any time, with a second click to confirm. It
+  sends `game.session.end`: the line closes (a run already on the track finishes its lap), the
+  podium shows and the phones see the results. **Start a new session** then sends `game.session.start` (empty
+  leaderboard, the line opens again). Mock mode has no session and says so in the menu.
 - **Graphics** (`--quality=low|medium|high`, saved in `user://settings.cfg`, default Medium):
   caps the 3D resolution (Low 720p, Medium 1080p, High native; MetalFX upscaling on Metal, FSR
   elsewhere) and scales shadows, SSAO, glow and vegetation range. On a 5K Retina screen in
@@ -98,24 +95,23 @@ Sweep flags:
   - `messages.gd`: envelope helpers.
   - `server_net.gd`: the real WebSocket client (`--server`): hello with the game key, auto-reconnect, unpacks `welcome`, merges `config.updated`.
   - `roster_assets.gd`: per-player specs from the roster, ride-drawing downloads, and hero/avatar renders + uploads via `AvatarRenderer`.
-  - `mock_net.gd`: the fake server and phones. It spawns players with random builds (the stars choose the routes), launches runs, taps boosts (skilled players tap inside zones), holds Push (skilled players let go before the bends), queues them like the server in a duel, and logs the `game.run.*` messages it would send.
+  - `mock_net.gd`: the fake server and phones. It spawns players with random builds (the stars choose the routes), lines them up and launches them onto the halves like the server (same split rule), taps boosts (skilled players tap inside zones), holds Push (skilled players let go before the bends), and logs the `game.run.*` messages it would send.
 - `world/`: the countryside world (see **World pipeline** below).
   - `course_world.tscn`: baked from the course by `tools/bake_world.gd`. Don't hand-edit.
   - `decor.tscn`, `environment.tscn`: hand-editable landmarks, sky and lighting.
   - `landscape.gd`, `terrain_shape.gd`, `viewpoints.gd`, `mesh_batch.gd`: data and helpers the bake uses.
-  - `racer_view.gd`: placeholder racers (mock mode).
+  - `racer_view.gd`: placeholder racers (mock mode without `--kit`).
   - `weather_fx.gd`: rain, wind and storm visuals, plus the global shader parameters `road_wetness`, `wind_strength` and `wind_dir`.
   - `camera_rig.gd`: follow, wide and fork cameras. Fork shots come from `viewpoints.gd`.
-  - `camera_director.gd`: which racer the camera follows, and when it switches (see below).
-- `ui/camera_hud.gd`: the on-camera name, the name pop after a cut, and the picture-in-picture second camera.
-- `tools/camera_check.gd`: headless test of the camera director and the camera blockers (no village house box on a road, pulled-in cameras outside every house), exit 1 on failure: `godot --headless --path . --script res://tools/camera_check.gd`.
-- `ui/race_hud.gd`: the big-screen race HUD for groups: a place + name tag over every kart (pushed apart, never overlapping), the race board (top right: place, avatar, lap or section, time; finishers keep their time until the group is home), the standings (top left: everyone by best time, or what the designer is doing), finish and oops banners, problems in red, and the podium when a session ends. Colours come from its palette in join order and are shared with the camera's name tags.
+  - `camera_blockers.gd`: the village boxes the chase cameras keep out of (see **Camera** below).
+- `tools/camera_check.gd`: headless test of the camera blockers (no village house box on a road, pulled-in cameras outside every house), exit 1 on failure: `godot --headless --path . --script res://tools/camera_check.gd`.
+- `world/duel_screen.gd`, `ui/duel_hud.gd`: the split screen and the halves' HUD (see **The line**).
+- `ui/race_hud.gd`: what sits over the halves: problems in red for the facilitator, and the podium when a session ends. Racer colours come from its palette in join order.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
-- `world/duel_screen.gd`, `ui/duel_hud.gd`: duel mode's split screen and its HUD (see **Duel mode**).
-- `tools/duel_check.gd`: headless duel check: the mock line, the halves, the champion who rests, one-lap runs without bumps, Push reaching the racers, then the split screen and HUD driven for a few frames. Exit 1 on a broken rule: `godot --headless --path . --script res://tools/duel_check.gd`.
+- `tools/duel_check.gd`: headless check of the line: one player alone (full screen, left half only), then six who stop coming after a while (the split turns on once two play and off `splitHoldMs` after the last lap), the champion who rests, one-lap runs without bumps, Push reaching the racers, then the split screen and HUD driven for a few frames. Exit 1 on a broken rule: `godot --headless --path . --script res://tools/duel_check.gd`.
 - `tools/start_crowd_check.gd`: groups of 4, 6 and 8 pressing Go together on both tracks (with the start countdown), with early Boost taps: start bumps, early crashes and release spread; exits 1 if the crowd knocks racers off. `--boost=onetap` is the gameplay thread's one-tap regression mode.
-- `tools/hud_check.gd` (windowed): renders the race HUD's podium, a 20-racer standings and a 16-racer race board from test data; exits 1 if they run into the camera HUD's corners.
+- `tools/hud_check.gd` (windowed): renders the podium from test data; exits 1 if it is missing or doesn't fit the screen.
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
 - `world/landscape.gd`: the terrain features each fork alternative is built around (pond, inflow stream, jump dip, knoll, valley, hills), anchored to the course.
 
@@ -128,7 +124,7 @@ Sweep flags:
 | 1. Check the layout | `godot --headless --path . --script res://tools/layout_map.gd` | `docs/layout_map.png`, exit 1 on bad geometry |
 | 2. Bake the world | `godot --headless --path . --script res://tools/bake_world.gd` | `world/course_world.tscn`, `world/terrain_data/`, `world/baked/`, `world/vegetation/` |
 | 3. Check the world | `godot --headless --path . --script res://tools/world_check.gd` | exit 1 if anything is scattered on a road or in water, floats or sinks more than 0.3 m, the terrain pokes through a road, anything solid (prop, post, sign, rail, plant) stands where a kart's body can reach on any road, sibling roads overlap at different heights, or an asset is missing |
-| 4. Benchmark | `godot --path . --resolution 1920x1080 --script res://tools/bench.gd -- --seconds=30 [--cam=wide]` | average and 1% low fps with 20 mock racers, exit 1 below 60 |
+| 4. Benchmark | `godot --path . --resolution 1920x1080 --script res://tools/bench.gd -- --seconds=30 [--racers=1]` | average and 1% low fps, split screen (or full screen with one racer), exit 1 below 60 |
 | 5. Screenshots | `godot --path . --resolution 1920x1080 --script res://tools/shots.gd -- --out=DIR` | fixed viewpoints from `world/viewpoints.gd` |
 
 - **Re-sync after editing the course:** run steps 1–3. The bake rebuilds the terrain (meadow levelled to the roads, pond, stream, dip, knoll, valley), the roads, water, course structures (kicker, causeway rails, lane fence) and vegetation. `--only=roads` (or `water`, `structures`) re-bakes single stages; vegetation needs the terrain stage too.
@@ -140,7 +136,7 @@ Current results (2026-10-31, M4 Max, 1920×1080, 20 racers, vsync off): about 10
 
 ## Village circuit (second track)
 
-A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, up the main street to the church hill (fork: ski-jump kicker or round the churchyard), down to the brook (ford through the duck pond or the covered wooden bridge), past the mill, along the south edge (open causeway over the windy meadow or the sheltered Laubengasse), then round the fountain to the line. Same sections and forks as the countryside, so builds, splits and coach tips carry over. A run finishes after `lapsPerRun` laps (3) or at the next crossing after "Pit in" (`run.stop`); the best lap ranks. The facilitator picks the track in config (`track`); in mock mode use `--track=village`.
+A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, up the main street to the church hill (fork: ski-jump kicker or round the churchyard), down to the brook (ford through the duck pond or the covered wooden bridge), past the mill, along the south edge (open causeway over the windy meadow or the sheltered Laubengasse), then round the fountain to the line. Same sections and forks as the countryside, so builds, splits and coach tips carry over. A run on the big screen is one lap (contracts §2i) and the best lap ranks; the sim and the tools can race more laps (`lapsPerRun`). The facilitator picks the track in config (`track`); in mock mode use `--track=village`.
 
 | File | What |
 |---|---|
@@ -196,66 +192,49 @@ Route lengths: jump 67.8 m / around 75.6 m, water 100.0 m / bridge 130.0 m, expo
 - **Pond:** water loses at water 0–1 (+0.6–1.4 s calm), is about even at 2 and wins from 3 upward (−1.7 to −2.8 s calm). It wins at every level in rain and storm.
 - **Crossing:** the exposed route is about 1.4–2.3 s faster in calm. In wind, sheltered wins at stability 0 (+1.0 s) and it is roughly even at 1–3.
 
-## Camera director
+## Camera
 
-With two or more racers on the course the follow camera takes turns: every 8 s (options menu,
-`--cam-cycle`) it cuts to the racer who has been off camera the longest, and a new racer counts
-from its start, so everyone gets a moment. It never cuts mid-jump (it waits up to 2 s for the
-landing), never cuts to a racer about to finish, and cuts at once when the followed racer leaves
-the course. A cut to a racer more than 12 m away jumps there; one close by swoops. The chase
-camera keeps about 10 m from its racer at any speed (it eases only its direction, so bumps and
-wobbles don't swing it), and the mock summary prints the average. Karts parked
-on the start grid during the countdown count as on the course, so the camera is behind the grid
-while the lights count down (the second row, out of sight, is left out).
-In the village neither the chase camera nor the inset sits in a house or looks through a wall:
-when a house or the covered bridge's roof is between the racer and the camera, the camera pulls
-in towards the racer (`world/camera_blockers.gd`: a box per house of the village plan, standing
-on the terrain). The mock summary says how long the camera was pulled in.
+Each half has its own chase camera (`world/camera_rig.gd`) on its racer; it keeps about 10 m
+from its racer at any speed (it eases only its direction, so bumps and wobbles don't swing it).
+In the village the chase camera never sits in a house or looks through a wall: when a house or
+the covered bridge's roof is between the racer and the camera, the camera pulls in towards the
+racer (`world/camera_blockers.gd`: a box per house of the village plan, standing on the
+terrain). The mock summary says how long the camera was pulled in.
 
-- **By hand:** Tab / Shift+Tab cut to the next / previous racer in start order. A stops the
-  switching (the name tag says STAYING) and starts it again.
-- **From the phone:** during a run, **Show me on the big screen** sends `phone.watch`; the game
-  gets `run.watch` and queues that racer. Queued racers get the next cuts in order, each once the
-  shot before it is 3 s old, so many phones tapping at once can't make the camera flicker. On
-  every cut the game sends `game.camera`, and the racer's phone lights up with "You're on the big
-  screen!" (`camera.updated`). The overlay logs each request as SHOW.
-- **On screen:** bottom left the racer on camera with a bar that runs down to the next switch;
-  their name big at the bottom middle for 2 s after each cut ("wants to be on the big screen!" when their
-  phone asked); bottom right the second camera, looking back at the racer's face or at its side.
-  The inset is a second view of the same world (about the cost of a 576×340 render), off when set
-  to Off. Racer name tags are on render layer 20, which the inset leaves out.
-
-## Duel mode
+## The line (the only way to race)
 
 King of the hill (contracts §2i): the fastest lap holds the crown and rests; everyone else lines
-up on their phone to beat it, one lap each, two at a time, against the clock. The sim runs duel
-runs solo (`sim.solo`): each gets its own start lights, the karts pass through each other and the
-autopilot ignores the other kart.
+up on their phone (Go) to beat it, one lap each against the clock. At most two race at a time,
+one per half, and each starts when their half is free, so the two halves start at different
+times. The sim runs every run solo (`sim.solo`): each gets its own start lights, the karts pass
+through each other and the autopilot ignores the other kart.
 
-- **Split screen** (2+ racers in the session, `queue.updated.split`): two SubViewports on the main
-  viewport's World3D, left red, right blue, each with its own `CameraRig` chasing its racer (an
-  idle half shows the fork shots and who is next). The main viewport stops drawing 3D; its camera
-  sits between the two halves' cameras, where the terrain's detail and the audio centre. With one
-  racer the main camera gives them the full screen.
-- **HUD** (`ui/duel_hud.gd`): per half the name, lap time, record, boosts, PUSH! while Push is
-  held and SLIDE! after a slide with it, its own start lights and the lap's verdict for
-  `duelResultMs`; the crown and the line top centre. The race HUD keeps only banners, problems
-  and the podium; the camera director, the picture in picture and Show me are off.
+- **When the screen splits** (`queue.updated.split`, decided by the server; the mock does the
+  same): one person playing races full screen on the left half's camera. Once a second person
+  plays (racing, or waiting in the line) the screen splits, and it stays split while anyone
+  plays. It goes whole again only when nobody has raced for `splitHoldMs` (30 s) and nobody
+  waits. While the screen is whole only the left half takes racers.
+- **Split screen:** two SubViewports on the main viewport's World3D, left red, right blue, each
+  with its own `CameraRig` chasing its racer (an idle half shows the fork shots and who is next).
+  The main viewport stops drawing 3D; its camera sits between the two halves' cameras, where the
+  terrain's detail and the audio centre.
+- **HUD** (`ui/duel_hud.gd`): per half the name, lap time, best lap, record, boosts, PUSH! while
+  Push is held and SLIDE! after a slide with it, its own start lights and the lap's verdict for
+  `duelResultMs`; the crown and the line top centre. `ui/race_hud.gd` adds problems and the
+  podium on top.
 - **Performance (Mac M3):** each half has half the pixels, so the 3D pixel count is the same as
   full screen; what doubles is culling, draw calls and the sun's shadow cascades. In split screen
   the sun casts two cascades within 80 m (instead of the preset's distance and four), vegetation
   ranges are 0.8 of the preset, and each camera has its own rain volume with half the drops.
-  Measure with `tools/bench.gd -- --mode=duel --racers=4 --track=village`.
-- **Options menu:** Game mode switches between free races and king of the hill (server mode:
-  like a track change, a running session ends first).
+  Measure with `tools/bench.gd -- --racers=4 --track=village`.
 
 ## Known issues and deviations
 
-- Duel split screen: the terrain's level of detail centres between the two cameras, so the far
+- Split screen: the terrain's level of detail centres between the two cameras, so the far
   ends of the village may show coarser terrain in a half; check on the Mac (Terrain3D's
   `mesh_size` can go up in split screen if it shows).
 
-- Racers are placeholder shapes in mock mode. The HUD (session clock, leaderboard, paddock, mini-map) is still to come; the camera HUD's inset sits where game.md puts the mini-map, so they will need to share that corner.
+- Racers are placeholder shapes in mock mode (`--kit` builds them with the racer kit).
 - `splitMs` is the time spent in each section.
 - Wind direction is `(cos dirDeg, 0, sin dirDeg)` in world XZ.
 - Crowded storms fail often: about 30% in the sweep. In mock mode the fail rate is about 13% in calm and about 25% in rain, mostly `off_track` in bends from collisions and daring slips.

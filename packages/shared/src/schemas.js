@@ -122,8 +122,8 @@ export const RunSchema = z.object({
   endedAt: iso.optional(),
   elapsedMs: ms.optional(), // sim time, finished runs only
   track: TrackIdSchema.optional(), // set by the server when the run is queued
-  lapsPerRun: z.number().int().positive().optional(), // loop tracks: the laps this run races (config.lapsPerRun when it was queued; 1 in a duel)
-  side: SideSchema.optional(), // duel runs: the half of the big screen it races in (§2i)
+  lapsPerRun: z.number().int().positive().optional(), // loop tracks: the laps this run races (1, §2i)
+  side: SideSchema.optional(), // the half of the big screen it races in (§2i); runs saved before halves have none
   laps: z.array(ms).optional(), // loop tracks: every completed lap, in order
   bestLapMs: ms.optional(), // loop tracks: fastest of `laps` (what ranks)
   splits: SplitsSchema.optional(), // loop tracks: the best lap's splits
@@ -208,17 +208,6 @@ export const PaddockEntrySchema = z.object({
   racing: z.boolean(), // on the track or on the start grid
 });
 
-/** One racer in a heat (the runs that left the start together, contracts §7 run.heat). */
-export const HeatEntrySchema = z.object({
-  playerId: z.string(),
-  nickname: z.string(),
-  avatarUrl: z.string().optional(),
-  place: z.number().int().positive().optional(), // by time, among the heat's racers with a time
-  timeMs: ms.optional(), // finish time, or the best lap on a loop track
-  outcome: z.enum(RUN_OUTCOMES).optional(), // absent: still racing
-  failReason: FailReasonSchema.optional(),
-});
-
 export const RosterEntrySchema = z.object({
   playerId: z.string(),
   nickname: z.string(),
@@ -237,10 +226,10 @@ export const RunStartSchema = z.object({
   bestTrace: GhostTraceSchema.optional(),
   bestSplits: SplitsSchema.optional(),
   lapsPerRun: z.number().int().positive().optional(), // loop tracks (required there): the laps to race
-  side: SideSchema.optional(), // duel mode (required there): its half; own start lights, no collisions
+  side: SideSchema, // its half of the big screen (§2i): own start lights, no collisions
 });
 
-/** Duel mode (contracts §2i): the line, the two halves and the champion (queue.updated). */
+/** The line, the two halves and the champion (contracts §2i, queue.updated). */
 export const QueueStateSchema = z.object({
   line: z.array(z.object({ playerId: z.string(), nickname: z.string() })), // launch order, champion last
   racing: z.array(
@@ -254,11 +243,11 @@ export const QueueStateSchema = z.object({
       tries: z.number().int().nonnegative(), // duel laps by others since the record was set
     })
     .optional(),
-  split: z.boolean(), // 2+ racers in the session: the big screen splits
+  split: z.boolean(), // two people playing (racing or waiting): the big screen splits (§2i)
   skipped: z.array(z.string()), // taken out of the line: phone offline at their turn
 });
 
-/** run.ended in a duel (contracts §2i): judged against the record when the lap ended. */
+/** run.ended for a lap (contracts §2i): judged against the record when the lap ended. */
 export const DuelResultSchema = z.object({
   newChampion: z.boolean(),
   gapMs: z.number().int().optional(), // this lap minus the record (positive = slower)

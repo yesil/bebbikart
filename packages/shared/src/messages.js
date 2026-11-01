@@ -8,7 +8,6 @@ import {
   DuelResultSchema,
   FailReasonSchema,
   GhostTraceSchema,
-  HeatEntrySchema,
   LeaderboardEntrySchema,
   PaddockEntrySchema,
   PlayerViewSchema,
@@ -34,8 +33,8 @@ const progress = z.number().min(0).max(1);
 
 const hello = z.discriminatedUnion("role", [
   z.object({ role: z.literal("phone") }), // the bk_device cookie identifies the device
-  // track: the course the game has loaded; Go is refused (track_changing) while it differs from
-  // config.track. Left out by a game that races whatever config.track says (fake-game).
+  // track: the course the game has loaded; the line holds while it differs from config.track.
+  // Left out by a game that races whatever config.track says (fake-game).
   z.object({ role: z.literal("game"), gameKey: z.string(), track: TrackIdSchema.optional() }),
   z.object({ role: z.literal("admin"), pin: z.string() }),
 ]);
@@ -82,13 +81,9 @@ export const CHANNELS = {
     hello,
     "phone.go": empty,
     "phone.boost": z.object({ runId: z.string() }),
-    // Loop tracks: "Pit in" ends the run when the racer next crosses the line.
-    "phone.stop": z.object({ runId: z.string() }),
-    // "Show me on the big screen": the game's camera cuts to this racer soon.
-    "phone.watch": z.object({ runId: z.string() }),
     // Push held down (on) or let go (contracts §2g).
     "phone.push": z.object({ runId: z.string(), on: z.boolean() }),
-    // Duel mode: leave the line (contracts §2i).
+    // Leave the line (contracts §2i).
     "phone.queue.leave": empty,
   },
   adminToServer: {
@@ -97,8 +92,8 @@ export const CHANNELS = {
   gameToServer: {
     hello,
     "game.run.started": z.object({ runId: z.string() }),
-    // The run is on the start grid; it leaves (game.run.started) in goInMs, with everyone else
-    // who pressed Go in the same countdown (config.startCountdownMs).
+    // The run is on the start grid in its half; it leaves (game.run.started) in goInMs
+    // (config.startCountdownMs).
     "game.run.grid": z.object({ runId: z.string(), goInMs: ms }),
     "game.run.progress": z.object({
       runId: z.string(),
@@ -133,17 +128,13 @@ export const CHANNELS = {
     // track changes only while no session is running (error track_locked).
     "game.config.set": ConfigSchema.pick({
       track: true,
-      lapsPerRun: true,
       sessionMinutes: true,
       language: true,
-      mode: true,
     })
       .partial()
       .strict(),
     "game.session.start": empty, // ended → a new session with a fresh leaderboard
     "game.session.end": empty,
-    // The run the big-screen camera follows now, on every cut; no runId when nobody races.
-    "game.camera": z.object({ runId: z.string().optional() }),
   },
   serverToPhone: {
     ...phoneBroadcasts,
@@ -162,12 +153,6 @@ export const CHANNELS = {
     // Everyone in the session (§7 "Paddock"), on joins, design steps, renders, races starting and
     // ending; also right after welcome.
     "paddock.updated": z.array(PaddockEntrySchema),
-    // To every phone: a countdown is open and these racers are on the grid; others can still
-    // press Go and join that race (§2c).
-    "grid.updated": z.object({
-      goInMs: ms,
-      racers: z.array(z.object({ playerId: z.string(), nickname: z.string() })),
-    }),
     "run.started": z.object({ run: RunSchema }),
     "run.progress": z.object({
       runId: z.string(),
@@ -177,9 +162,6 @@ export const CHANNELS = {
       deltaVsBestMs: z.number().int().optional(),
       boostsLeft: z.number().int().nonnegative(),
       ...lapInfo,
-      // In a heat (§7 "Heats"): place right now among the racers who left together, of how many.
-      place: z.number().int().positive().optional(),
-      of: z.number().int().positive().optional(),
     }),
     // Loop tracks: a lap completed. isLapBest = the player's fastest lap ever (session).
     "run.lap": z.object({
@@ -203,21 +185,9 @@ export const CHANNELS = {
       // run.stretches with the player's best and the session's fastest on each (§2d); empty
       // for an aborted run.
       stretches: z.array(StretchResultSchema),
-      duel: DuelResultSchema.optional(), // duel runs (§2i)
+      duel: DuelResultSchema.optional(), // a lap in a half (§2i): judged against the record
     }),
-    // The racers who left the start with this one: places so far, sent on each of their results;
-    // done once the last of them is home (§7 "Heats").
-    "run.heat": z.object({
-      heatId: z.string(),
-      done: z.boolean(),
-      entries: z.array(HeatEntrySchema),
-    }),
-    // Who the big-screen camera follows now (relayed game.camera); empty when nobody.
-    "camera.updated": z.object({
-      playerId: z.string().optional(),
-      runId: z.string().optional(),
-    }),
-    // Duel mode (§2i): the line, the halves and the champion; after welcome and on every change.
+    // The line, the halves and the champion (§2i); after welcome and on every change.
     "queue.updated": QueueStateSchema,
   },
   // Not spelled out in contracts.md: the console gets the phone broadcasts plus the full
@@ -245,10 +215,8 @@ export const CHANNELS = {
     "roster.updated": z.array(RosterEntrySchema),
     "run.start": RunStartSchema,
     "run.boost": z.object({ runId: z.string() }),
-    "run.stop": z.object({ runId: z.string() }), // loop tracks: finish at the next line crossing
-    "run.watch": z.object({ runId: z.string() }), // a phone asked for the big screen
     "run.push": z.object({ runId: z.string(), on: z.boolean() }), // Push held or let go (§2g)
-    "queue.updated": QueueStateSchema, // duel mode (§2i)
+    "queue.updated": QueueStateSchema, // the line and the halves (§2i)
     "run.abort": z.object({ runId: z.string(), reason: z.string() }),
   },
 };

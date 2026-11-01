@@ -1,8 +1,9 @@
 extends CanvasLayer
-## Duel mode's HUD (contracts §2i), over world/duel_screen.gd's halves (or the full screen):
-##  - Each racing half, top: the racer's name on its side's colour (left red, right blue), the
-##    lap time, their own best lap, the record to beat, boosts left, and PUSH! while Push is held
-##    (SLIDE! after a slide with Push, contracts §2g).
+## The halves' HUD (contracts §2i), over world/duel_screen.gd's halves (or the full screen):
+##  - Each racing half, in its outer top corner (left half top left, right half top right, so the
+##    crown fits between them): the racer's name on its side's colour (left red, right blue), the
+##    lap time, their own best lap, the record to beat (once there is one), boosts left, and under
+##    it PUSH! while Push is held (SLIDE! after a slide with Push, contracts §2g).
 ##  - Each half's own start lights (a duel run never shares a countdown), then GO!.
 ##  - A finished lap's verdict in its half for duelResultMs: NEW CHAMPION!, or how far short of
 ##    whose record; a failed lap says oops and why.
@@ -17,6 +18,8 @@ const SIDE_COLOR := {"left": Color("#ff4b4b"), "right": Color("#3b8cff")}
 const FONT_NAMES := ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue", "Arial"]
 const GO_S := 1.2
 const LINE_NAMES := 4        # names shown in the line at the top
+const MARGIN := 18.0
+const PLATE_W := 300.0       # the plate's least width, so a right-aligned plate doesn't jiggle
 
 var result_s := 5.0          # how long a verdict stays (config.duelResultMs)
 var bests := {}              # playerId -> best lap in ms this session (main.gd keeps it)
@@ -59,7 +62,8 @@ func _build_half(side: String) -> Dictionary:
 	add_child(root)
 	var col: Color = SIDE_COLOR[side]
 	var plate := _panel(col.darkened(0.3), 12, col.lightened(0.3), 3)
-	plate.position = Vector2(18, 18)
+	plate.position = Vector2(MARGIN, MARGIN)
+	plate.custom_minimum_size = Vector2(PLATE_W, 0)
 	root.add_child(plate)
 	var pbox := VBoxContainer.new()
 	pbox.add_theme_constant_override("separation", 0)
@@ -74,6 +78,9 @@ func _build_half(side: String) -> Dictionary:
 	pbox.add_child(record_l)
 	var boosts_l := _label("", 20, Color("#ffd23a"))
 	pbox.add_child(boosts_l)
+	if side == "right":  # its plate sits in the right corner: the text hugs the outer edge
+		for l in pbox.get_children():
+			(l as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var push := _panel(Color("#ff6b35"), 12, Color.WHITE, 3)
 	var push_l := _label("", 34, Color.WHITE)
 	push.add_child(push_l)
@@ -179,15 +186,22 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		var best := int(bests.get(r.player_id, 0))
 		h["best"].text = I18n.f("duel.best", [best / 1000.0]) if best > 0 else I18n.t("duel.first_lap")
 		var c: Dictionary = _queue.get("champion", {})
-		h["record"].text = I18n.f("duel.record", [int(c["timeMs"]) / 1000.0]) + "  ·  " + String(c["nickname"]) if not c.is_empty() else I18n.t("duel.no_crown")
+		h["record"].visible = not c.is_empty()  # no record yet: the crown at the top says so
+		if not c.is_empty():
+			h["record"].text = I18n.f("duel.record", [int(c["timeMs"]) / 1000.0]) + "  ·  " + String(c["nickname"])
 		h["boosts"].text = I18n.f("duel.boosts", [r.boosts_left])
+		plate.reset_size()
+		plate.position = Vector2(MARGIN if side == "left" else rect.size.x - plate.size.x - MARGIN, MARGIN)
 		# PUSH! while held; SLIDE! while fishtailing after a slide with Push.
 		var sliding: bool = r.push_recover_t > 0.0
 		if r.pushing or sliding:
 			h["push"].visible = true
 			h["push_label"].text = I18n.t("duel.slide") if sliding else I18n.t("duel.push")
 			(h["push"].get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color("#d64545") if sliding else Color("#ff6b35")
-			h["push"].position = Vector2(rect.size.x - h["push"].size.x - 24, 24)
+			var push: PanelContainer = h["push"]
+			push.reset_size()
+			var y := plate.position.y + plate.size.y + 10.0
+			push.position = Vector2(MARGIN if side == "left" else rect.size.x - push.size.x - MARGIN, y)
 		# The half's own start lights, then GO!.
 		var lights: Label = h["lights"]
 		if on_grid:
@@ -203,6 +217,7 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 			lights.add_theme_color_override("font_color", Color("#33d17a"))
 		if lights.visible:
 			_place_center(lights, rect.size, 0.3)
+			h["verdict"].visible = false  # the next racer's lights win over the last lap's verdict
 	# The crown and the line, top centre over the divider (or the middle of the full screen).
 	var vp_size: Vector2 = get_viewport().get_visible_rect().size
 	_crown.reset_size()

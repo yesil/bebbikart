@@ -1,6 +1,7 @@
 extends Camera3D
 ## The big-screen camera: chase a racer, or a wide shot that frames the whole field, or fixed
-## vantage points at the three forks. Which racer it chases is up to world/camera_director.gd.
+## vantage points at the three forks. Each half of the screen has one (world/duel_screen.gd says
+## which racer it chases).
 
 enum Mode { FOLLOW, WIDE, FORKS }
 

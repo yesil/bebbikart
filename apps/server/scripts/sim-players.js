@@ -3,21 +3,23 @@
 //   bun run sim-players -- --players 8 --url http://localhost:8090 --races 3 --stagger 1500
 // Each phone gets a device cookie, creates a racer, uploads a sample drawing pair, waits for the
 // design job (real Claude) and the big screen's renders, sets a random build, presses Go (all at
-// once, or --stagger ms apart), taps Boost, waits for the result and races again (--races).
-// It logs a timeline and ends with timings (join → racer ready, Go → on track, boost tap → seen,
-// finish → result on the phone), message counts per phone and every error. Exit 1 on any error.
+// once, or --stagger ms apart) to join the line (contracts §2i), waits for its turn on a half of
+// the big screen, taps Boost, waits for the result and races again (--races).
+// It logs a timeline and ends with timings (join → racer ready, Go → own half, Go → on track,
+// boost tap → seen, finish → result on the phone), message counts per phone and every error.
+// Exit 1 on any error.
 //
 // Racers are kept between runs: device ids go to --state (default .sim-players.json next to the
 // data dir you pass with --state), so a second run reuses the racers instead of designing new
 // ones. New designs are capped by --max-new (default 8): real Claude calls cost money.
 //
 // Flags: --players N (4) --url URL --races N (2) --stagger MS (0) --join-stagger MS (0)
-//   --waves N --wave-gap MS (1, 20000): Go in N groups, wave-gap apart (a second group lines up
-//   while the first is still racing, e.g. lapping past the start line)
+//   --waves N --wave-gap MS (1, 20000): Go in N groups, wave-gap apart (a second group joins the
+//   line while the first is still racing)
 //   --state FILE --fresh (forget saved racers) --max-new N (8) --names A,B,C --seed N (1)
 //   --renders 0 (don't wait for the game's hero/avatar renders, e.g. with fake-game)
 //   --track countryside|village (switches via the admin API: ends the session, new leaderboard)
-//   --pit (loop tracks: tap Pit in after the first lap) --boosts N (taps per race, 3)
+//   --boosts N (taps per race, 3)
 //   --pin PIN (BK_ADMIN_PIN, 1234) --json FILE (write the full report) --quiet (no timeline)
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -132,7 +134,6 @@ class Phone {
     this.t = {}; // timings (ms)
     this.races = [];
     this.stages = [];
-    this.heats = []; // run.heat payloads (+ at)
   }
 
   get cookie() {
@@ -180,11 +181,9 @@ class Phone {
         this.stages.push([p.job.stage, at]);
         line(this.tag, `making: ${p.job.stage}`);
       }
-    } else if (m.type === "run.heat") this.heats.push({ ...p, at });
-    else if (m.type === "config.updated") this.config = p;
+    } else if (m.type === "config.updated") this.config = p;
     else if (m.type === "player.removed") fail(this.tag, "the racer was removed");
-    else if (m.type === "error" && p.code !== "track_changing")
-      fail(this.tag, `server error ${p.code}: ${p.message}`);
+    else if (m.type === "error") fail(this.tag, `server error ${p.code}: ${p.message}`);
     this.race?.onMessage(m, at);
     for (const w of [...this.waiters]) {
       if (w.type !== m.type || !w.pred(p)) continue;
@@ -297,32 +296,20 @@ class Race {
     phone.race = this;
     this.goAt = performance.now();
     phone.send("phone.go", {});
-    const capMs = phone.config.runTimeCapMs * (this.loop ? phone.config.lapsPerRun : 1) + 60_000;
-    // Like a kid: the big screen still loading a new track says "try again in a moment".
-    let q;
-    for (let attempt = 0; !q; attempt++) {
-      try {
-        q = await new Promise((res, rej) => {
-          phone.wait("run.queued", () => true, 5000).then(res, rej);
-          phone
-            .wait("error", () => true, 5000)
-            .then(
-              (e) =>
-                rej(
-                  Object.assign(new Error(`Go refused: ${e.code} ${e.message}`), { code: e.code }),
-                ),
-              () => {},
-            );
-        });
-      } catch (err) {
-        if (err.code !== "track_changing" || attempt >= 30) throw err;
-        if (attempt === 0) line(phone.tag, "the big screen is changing track; Go again every 1 s");
-        await Bun.sleep(1000);
-        this.goAt = performance.now();
-        phone.send("phone.go", {});
-      }
-    }
+    // One lap per run (§2i); the line can hold everyone else's lap first, two at a time.
+    const capMs = phone.config.runTimeCapMs + 60_000;
+    const lineMs = Math.ceil(N / 2) * (capMs + phone.config.duelResultMs);
+    const q = await new Promise((res, rej) => {
+      phone.wait("run.queued", () => true, lineMs).then(res, rej);
+      phone
+        .wait("error", () => true, lineMs)
+        .then(
+          (e) => rej(new Error(`Go refused: ${e.code} ${e.message}`)),
+          () => {},
+        );
+    });
     this.runId = q.run.id;
+    this.r.side = q.run.side;
     this.r.goToQueuedMs = performance.now() - this.goAt;
     await phone.wait("run.started", (p) => p.run.id === this.runId, 60_000);
     this.startedAt = performance.now();
@@ -331,7 +318,7 @@ class Race {
     if (this.greenAt !== undefined) this.r.greenToStartedMs = this.startedAt - this.greenAt;
     line(
       phone.tag,
-      `on track after ${(this.r.goToStartedMs / 1000).toFixed(2)} s${this.greenAt !== undefined ? ` (countdown, ${Math.round(this.r.greenToStartedMs)} ms after green)` : ""}`,
+      `on track on the ${this.r.side} after ${(this.r.goToStartedMs / 1000).toFixed(2)} s${this.greenAt !== undefined ? ` (countdown, ${Math.round(this.r.greenToStartedMs)} ms after green)` : ""}`,
     );
     this.scheduleTaps();
     const ended = await phone.wait("run.ended", (p) => p.run.id === this.runId, capMs);
@@ -341,7 +328,7 @@ class Race {
   }
 
   scheduleTaps() {
-    // Spread the taps over the expected run (~25 s point to point, ~50 s per lap on loops).
+    // Spread the taps over the expected run (~25 s point to point, ~50 s for a lap on loops).
     const span = this.loop ? 40_000 : 20_000;
     for (let k = 0; k < BOOST_TAPS; k++) {
       const at = 1500 + (span / BOOST_TAPS) * k + rand() * 2000;
@@ -378,12 +365,6 @@ class Race {
         this.pending = null;
       }
       this.boostsLeft = p.boostsLeft;
-      if (p.place) Object.assign(this.r, { lastPlace: p.place, of: p.of });
-      if (this.loop && p.lap > 1 && args.pit && !this.pitSent) {
-        this.pitSent = true;
-        this.phone.send("phone.stop", { runId: this.runId });
-        line(this.phone.tag, "Pit in");
-      }
     } else if (m.type === "run.lap") {
       this.r.laps++;
       line(
@@ -422,7 +403,7 @@ class Race {
         : `${run.outcome} ${run.failReason ?? ""}@${run.failSection ?? ""}`;
     line(
       this.phone.tag,
-      `result: ${what}${this.r.lastPlace ? ` (last seen ${this.r.lastPlace} of ${this.r.of})` : ""}${e.rank ? ` rank #${e.rank}` : ""}${e.isPersonalBest ? " PB" : ""} · "${e.coach?.text}"`,
+      `result: ${what}${e.rank ? ` rank #${e.rank}` : ""}${e.isPersonalBest ? " PB" : ""}${e.duel?.newChampion ? " NEW CHAMPION" : ""} · "${e.coach?.text}"`,
     );
   }
 }
@@ -435,56 +416,6 @@ const stats = (xs, f = ms) => {
   const q = (k) => a[Math.min(a.length - 1, Math.floor(k * a.length))];
   return `min ${f(a[0])} · median ${f(q(0.5))} · p95 ${f(q(0.95))} · max ${f(a[a.length - 1])} (n=${a.length})`;
 };
-
-/** Group results on the phones (run.heat): every racer of a heat gets the same, complete result. */
-function checkHeats(phones, n, lastEnd) {
-  // Racers who left within 2.5 s of each other are a heat (the server's rule); one who left
-  // alone (e.g. pressed Go after the countdown went green) gets no group result.
-  const starts = phones
-    .map((ph) => ({ ph, at: ph.races.find((r) => r.race === n)?.startedAt }))
-    .filter((x) => x.at !== undefined)
-    .sort((a, b) => a.at - b.at);
-  const alone = new Set();
-  for (let i = 0; i < starts.length; ) {
-    let j = i;
-    while (j + 1 < starts.length && starts[j + 1].at - starts[i].at <= 2500) j++;
-    if (j === i) alone.add(starts[i].ph);
-    i = j + 1;
-  }
-  const byHeat = new Map();
-  for (const ph of phones) {
-    if (alone.has(ph)) {
-      line(ph.tag, `race ${n}: left alone, no group result expected`);
-      continue;
-    }
-    const h = ph.heats.filter((x) => x.done).at(-1);
-    if (!h || h.at < lastEnd - 120_000) {
-      fail(ph.tag, `race ${n}: no complete group result (run.heat done) on the phone`);
-      continue;
-    }
-    if (!h.entries.some((e) => e.playerId === ph.me.id))
-      fail(ph.tag, `race ${n}: the group result doesn't list me`);
-    if (!byHeat.has(h.heatId)) byHeat.set(h.heatId, []);
-    byHeat.get(h.heatId).push({ ph, h });
-  }
-  for (const [id, list] of byHeat) {
-    const first = JSON.stringify(list[0].h.entries);
-    for (const { ph, h } of list)
-      if (JSON.stringify(h.entries) !== first)
-        fail(ph.tag, `race ${n}: heat ${id} differs between phones`);
-    // From this heat's own last result (a later wave may still have been racing).
-    const heatEnd = Math.max(
-      ...list.map(({ ph }) => ph.races.find((r) => r.race === n)?.endedAt ?? 0),
-    );
-    const lag = Math.max(...list.map(({ h }) => h.at)) - heatEnd;
-    const names = list[0].h.entries
-      .map((e) => `${e.place ? `${e.place}.` : e.outcome ? "oops" : "?"} ${e.nickname}`)
-      .join(", ");
-    console.log(
-      `  heat ${id}: ${list.length} phones, complete ${Math.round(lag)} ms after the last result · ${names}`,
-    );
-  }
-}
 
 async function switchTrack(track) {
   const st = await rest("GET", "/api/state");
@@ -530,8 +461,6 @@ async function main() {
     console.log(
       `\n--- race ${n}: ${ready.length} racers, Go ${STAGGER ? `${STAGGER} ms apart` : "all at once"}`,
     );
-    // Wait out the launch cooldown from the previous race.
-    if (n > 1) await Bun.sleep(ready[0].config.launchCooldownMs + 500);
     const results = await Promise.allSettled(
       ready.map(async (ph, i) => {
         const per = Math.ceil(ready.length / WAVES);
@@ -549,8 +478,6 @@ async function main() {
       console.log(
         `  results reached the phones within ${((Math.max(...ends) - Math.min(...ends)) / 1000).toFixed(1)} s of each other`,
       );
-    await Bun.sleep(400); // the last finisher's heat update follows its result
-    checkHeats(ready, n, Math.max(...ends));
   }
   await Bun.sleep(300);
   for (const ph of phones) ph.close();
@@ -562,7 +489,7 @@ async function main() {
   console.log(`design (upload → ready)      ${stats(phones.map((p) => p.t.designMs))}`);
   console.log(`renders (ready → on phone)   ${stats(phones.map((p) => p.t.rendersMs))}`);
   console.log(`join → racer ready           ${stats(phones.map((p) => p.t.readyMs))}`);
-  console.log(`Go → run.queued              ${stats(all.map((r) => r.goToQueuedMs))}`);
+  console.log(`Go → own half (run.queued)   ${stats(all.map((r) => r.goToQueuedMs))}`);
   console.log(`Go → on track (run.started)  ${stats(all.map((r) => r.goToStartedMs))}`);
   console.log(`countdown green → on track   ${stats(all.map((r) => r.greenToStartedMs))}`);
   console.log(

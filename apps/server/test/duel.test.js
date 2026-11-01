@@ -1,5 +1,6 @@
-// Duel mode (contracts §2i) and Push (§2g) over real HTTP + WebSockets: the line, the two halves,
-// the champion who rests, judging, offline phones, the session end; Push relayed to the game.
+// The line (contracts §2i) and Push (§2g) over real HTTP + WebSockets: the two halves, the
+// champion who rests, judging, offline phones, the session end, when the screen splits; Push
+// relayed to the game.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,6 +12,7 @@ import { startServer } from "../src/index.js";
 
 const SAMPLES = join(REPO_ROOT, "packages/asset-pipeline/samples");
 const RESULT_MS = 150;
+const HOLD_MS = 600; // splitHoldMs
 let srv;
 let base;
 let settings;
@@ -22,7 +24,7 @@ beforeAll(() => {
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-duel-")),
     designClient: createMockClient({ designId: "pair01" }),
-    config: { ...DEFAULT_CONFIG, track: "village", mode: "duel", duelResultMs: RESULT_MS },
+    config: { ...DEFAULT_CONFIG, track: "village", duelResultMs: RESULT_MS, splitHoldMs: HOLD_MS },
   };
   settings.dbFile = ":memory:";
   srv = startServer(settings, { log: () => {} });
@@ -132,15 +134,19 @@ test("duel: Go joins the line, a free half launches it, the champion rests, laps
   const a = await racer("Ava");
   const b = await racer("Ben");
   const c = await racer("Cleo");
-  expect((await game.wait("queue.updated", (q) => q.split)).payload.line).toEqual([]);
+  // Three racers in the session, but nobody plays yet: one picture, not split.
+  expect(game.last("queue.updated")).toMatchObject({ line: [], racing: [], split: false });
 
-  // Ava and Ben go straight onto the two halves (left first), one lap each.
+  // Ava and Ben go straight onto the two halves (left first), one lap each. Ava alone has the
+  // whole screen; Ben joining splits it.
   a.go();
   const startA = (await game.wait("run.start", (p) => p.playerId === a.me.id)).payload;
   expect([startA.side, startA.lapsPerRun]).toEqual(["left", 1]);
+  expect(game.last("queue.updated")).toMatchObject({ split: false });
   b.go();
   const startB = (await game.wait("run.start", (p) => p.playerId === b.me.id)).payload;
   expect(startB.side).toBe("right");
+  expect(game.last("queue.updated")).toMatchObject({ split: true });
   expect((await b.phone.wait("run.queued")).payload.run.side).toBe("right");
 
   // Both halves busy: Cleo waits; a second Go is refused, and REST Go answers with the line.
@@ -220,7 +226,7 @@ test("duel: Go joins the line, a free half launches it, the champion rests, laps
   game.ws.close();
 });
 
-test("duel: an offline phone loses its turn loudly; leave the line; mode locked; session end closes the line", async () => {
+test("duel: an offline phone loses its turn loudly; leave the line; session end closes the line", async () => {
   const game = client({}, { role: "game", gameKey: settings.gameKey, track: "village" });
   await game.start();
   await game.wait("welcome");
@@ -228,14 +234,6 @@ test("duel: an offline phone loses its turn loudly; leave the line; mode locked;
   const e = await racer("Eve");
   const f = await racer("Finn");
   const g = await racer("Gus");
-
-  // The mode can't change while the session runs.
-  const locked = await fetch(`${base}/api/admin/config`, {
-    method: "PATCH",
-    headers: admin(),
-    body: JSON.stringify({ mode: "race" }),
-  });
-  expect((await locked.json()).error.code).toBe("mode_locked");
 
   d.go();
   const runD = (await game.wait("run.start", (p) => p.playerId === d.me.id)).payload.runId;
@@ -267,5 +265,68 @@ test("duel: an offline phone loses its turn loudly; leave the line; mode locked;
   finishLap(game, runE, 54_000);
   await e.phone.wait("run.ended", (p) => p.run.id === runE);
   for (const r of [d, e, g]) r.phone.ws.close();
+  game.ws.close();
+});
+
+test("split screen: one player has it all; a second player splits it; it stays split while anyone plays", async () => {
+  await fetch(`${base}/api/admin/session/start`, { method: "POST", headers: admin(), body: "{}" });
+  const game = client({}, { role: "game", gameKey: settings.gameKey, track: "village" });
+  await game.start();
+  await game.wait("welcome");
+  const h = await racer("Hana");
+  const i = await racer("Ivo");
+  // (The racers of the tests before have stopped playing too.)
+  await game.wait("queue.updated", (q) => !q.split && q.racing.length === 0, HOLD_MS + 2000);
+  const from = game.msgs.length;
+  const nextStart = async (r, seen) =>
+    (await game.wait("run.start", (p) => p.playerId === r.me.id && !seen.has(p.runId))).payload;
+  const seen = new Set();
+  const lap = async (r, ms) => {
+    const st = await nextStart(r, seen);
+    seen.add(st.runId);
+    finishLap(game, st.runId, ms);
+    await r.phone.wait("run.ended", (p) => p.run.id === st.runId);
+    return st;
+  };
+
+  // Hana alone, lap after lap: always the left half, never split (she waits out her own result).
+  h.go();
+  expect((await lap(h, 60_000)).side).toBe("left");
+  h.go();
+  expect((await lap(h, 59_000)).side).toBe("left");
+  const shown = game.msgs.slice(from).filter((m) => m.type === "queue.updated");
+  expect(shown.length).toBeGreaterThan(0);
+  expect(shown.every((m) => !m.payload.split)).toBe(true);
+
+  // Ivo joins while Hana races: split, Ivo on the right.
+  h.go();
+  const hRun = await nextStart(h, seen);
+  seen.add(hRun.runId);
+  i.go();
+  const iRun = await nextStart(i, seen);
+  seen.add(iRun.runId);
+  expect(iRun.side).toBe("right");
+  await game.wait("queue.updated", (q) => q.split && q.racing.length === 2);
+
+  // Ivo finishes and stops; Hana keeps playing alone: the screen stays split.
+  finishLap(game, iRun.runId, 61_000);
+  finishLap(game, hRun.runId, 58_000);
+  await h.phone.wait("run.ended", (p) => p.run.id === hRun.runId);
+  h.go();
+  const hRun2 = await nextStart(h, seen);
+  seen.add(hRun2.runId);
+  await Bun.sleep(HOLD_MS + 200);
+  expect(game.last("queue.updated")).toMatchObject({ split: true });
+  expect(game.last("queue.updated").racing.map((r) => r.nickname)).toEqual(["Hana"]);
+
+  // Nobody plays any more: once the hold is over, the whole screen again.
+  finishLap(game, hRun2.runId, 57_000);
+  await h.phone.wait("run.ended", (p) => p.run.id === hRun2.runId);
+  await Bun.sleep(HOLD_MS / 2);
+  expect(game.last("queue.updated")).toMatchObject({ split: true, racing: [] });
+  await Bun.sleep(HOLD_MS / 2 + 200);
+  expect(game.last("queue.updated")).toMatchObject({ split: false, racing: [], line: [] });
+  expect(game.last("queue.updated").champion.nickname).toBe("Hana");
+  for (const r of [h, i]) r.phone.ws.close();
   game.ws.close();
 });

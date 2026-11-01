@@ -30,7 +30,6 @@ export function mockHandlers({
     others: [1, 2, 3, 4].map((i) => structuredClone(playerView(i))),
     runs: structuredClone(RUNS.filter((r) => r.playerId === playerView(0).id)),
     leaderboard: structuredClone(LEADERBOARD),
-    lastRunEndedAt: 0,
     rerolls: 0,
   };
   const allPlayers = () => (state.me ? [state.me, ...state.others] : state.others);
@@ -77,15 +76,14 @@ export function mockHandlers({
       return fail(409, "session_not_running", "Session is not running");
     if (player.status !== "ready") return fail(409, "not_ready", "Racer is not ready yet");
     if (player.currentRun) return fail(409, "run_in_progress", "Racer is still on the track");
-    if (Date.now() - state.lastRunEndedAt < state.config.launchCooldownMs) {
-      return fail(409, "cooldown", "Wait a moment before the next run");
-    }
+    // Go joins the line (contracts §2i); here nobody else waits, so the left half takes it now.
     const run = {
       id: newId("run"),
       playerId: player.id,
       buildId: player.build.id,
       status: "queued",
       queuedAt: now(),
+      side: "left",
     };
     player.currentRun = run;
     // Finish the run after ~30 s so the phone can be built against the full loop.
@@ -106,14 +104,16 @@ export function mockHandlers({
       player.currentRun = undefined;
       player.lastRun = done;
       state.runs.push(done);
-      state.lastRunEndedAt = Date.now();
       if (player.bestTimeMs === undefined || elapsedMs < player.bestTimeMs) {
         player.bestTimeMs = elapsedMs;
         player.bestRunId = done.id;
         player.bestRun = done;
       }
     }, 30_000);
-    return HttpResponse.json(run);
+    const racing = [
+      { side: "left", playerId: player.id, nickname: player.nickname, runId: run.id },
+    ];
+    return HttpResponse.json({ line: [], racing, split: false, skipped: [] }, { status: 202 });
   };
 
   const findPlayer = (id) => allPlayers().find((p) => p.id === id);

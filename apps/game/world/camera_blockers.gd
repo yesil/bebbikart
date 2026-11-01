@@ -2,8 +2,7 @@ extends RefCounted
 ## Boxes the big-screen cameras must not sit in or look through: the village houses (from
 ## world/village/village_plan.gd, standing on the terrain) and the covered bridge's roof. When a
 ## box is between the racer and where a camera wants to be, the camera pulls in towards the racer
-## and stops just short of it (world/camera_rig.gd for the chase camera, ui/camera_hud.gd for the
-## inset). Plain maths, no physics bodies: a box test is a few multiplications, and boxes far
+## and stops just short of it (world/camera_rig.gd, the chase camera of each half). Plain maths, no physics bodies: a box test is a few multiplications, and boxes far
 ## from the camera are skipped before that.
 
 const VillagePlan = preload("res://world/village/village_plan.gd")

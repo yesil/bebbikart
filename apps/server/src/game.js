@@ -416,6 +416,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     const run = activeRun(playerId);
     if (run) abortRun(run, reason);
     dropFromLine(playerId);
+    lastLap.delete(playerId);
     hub.toPhone(playerId, "player.removed", { playerId }); // before the delete: routed by player
     players.delete(playerId);
     manifests.delete(playerId);
@@ -434,7 +435,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     hub.toAdmins("player.updated", playerView(p.id));
     pushRoster();
   }
-  /** The big screen (re)connected or loaded its track: duel halves can fill again. */
+  /** The big screen (re)connected or loaded its track: the halves can fill again. */
   function gameChanged() {
     fillHalves();
   }
@@ -467,7 +468,6 @@ export function createGame({ db, settings, hub, log = console.log }) {
   }
 
   // ------------------------------------------------------------------ runs
-  const isDuel = () => config.mode === "duel";
   /** What every launch needs: a running session and a racer that is ready and not racing. */
   function mustLaunchable(playerId) {
     const p = players.get(playerId);
@@ -493,29 +493,9 @@ export function createGame({ db, settings, hub, log = console.log }) {
     // hello again with it. A run before that would race the old course.
     return hub.gameOnline() && !(hub.gameTrack() && hub.gameTrack() !== config.track);
   }
-  /**
-   * Go: a free race starts at once (contracts §2c); a duel joins the line (§2i) and returns the
-   * line instead of a run.
-   */
+  /** Go joins the line (contracts §2i) and returns it; a free half launches the racer. */
   function launch(playerId) {
-    if (isDuel()) return joinLine(playerId);
-    const p = mustLaunchable(playerId);
-    const last = playerRuns(playerId).find((r) => r.status === "done");
-    const readyAt = last?.endedAt ? Date.parse(last.endedAt) + config.launchCooldownMs : 0;
-    if (Date.now() < readyAt)
-      throw new ApiError("cooldown", "Catch your breath! Ready in a moment", 409);
-    if (!hub.gameOnline())
-      throw new ApiError("game_offline", "The big screen isn't connected", 409);
-    if (!gameReady())
-      throw new ApiError(
-        "track_changing",
-        "The big screen is changing track, try again in a moment",
-        409,
-      );
-    const running = [...runs.values()].filter((r) => r.status !== "done").length;
-    if (running >= config.maxConcurrentRuns)
-      throw new ApiError("run_in_progress", "The track is full, try again in a moment", 409);
-    return startRun(p, mustRaceableBuild(playerId));
+    return joinLine(playerId);
   }
   function startRun(p, build, side) {
     const run = {
@@ -526,16 +506,15 @@ export function createGame({ db, settings, hub, log = console.log }) {
       queuedAt: now(),
       track: config.track,
     };
-    // The laps travel with the run (big screen and phone show and race this, not their config).
-    // A duel is one lap (§2i).
-    if (isLoop(config.track)) run.lapsPerRun = side ? 1 : config.lapsPerRun;
-    if (side) run.side = side;
+    // The laps travel with the run (big screen and phone race and show this): one lap (§2i).
+    if (isLoop(config.track)) run.lapsPerRun = 1;
+    run.side = side;
     saveRun(run);
     hub.toGame("run.start", runStart(run));
     hub.toPhone(p.id, "run.queued", { run });
     pushPlayer(p.id);
     pushPaddock();
-    log(`[run] ${run.id} queued for "${p.nickname}"${side ? ` on the ${side}` : ""}`);
+    log(`[run] ${run.id} queued for "${p.nickname}" on the ${side}`);
     return run;
   }
   // Push (contracts §2g): held down or let go on the phone, relayed to the game. The server
@@ -553,14 +532,18 @@ export function createGame({ db, settings, hub, log = console.log }) {
     const run = activeRun(playerId);
     if (run && pushing.delete(run.id)) hub.toGame("run.push", { runId: run.id, on: false });
   }
-  // ------------------------------------------------------------------ duel (contracts §2i)
+  // ------------------------------------------------------------------ the line (contracts §2i)
   // King of the hill: the champion (rank 1) rests; the others take turns in the line, one lap
-  // each, on the two halves of the big screen. Go joins the line; a free half launches its head.
+  // each against the clock, on the two halves of the big screen. Go joins the line; a free half
+  // launches its head. The screen splits once two people play, and stays split while anyone does.
   const line = []; // playerIds in join order (lineOrder puts the champion last)
   const skipped = new Set(); // out of the line: their phone was offline at their turn
   const halves = Object.fromEntries(SIDES.map((side) => [side, { runId: null, freeAt: 0 }]));
-  let record = { key: "", tries: 0 }; // the champion's time, and duel laps by others since
+  let record = { key: "", tries: 0 }; // the champion's time, and laps by others since
+  const lastLap = new Map(); // playerId -> when their last lap ended (Date.now())
+  let split = false; // queue.updated split
   let fillTimer = null;
+  let splitTimer = null;
   let lastQueue = "";
   function joinLine(playerId) {
     const p = mustLaunchable(playerId);
@@ -603,6 +586,31 @@ export function createGame({ db, settings, hub, log = console.log }) {
     if (key !== record.key) record = { key, tries: 0 };
     return c;
   }
+  /**
+   * Who plays now: on a half, waiting in the line, or back in the garage less than splitHoldMs
+   * after their lap (setting their stars for the next one; a half's result included).
+   */
+  function playing() {
+    const ids = new Set(line);
+    for (const side of SIDES) {
+      const r = halves[side].runId && runs.get(halves[side].runId);
+      if (r) ids.add(r.playerId);
+    }
+    const since = Date.now() - Math.max(config.splitHoldMs, config.duelResultMs);
+    for (const [id, t] of lastLap) {
+      if (t > since) ids.add(id);
+      else lastLap.delete(id);
+    }
+    for (const id of ids) if (!players.has(id)) ids.delete(id);
+    return ids;
+  }
+  /** Split once a second person plays; back to the full screen only when nobody does. */
+  function updateSplit() {
+    const n = playing().size;
+    if (n >= 2) split = true;
+    else if (n === 0) split = false;
+    return split;
+  }
   function queueState() {
     const nick = (id) => players.get(id)?.nickname ?? "?";
     const racing = [];
@@ -614,7 +622,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     const out = {
       line: lineOrder().map((id) => ({ playerId: id, nickname: nick(id) })),
       racing,
-      split: [...players.values()].filter((p) => p.status === "ready").length >= 2,
+      split: updateSplit(),
       skipped: [...skipped],
     };
     const c = recordState();
@@ -627,23 +635,23 @@ export function createGame({ db, settings, hub, log = console.log }) {
       };
     return out;
   }
-  /** queue.updated to phones, admins and the game, when something changed (duel mode only). */
+  /** queue.updated to phones, admins and the game, when something changed. */
   function pushQueue() {
-    if (!isDuel() && !lastQueue) return;
-    const q = isDuel() ? queueState() : { line: [], racing: [], split: false, skipped: [] };
+    const q = queueState();
     const json = JSON.stringify(q);
     if (json === lastQueue) return;
-    lastQueue = isDuel() ? json : "";
+    lastQueue = json;
     hub.toPhones("queue.updated", q);
     hub.toAdmins("queue.updated", q);
     hub.toGame("queue.updated", q);
   }
-  /** Each free half takes the first in line who can race now. */
+  /** Each free half takes the first in line who can race now; one player alone races on the left. */
   function fillHalves() {
     clearTimeout(fillTimer);
-    if (!isDuel() || session.status !== "running" || !gameReady()) return;
+    if (session.status !== "running" || !gameReady()) return;
     let wakeAt = Number.POSITIVE_INFINITY;
     for (const side of SIDES) {
+      if (side !== "left" && !updateSplit()) break; // the full screen shows the left half
       const half = halves[side];
       if (half.runId) continue;
       if (Date.now() < half.freeAt) {
@@ -693,6 +701,13 @@ export function createGame({ db, settings, hub, log = console.log }) {
     if (half.runId !== run.id) return;
     half.runId = null;
     half.freeAt = Date.now() + (run.outcome === "aborted" ? 0 : config.duelResultMs);
+    // Still playing while they set their stars; once nobody is, the screen goes back to one.
+    lastLap.set(run.playerId, Date.now());
+    clearTimeout(splitTimer);
+    splitTimer = setTimeout(
+      () => pushQueue(),
+      Math.max(config.splitHoldMs, config.duelResultMs) + 50,
+    );
     // A lap by someone else against a record that still stands is one more try.
     const after = recordState();
     if (
@@ -721,22 +736,6 @@ export function createGame({ db, settings, hub, log = console.log }) {
     hub.toGame("run.boost", { runId: run.id });
     return true;
   }
-  /** "Pit in" on a loop track: the game finishes the run at the next line crossing. */
-  function stop(playerId, runId) {
-    const run = activeRun(playerId);
-    if (!run || (runId && run.id !== runId)) return false;
-    if (!isLoop(run.track))
-      throw new ApiError("bad_request", "Pit in only works on a loop track", 400);
-    hub.toGame("run.stop", { runId: run.id });
-    return true;
-  }
-  /** "Show me on the big screen": the game queues the racer for one of its next camera cuts. */
-  function watch(playerId, runId) {
-    const run = activeRun(playerId);
-    if (!run || (runId && run.id !== runId)) return false;
-    hub.toGame("run.watch", { runId: run.id });
-    return true;
-  }
   function abortRun(run, reason) {
     if (run.status === "done") return;
     const done = { ...run, status: "done", outcome: "aborted", endedAt: now() };
@@ -749,84 +748,10 @@ export function createGame({ db, settings, hub, log = console.log }) {
       stretches: [],
     });
     pushPlayer(run.playerId);
-    runGreen.delete(run.id);
-    pushHeat(run.id);
     pushPaddock();
     runDone(done);
   }
 
-  // ------------------------------------------------------------------ heats
-  // Runs that left the start within HEAT_WINDOW_MS of each other raced each other (the start
-  // countdown sends a group off together). Each time one of them ends, every phone in the heat
-  // gets the places so far (run.heat); the last one home makes it done.
-  // Runs from the same start countdown are one heat however many rows it took to release them
-  // (16 karts leave over ~2.7 s); without a countdown, starts within HEAT_WINDOW_MS are.
-  const HEAT_WINDOW_MS = 2_500;
-  const heats = new Map(); // heatId (its first run's id) -> { id, startedAt, green, runIds }
-  const runHeat = new Map(); // runId -> heatId
-  const runGreen = new Map(); // runId -> its countdown's green time (game.run.grid)
-  function joinHeat(runId) {
-    const t = Date.now();
-    const green = runGreen.get(runId);
-    runGreen.delete(runId);
-    let heat = [...heats.values()].find((h) =>
-      green !== undefined
-        ? h.green === green
-        : h.green === undefined && t - h.startedAt <= HEAT_WINDOW_MS,
-    );
-    if (!heat) {
-      heat = { id: runId, startedAt: t, green, runIds: [] };
-      heats.set(heat.id, heat);
-    }
-    heat.runIds.push(runId);
-    runHeat.set(runId, heat.id);
-  }
-  /** Where a run is among its heat right now: racers home with a time first, then by distance. */
-  function heatPlace(r) {
-    const heat = heats.get(runHeat.get(r.id));
-    if (!heat || heat.runIds.length < 2) return undefined;
-    const members = heat.runIds
-      .map((id) => runs.get(id))
-      .filter((m) => m && players.has(m.playerId));
-    let ahead = 0;
-    for (const m of members) {
-      if (m.id === r.id) continue;
-      if (m.status === "done") ahead += rankTime(m) !== undefined ? 1 : 0;
-      else if ((m.liveDist ?? 0) > (r.liveDist ?? 0)) ahead++;
-    }
-    return { place: ahead + 1, of: members.length };
-  }
-  function pushHeat(runId) {
-    const heat = heats.get(runHeat.get(runId));
-    if (!heat) return;
-    const members = heat.runIds
-      .map((id) => runs.get(id))
-      .filter((r) => r && players.has(r.playerId));
-    const done = members.every((r) => r.status === "done");
-    if (members.length >= 2) {
-      const timed = members
-        .filter((r) => r.status === "done" && rankTime(r) !== undefined)
-        .sort((a, b) => rankTime(a) - rankTime(b));
-      const racing = members.filter((r) => r.status !== "done");
-      const out = members.filter((r) => r.status === "done" && rankTime(r) === undefined);
-      const entries = [...timed, ...racing, ...out].map((r) => {
-        const e = { playerId: r.playerId, nickname: players.get(r.playerId).nickname };
-        const avatar = manifests.get(r.playerId)?.renders.avatar_happy;
-        if (avatar) e.avatarUrl = avatar;
-        const i = timed.indexOf(r);
-        if (i >= 0) Object.assign(e, { place: i + 1, timeMs: rankTime(r) });
-        if (r.status === "done") e.outcome = r.outcome;
-        if (r.failReason) e.failReason = r.failReason;
-        return e;
-      });
-      for (const r of members)
-        hub.toPhone(r.playerId, "run.heat", { heatId: heat.id, done, entries });
-    }
-    if (done) {
-      heats.delete(heat.id);
-      for (const id of heat.runIds) runHeat.delete(id);
-    }
-  }
   /** The game went away: its runs can't finish. */
   function abortAllRuns(reason) {
     for (const r of runs.values()) {
@@ -840,13 +765,11 @@ export function createGame({ db, settings, hub, log = console.log }) {
         stretches: [],
       });
       pushPlayer(r.playerId);
-      pushHeat(r.id);
       pushPaddock();
       runDone(done);
       log(`[run] ${r.id} aborted (${reason})`);
     }
   }
-  let grid = null; // the open start countdown: { goAt, playerIds } (grid.updated)
   function gameRun(runId) {
     const r = runs.get(runId);
     return r && r.status !== "done" ? r : undefined;
@@ -858,34 +781,20 @@ export function createGame({ db, settings, hub, log = console.log }) {
         if (!r) return;
         const started = { ...r, status: "running", startedAt: now() };
         saveRun(started);
-        joinHeat(r.id);
         hub.toPhone(r.playerId, "run.started", { run: started });
         pushPlayer(r.playerId);
         return;
       }
       case "game.run.grid": {
-        // On the start grid in a countdown: the phone counts down to green with the big screen,
-        // and every other phone hears who is on the grid, so friends can join that race.
+        // On the start grid in its half: the phone counts down to green with the big screen.
         const r = gameRun(pl.runId);
-        if (!r) return;
-        hub.toPhone(r.playerId, "run.grid", pl);
-        const goAt = Date.now() + pl.goInMs;
-        if (!grid || Math.abs(grid.goAt - goAt) > 300) grid = { goAt, playerIds: [] };
-        runGreen.set(r.id, grid.goAt);
-        if (!grid.playerIds.includes(r.playerId)) grid.playerIds.push(r.playerId);
-        const racers = grid.playerIds
-          .filter((id) => players.has(id))
-          .map((id) => ({ playerId: id, nickname: players.get(id).nickname }));
-        hub.toPhones("grid.updated", { goInMs: pl.goInMs, racers });
+        if (r) hub.toPhone(r.playerId, "run.grid", pl);
         return;
       }
       case "game.run.progress": {
         const r = gameRun(pl.runId);
         if (!r) return;
-        r.liveDist = (pl.lap ? pl.lap - 1 : 0) + pl.progress; // laps + progress on loops
         const out = { ...pl };
-        const hp = heatPlace(r);
-        if (hp) Object.assign(out, hp);
         const best = bestRunOf(r.playerId);
         if (best?.splits) {
           // vs best at the same point: compare elapsed with best's time for completed sections.
@@ -939,12 +848,6 @@ export function createGame({ db, settings, hub, log = console.log }) {
         hub.toPhones("weather.updated", pl);
         hub.toAdmins("weather.updated", pl);
         return;
-      case "game.camera": {
-        // Every phone hears who is on the big screen; the racer's own phone shows it.
-        const r = pl.runId ? runs.get(pl.runId) : undefined;
-        hub.toPhones("camera.updated", r ? { playerId: r.playerId, runId: r.id } : {});
-        return;
-      }
       default:
     }
   }
@@ -955,7 +858,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function finishRun(ok, pl) {
     const r = gameRun(pl.runId);
     if (!r) return;
-    const { liveSplits, liveLaps, liveLapStretches, liveLapWeather, liveDist, ...base } = r;
+    const { liveSplits, liveLaps, liveLapStretches, liveLapWeather, ...base } = r;
     const run = {
       ...base,
       status: "done",
@@ -1013,7 +916,6 @@ export function createGame({ db, settings, hub, log = console.log }) {
     const ended = { run, isPersonalBest, ...(rank ? { rank } : {}), coach, stretches };
     if (run.side) ended.duel = duelResult(run, time, recordBefore, rank);
     hub.toPhone(r.playerId, "run.ended", ended);
-    pushHeat(run.id);
     pushPaddock();
     pushPlayer(r.playerId);
     if (isPersonalBest) {
@@ -1126,11 +1028,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
   function patchConfig(next) {
     if (next.track !== config.track && session.status === "running")
       throw new ApiError("track_locked", "End the session before changing the track", 409);
-    if (next.mode !== config.mode && session.status === "running")
-      throw new ApiError("mode_locked", "End the session before changing the mode", 409);
-    const modeChanged = next.mode !== config.mode;
     config = next;
-    if (modeChanged) closeLine(`mode is now ${config.mode}`);
     hub.toPhones("config.updated", config);
     hub.toAdmins("config.updated", config);
     hub.toGame("config.updated", config);
@@ -1230,13 +1128,11 @@ export function createGame({ db, settings, hub, log = console.log }) {
     // runs
     launch,
     boost,
-    stop,
-    watch,
     push,
     abortRun,
     abortAllRuns,
     onGameMessage,
-    // duel
+    // the line
     leaveLine,
     gameChanged,
     queueState,
@@ -1250,6 +1146,7 @@ export function createGame({ db, settings, hub, log = console.log }) {
     close() {
       clearInterval(capTimer);
       clearTimeout(fillTimer);
+      clearTimeout(splitTimer);
       clearTimeout(endTimer);
       clearTimeout(rosterTimer);
       clearTimeout(paddockTimer);

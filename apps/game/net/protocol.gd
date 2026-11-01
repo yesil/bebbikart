@@ -24,14 +24,10 @@ const ERROR_CODES = [
 	"player_exists",
 	"server_full",
 	"run_in_progress",
-	"cooldown",
 	"session_not_running",
 	"not_ready",
-	"game_offline",
 	"reroll_limit",
 	"track_locked",
-	"track_changing",
-	"mode_locked",
 	"in_line"
 ]
 const FAIL_REASONS = [
@@ -58,10 +54,6 @@ const FORK_IDS = [
 	"pond",
 	"ramp",
 	"crossing"
-]
-const GAME_MODES = [
-	"race",
-	"duel"
 ]
 const GHOST_HZ = 10
 const ID_PREFIXES = {
@@ -349,13 +341,12 @@ const DEFAULT_CONFIG = {
 	"boostsPerRun": 3,
 	"runTimeCapMs": 90000,
 	"stuckTimeoutMs": 3000,
-	"launchCooldownMs": 2000,
 	"startCountdownMs": 3000,
 	"track": "countryside",
 	"lapsPerRun": 3,
 	"language": "en",
-	"mode": "race",
 	"duelResultMs": 5000,
+	"splitHoldMs": 30000,
 	"weather": {
 		"rain": {
 			"minCalmMs": 20000,
@@ -396,8 +387,6 @@ const MSG_PHONE_TO_SERVER = [
 	"hello",
 	"phone.go",
 	"phone.boost",
-	"phone.stop",
-	"phone.watch",
 	"phone.push",
 	"phone.queue.leave"
 ]
@@ -417,8 +406,7 @@ const MSG_GAME_TO_SERVER = [
 	"game.capacity",
 	"game.config.set",
 	"game.session.start",
-	"game.session.end",
-	"game.camera"
+	"game.session.end"
 ]
 const MSG_SERVER_TO_PHONE = [
 	"leaderboard.updated",
@@ -432,14 +420,11 @@ const MSG_SERVER_TO_PHONE = [
 	"run.queued",
 	"run.grid",
 	"paddock.updated",
-	"grid.updated",
 	"run.started",
 	"run.progress",
 	"run.lap",
 	"run.section",
 	"run.ended",
-	"run.heat",
-	"camera.updated",
 	"queue.updated"
 ]
 const MSG_SERVER_TO_ADMIN = [
@@ -462,8 +447,6 @@ const MSG_SERVER_TO_GAME = [
 	"roster.updated",
 	"run.start",
 	"run.boost",
-	"run.stop",
-	"run.watch",
 	"run.push",
 	"queue.updated",
 	"run.abort"

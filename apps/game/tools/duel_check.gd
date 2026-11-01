@@ -1,11 +1,14 @@
 extends SceneTree
-## Duel mode check (contracts §2i), headless: the mock players' line, the two halves and the
+## Line check (contracts §2i), headless: the mock players' line, the two halves and the
 ## champion, raced in the solo sim (own start lights, no collisions), with Push driven by the mock
-## players (§2g). Then the duel screen and HUD are built and driven for a few frames, split and
+## players (§2g). Each track is raced by one player alone, then by --players who stop coming
+## after --secs. Then the split screen and HUD are built and driven for a few frames, split and
 ## full screen, so a script error there shows up here and not first on the big screen.
 ##   godot --headless --path apps/game --script res://tools/duel_check.gd [-- --players=6 --secs=420 --track=village]
 ## Exits 1 if a rule is broken:
 ##  - never more than one run per half, never more than two on the track;
+##  - one player alone races full screen on the left; the screen splits only once two play, and
+##    goes whole again only splitHoldMs after the last lap, with nobody waiting;
 ##  - with both halves free the left one goes first;
 ##  - a half waits duelResultMs after a lap before its next run;
 ##  - the champion never launches while someone else waits;
@@ -39,6 +42,7 @@ func _init() -> void:
 	if args.has("track"):
 		tracks = [String(args["track"])]
 	for t in tracks:
+		_race(t, 1, 150.0, int(args.get("seed", "3")))
 		_race(t, int(args.get("players", "6")), float(args.get("secs", "420")), int(args.get("seed", "3")))
 	# The screen and HUD need the tree running: built on the first frame (_process).
 
@@ -51,16 +55,16 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 	var course = _course(track)
 	var config := Messages.default_config()
 	config["track"] = track
-	config["mode"] = "duel"
 	var sim := Sim.new(course, config, seed_)
 	sim.solo = true
 	sim.emit_messages = true
 	var net := MockNet.new(config, n_players, seed_)
 	net.course = course
 	net.sim = sim
-	net.duel = true
 	net.log_mode = "none"
 	var hold := float(config["duelResultMs"]) / 1000.0
+	var split_hold := maxf(float(config["splitHoldMs"]), float(config["duelResultMs"])) / 1000.0
+	var tail_max := 600.0  # after secs nobody comes back: the line empties, then the hold
 	var loop: bool = course.get("loop") == true
 	var side_of := {}            # runId -> side
 	var on_side := {"left": "", "right": ""}
@@ -74,10 +78,20 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 	var overlap_s := 0.0
 	var staggered := 0           # second-half starts while the other half was already racing
 	var last_queue := {}
+	var was_split := false
+	var split_on_at := -1.0
+	var split_off_at := -1.0
+	var last_lap_at := -INF
 	var t := 0.0
 	var dt := 1.0 / float(Protocol.SIM_TICK_HZ)
-	while t < secs:
+	while t < secs + tail_max:
+		if t >= secs and net.line.is_empty() and sim.active_count() == 0 and t - last_lap_at > split_hold + 5.0:
+			break
 		t += dt
+		if t >= secs:  # everyone goes home: whoever is in the line still races
+			for p in net.players:
+				if p["status"] != "racing":
+					p["wait"] = INF
 		var champ_before: Dictionary = net._champion()
 		var line_before: Array = net.line.duplicate()
 		for msg in net.poll(dt, 0):
@@ -94,6 +108,8 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 						problems.append("%s: %s started on the %s half while %s still races there" % [track, rid, side, on_side[side]])
 					if side == "right" and on_side["left"] == "" and t - freed_at["left"] >= hold:
 						problems.append("%s: the right half went first while the left one was free" % track)
+					if side == "right" and not net.split:
+						problems.append("%s: a run on the right half while the screen is whole" % track)
 					if t - freed_at[side] < hold - dt * 2.0:
 						problems.append("%s: the %s half took its next run %.2f s after a lap (hold %.1f s)" % [track, side, t - freed_at[side], hold])
 					if not champ_before.is_empty() and pl["playerId"] == champ_before["playerId"] and line_before.size() > 1:
@@ -114,8 +130,21 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 					sim.push(pl["runId"], bool(pl["on"]))
 				Messages.QUEUE_UPDATED:
 					last_queue = pl
+					var now_split := bool(pl["split"])
+					if now_split and not was_split:
+						if net._playing() < 2:
+							problems.append("%s: the screen split with %d playing" % [track, net._playing()])
+						if split_on_at < 0.0:
+							split_on_at = t
+					if was_split and not now_split:
+						if net._playing() > 0:
+							problems.append("%s: the screen went whole with %d still playing" % [track, net._playing()])
+						if t - last_lap_at < split_hold - dt * 2.0:
+							problems.append("%s: the screen went whole %.1f s after the last lap (hold %.0f s)" % [track, t - last_lap_at, split_hold])
+						split_off_at = t
+					was_split = now_split
 		sim.step()
-		if sim.racers.size() == 2:
+		if sim.racers.size() == 2 and t < secs:
 			overlap_s += dt
 		if sim.active_count() > 2:
 			problems.append("%s: %d runs on the track" % [track, sim.active_count()])
@@ -146,6 +175,7 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 					if side != "":
 						on_side[side] = ""
 						freed_at[side] = t
+					last_lap_at = t
 					net.send(type, p)
 				"sim.removed":
 					if p["outcome"] == "aborted":
@@ -160,14 +190,26 @@ func _race(track: String, n_players: int, secs: float, seed_: int) -> void:
 		problems.append("%s: champion %s, but the best lap was %d ms" % [track, JSON.stringify(champ), best])
 	if pushes == 0:
 		problems.append("%s: no Push from the mock players" % track)
-	if overlap_s < secs * 0.2:
-		problems.append("%s: the two halves raced together only %.0f s of %.0f s" % [track, overlap_s, secs])
-	if staggered == 0:
-		problems.append("%s: the halves never started at different times" % track)
+	if was_split or not net.line.is_empty() or sim.active_count() > 0:
+		problems.append("%s: %.0f s after everyone left the screen is still %s (%d in line, %d racing)" % [
+			track, t - secs, "split" if was_split else "whole", net.line.size(), sim.active_count()])
+	if n_players == 1:
+		if split_on_at >= 0.0:
+			problems.append("%s: one player alone, but the screen split" % track)
+		if finished + failed < 2:
+			problems.append("%s: one player alone raced only %d laps" % [track, finished + failed])
+	else:
+		if split_on_at < 0.0:
+			problems.append("%s: %d players, but the screen never split" % [track, n_players])
+		if overlap_s < secs * 0.2:
+			problems.append("%s: the two halves raced together only %.0f s of %.0f s" % [track, overlap_s, secs])
+		if staggered == 0:
+			problems.append("%s: the halves never started at different times" % track)
 	laps_ms.sort()
-	print("%-11s %d players, %.0f s: %d runs (%d finished, %d failed), lap median %.2f s, best %.2f s · both halves racing %.0f%% of the time, %d staggered starts · %.1f push changes per run · champion %s with %d tries" % [
-		track, n_players, secs, runs, finished, failed,
+	print("%-11s %d player%s, %.0f s + %.0f s going home: %d runs (%d finished, %d failed), lap median %.2f s, best %.2f s · split %s · both halves racing %.0f%% of the time, %d staggered starts · %.1f push changes per run · champion %s with %d tries" % [
+		track, n_players, "" if n_players == 1 else "s", secs, t - secs, runs, finished, failed,
 		(laps_ms[laps_ms.size() / 2] / 1000.0) if not laps_ms.is_empty() else 0.0, best / 1000.0,
+		("%.0f s to %.0f s" % [split_on_at, split_off_at]) if split_on_at >= 0.0 else "never",
 		100.0 * overlap_s / secs, staggered, float(pushes) / maxf(1.0, runs),
 		champ.get("nickname", "-"), int(champ.get("tries", 0))])
 
@@ -182,7 +224,6 @@ func _start_ui() -> void:
 		return
 	var course = _course("village")
 	var config := Messages.default_config()
-	config["mode"] = "duel"
 	var sim := Sim.new(course, config, 1)
 	sim.solo = true
 	var main := Node3D.new()

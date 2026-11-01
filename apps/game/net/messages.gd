@@ -13,15 +13,12 @@ const GAME_RUN_LAP := "game.run.lap"
 const GAME_RUN_FINISHED := "game.run.finished"
 const GAME_RUN_FAILED := "game.run.failed"
 const GAME_WEATHER := "game.weather"
-const GAME_CAMERA := "game.camera"
 # Server -> Game
 const RUN_START := "run.start"
 const RUN_BOOST := "run.boost"
-const RUN_STOP := "run.stop"
 const RUN_ABORT := "run.abort"
-const RUN_WATCH := "run.watch"
 const RUN_PUSH := "run.push"            # Push held down / let go on the phone (contracts §2g)
-const QUEUE_UPDATED := "queue.updated"  # duel mode: the line, the halves, the champion (§2i)
+const QUEUE_UPDATED := "queue.updated"  # the line, the halves, the champion (§2i)
 const ROSTER_UPDATED := "roster.updated"
 const WELCOME := "welcome"
 const SESSION_UPDATED := "session.updated"

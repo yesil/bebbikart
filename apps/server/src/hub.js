@@ -83,14 +83,6 @@ export function createHub({ settings, log = console.log }) {
             }
           } else if (type === "phone.boost") {
             game.boost(p.id, payload.runId);
-          } else if (type === "phone.stop") {
-            try {
-              game.stop(p.id, payload.runId);
-            } catch (err) {
-              sendError(ws, out, err.code ?? "bad_request", err.message, id);
-            }
-          } else if (type === "phone.watch") {
-            game.watch(p.id, payload.runId);
           } else if (type === "phone.push") {
             game.push(p.id, payload.runId, payload.on);
           } else if (type === "phone.queue.leave") {
@@ -140,8 +132,7 @@ export function createHub({ settings, log = console.log }) {
       });
       send(ws, "serverToPhone", "leaderboard.updated", game.leaderboard());
       send(ws, "serverToPhone", "paddock.updated", game.paddock());
-      if (game.config.mode === "duel")
-        send(ws, "serverToPhone", "queue.updated", game.queueState());
+      send(ws, "serverToPhone", "queue.updated", game.queueState());
     } else if (h.role === "game") {
       if (h.gameKey !== settings.gameKey) {
         ws.close(WS_CLOSE_UNAUTHORIZED, "bad game key");
@@ -164,7 +155,7 @@ export function createHub({ settings, log = console.log }) {
         roster: game.roster(),
         activeRuns: game.activeRunStarts(),
       });
-      if (game.config.mode === "duel") send(ws, "serverToGame", "queue.updated", game.queueState());
+      send(ws, "serverToGame", "queue.updated", game.queueState());
       game.gameChanged();
     } else if (h.role === "admin") {
       if (h.pin !== settings.adminPin) {
@@ -179,8 +170,7 @@ export function createHub({ settings, log = console.log }) {
         players: game.allPlayerViews(),
         weather: game.weather,
       });
-      if (game.config.mode === "duel")
-        send(ws, "serverToAdmin", "queue.updated", game.queueState());
+      send(ws, "serverToAdmin", "queue.updated", game.queueState());
     }
   }
 

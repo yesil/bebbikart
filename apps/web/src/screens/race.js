@@ -3,7 +3,7 @@ import { html } from "htm/preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
-import { Avatar, delta, GridCall, isLoop, secs, useGridCall } from "./common.js";
+import { Avatar, delta, isLoop, secs } from "./common.js";
 import { SetupCard } from "./setup-card.js";
 import { TrackMap } from "./track-map.js";
 
@@ -17,22 +17,15 @@ export function Run({ ctx }) {
     sections: {},
   };
   const [flash, setFlash] = useState(false);
-  const [pitting, setPitting] = useState(false);
-  const [asked, setAsked] = useState(false);
   const [pushing, setPushing] = useState(false);
   const pushOn = useRef(false);
-  // Duel run (contracts §2i): its half of the big screen; no pit in, no "Show me".
+  // Its half of the big screen (contracts §2i): one lap against the clock.
   const side = s.me.currentRun?.side;
   const loop = isLoop(s.me.currentRun?.track ?? s.config.track);
-  // The laps this run races (set when it was queued); never the config's, which may have changed.
-  const runLaps = s.me.currentRun?.lapsPerRun;
-  const lapsDone = live.laps ?? [];
-  const lastLap = lapsDone[lapsDone.length - 1];
   const started = s.me.currentRun?.status === "running" || live.elapsedMs > 0;
   const boostsLeft = live.boostsLeft ?? s.config.boostsPerRun;
   const lastSection = SECTION_IDS.filter((id) => live.sections?.[id]).pop();
   const last = lastSection ? live.sections[lastSection] : null;
-  const onCamera = !!live.runId && s.camera?.runId === live.runId;
   // The start countdown, in step with the lights on the big screen.
   const counting = !started && live.goAt !== undefined;
   const [, tick] = useState(0);
@@ -45,19 +38,6 @@ export function Run({ ctx }) {
   useEffect(() => {
     if (counting && left <= 0) navigator.vibrate?.(120);
   }, [counting, left <= 0]);
-
-  // On the big screen now: a little buzz, and "Show me" can be asked again after this shot.
-  useEffect(() => {
-    if (!onCamera) return;
-    navigator.vibrate?.([60, 40, 60]);
-    setAsked(false);
-  }, [onCamera]);
-  // A request the big screen never got to (a crowd, or the racer's run ended): ask again later.
-  useEffect(() => {
-    if (!asked) return;
-    const t = setTimeout(() => setAsked(false), 20000);
-    return () => clearTimeout(t);
-  }, [asked]);
 
   /**
    * Push (contracts §2g): on while the thumb is down, off when it comes up, slides off or the
@@ -89,50 +69,13 @@ export function Run({ ctx }) {
     setTimeout(() => setFlash(false), 180);
   }
 
-  function showMe() {
-    if (!started || !live.runId || onCamera || asked) return;
-    send("phone.watch", { runId: live.runId });
-    setAsked(true);
-  }
-
-  function pitIn() {
-    if (!live.runId || pitting) return;
-    send("phone.stop", { runId: live.runId });
-    setPitting(true);
-  }
-
   return html`
     <div class="run">
       ${side ? html`<div class=${`side-badge side-${side}`}>${COPY.duel.side[side]}</div>` : null}
-      ${
-        loop && started
-          ? html`<div class="lap-head">
-              <span>${
-                runLaps
-                  ? COPY.run.lap(Math.min(live.lap ?? lapsDone.length + 1, runLaps), runLaps)
-                  : html`<b class="bad">${COPY.run.lapsMissing}</b>`
-              }</span>
-              <span class="muted">${secs(live.elapsedMs)}</span>
-            </div>`
-          : null
-      }
       ${counting ? html`<div class="get-ready">${COPY.run.getReady}</div>` : null}
-      ${
-        started && live.place && live.of > 1
-          ? html`<div class=${`live-place p${Math.min(live.place, 4)}`}>${COPY.run.place(live.place, live.of)}</div>`
-          : null
-      }
       <div class=${`timer ${counting ? `count ${left > 0 ? "" : "go"}` : ""}`}>
         ${started ? secs(loop ? (live.lapMs ?? live.elapsedMs) : live.elapsedMs) : counting ? (left > 0 ? left : COPY.run.go) : COPY.run.queued}
       </div>
-      ${
-        loop && lastLap
-          ? html`<div class=${`lap-result ${lastLap.isLapBest ? "good" : lastLap.deltaVsBestLapMs > 0 ? "bad" : ""}`}>
-              ${lastLap.isLapBest ? COPY.run.bestLap : COPY.run.lastLap} ${secs(lastLap.lapMs)}
-              ${lastLap.deltaVsBestLapMs !== undefined ? html` (${delta(lastLap.deltaVsBestLapMs)})` : null}
-            </div>`
-          : null
-      }
       <div class="track">
         <div class="fill" style=${{ width: `${Math.round((live.progress ?? 0) * 100)}%` }}></div>
         ${SECTION_IDS.slice(1).map((id, i) => html`<i key=${id} class="tick" style=${{ left: `${((i + 1) / SECTION_IDS.length) * 100}%` }}></i>`)}
@@ -170,20 +113,6 @@ export function Run({ ctx }) {
         </button>
       </div>
       <p class="hint center">${COPY.run.pushHint}</p>
-      ${
-        loop && started && !side
-          ? html`<button class="ghost pit" disabled=${pitting} onClick=${pitIn}>
-              ${pitting ? COPY.run.pitting : COPY.run.pitIn}
-            </button>`
-          : null
-      }
-      ${
-        side
-          ? null
-          : html`<button class=${`ghost watch ${onCamera ? "on" : ""}`} disabled=${!started || onCamera || asked} onClick=${showMe}>
-              ${onCamera ? COPY.run.onScreen : asked ? COPY.run.showMeAsked : COPY.run.showMe}
-            </button>`
-      }
     </div>
   `;
 }
@@ -195,12 +124,9 @@ export function Result({ ctx }) {
   const ok = run.outcome === "finished";
   const mood = r.isPersonalBest ? "excited" : ok ? "happy" : "sad";
   const loop = isLoop(run.track);
-  const laps = run.laps ?? [];
-  const gridLeft = useGridCall(s);
   const [sel, setSel] = useState(null); // the stretch tapped on the map (its row lights up)
   const see = seeWhy(r, s.me?.id);
   const [peek, setPeek] = useState(false); // the faster racer's setup card is open
-  const duel = !!run.side; // a duel lap (contracts §2i): judged against the crown, no heat
   const duelLine = r.duel ? duelVerdict(r.duel, run, s.me?.nickname) : null;
 
   async function again() {
@@ -230,7 +156,6 @@ export function Result({ ctx }) {
       ${duelLine ? html`<p class=${`duel-verdict ${r.duel.newChampion ? "crown" : ""}`}>${duelLine}</p>` : null}
       ${r.rank ? html`<p class="muted">${COPY.garage.rank} #${r.rank}</p>` : null}
     </div>
-    ${s.heat && !duel ? html`<${HeatCard} s=${s} />` : null}
     ${r.coach ? html`<section class="card coach">💡 ${r.coach.text}</section>` : null}
     ${
       r.stretches?.length || run.failStretch
@@ -242,16 +167,6 @@ export function Result({ ctx }) {
               <p class="hint center">${COPY.map.tapHint}</p>
             </section>
             <${Stretches} r=${r} see=${see} sel=${sel} onPeek=${() => setPeek(true)} />`
-        : null
-    }
-    ${
-      loop && laps.length
-        ? html`<section class="card">
-            <h2>${COPY.result.laps}</h2>
-            <ol class="laps">
-              ${laps.map((l, i) => html`<li key=${i} class=${l === run.bestLapMs ? "best" : ""}>${secs(l)}</li>`)}
-            </ol>
-          </section>`
         : null
     }
     ${
@@ -271,11 +186,8 @@ export function Result({ ctx }) {
     }
     <div class="go-bar-space" aria-hidden="true"></div>
     <div class="go-bar two">
-      ${gridLeft && !duel ? html`<div class="span2"><${GridCall} s=${s} left=${gridLeft} /></div>` : null}
       <button class="ghost" onClick=${() => dispatch({ type: "clearResult", coach: r.coach })}>${COPY.result.change}</button>
-      <button class="go small" onClick=${again}>${
-        s.config.mode === "duel" ? COPY.duel.join : gridLeft ? COPY.grid.join : COPY.result.again
-      }</button>
+      <button class="go small" onClick=${again}>${COPY.duel.join}</button>
     </div>
   `;
 }
@@ -406,31 +318,6 @@ function Stretches({ r, see, sel, onPeek }) {
         }
       </ol>
       <p class="hint">${COPY.result.vsYourBest}</p>
-    </section>
-  `;
-}
-
-/** Everyone who left the start with me: places as they come home, mine highlighted. */
-function HeatCard({ s }) {
-  const h = s.heat;
-  const mine = h.entries.find((e) => e.playerId === s.me.id);
-  const racing = h.entries.filter((e) => !e.outcome).length;
-  return html`
-    <section class="card heat">
-      <h2>
-        ${COPY.result.thisRace}${mine?.place ? html` · <b>${COPY.result.place(mine.place, h.entries.length)}</b>` : null}
-      </h2>
-      <ol class="board">
-        ${h.entries.map(
-          (e) => html`<li key=${e.playerId} class=${e.playerId === s.me.id ? "mine" : ""}>
-            <span class="rank">${e.place ?? ""}</span>
-            ${e.avatarUrl ? html`<img src=${e.avatarUrl} alt="" />` : html`<span class="ph">🏎️</span>`}
-            <span class="who"><b>${e.nickname}</b></span>
-            <span class="time">${e.timeMs !== undefined ? secs(e.timeMs) : e.outcome ? COPY.result.oops : COPY.result.racing}</span>
-          </li>`,
-        )}
-      </ol>
-      ${racing ? html`<p class="muted center">${COPY.result.stillRacing(racing)}</p>` : null}
     </section>
   `;
 }

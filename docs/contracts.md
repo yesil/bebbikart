@@ -29,13 +29,12 @@ export const DEFAULT_CONFIG = {
   boostsPerRun: 3,
   runTimeCapMs: 90_000,
   stuckTimeoutMs: 3_000,
-  launchCooldownMs: 2_000, // after a run ends, before the same racer can launch again
   startCountdownMs: 3_000, // race start countdown (§2c); 0 = each racer leaves as soon as there is room
   track: "countryside", // TrackId; changes only while no session is running (409 track_locked)
-  lapsPerRun: 3, // loop tracks: a run ends after this many laps, or earlier on "Pit in"
+  lapsPerRun: 3, // the game's tools without a server; the server's runs race one lap (§2i)
   language: "en", // Language; set on the big screen, every phone follows it (§2b)
-  mode: "race", // GameMode: "race" (free races) or "duel" (§2i); changes only while no session is running (mode_locked)
-  duelResultMs: 5_000, // duel: how long a half shows its racer's result before the next in line starts there
+  duelResultMs: 5_000, // how long a half shows its racer's result before the next in line starts there (§2i)
+  splitHoldMs: 30_000, // the split screen stays this long after a lap while nobody else plays (§2i)
   weather: {
     rain: { minCalmMs: 20_000, maxCalmMs: 90_000, minMs: 6_000, maxMs: 15_000, warningMs: 5_000 },
     wind: {
@@ -57,7 +56,7 @@ export const DEFAULT_CONFIG = {
 The game manager picks the session's **track** in config (`track`) from the options menu on the big screen (`game.config.set`, §7). Both tracks have the same four sections and the same three forks, so builds, splits and coach tips mean the same on either.
 
 - `countryside` is point to point: a run is one trip from start to finish, and `elapsedMs` ranks.
-- `village` is a **loop** (in `LOOP_TRACKS`): the racer crosses the line and keeps going. Each crossing books a lap (`game.run.lap`). The run finishes after `lapsPerRun` laps, or at the next crossing after the player taps **Pit in** (`phone.stop` → `run.stop`). The player's **best lap** ranks: `Player.bestTimeMs` and `LeaderboardEntry.bestTimeMs` hold the best lap, `run.splits` and the ghost trace are the best lap's, and `runTimeCapMs` applies per lap. A run that fails after completing laps still reports them (`laps`, `bestLapMs`), and those laps count.
+- `village` is a **loop** (in `LOOP_TRACKS`): the racer crosses the line and keeps going. Each crossing books a lap (`game.run.lap`). A run is one lap (`lapsPerRun: 1` on `run.start`, §2i); the game races the laps `run.start` says, so the protocol still carries `laps` and `bestLapMs`. The player's **best lap** ranks: `Player.bestTimeMs` and `LeaderboardEntry.bestTimeMs` hold the best lap, `run.splits` and the ghost trace are the best lap's, and `runTimeCapMs` applies per lap. A run that fails after completing laps still reports them (`laps`, `bestLapMs`), and those laps count.
 - `track` can't change while a session is running (the leaderboard is per session). `PATCH /api/admin/config` with a new track during a session → 409 `track_locked`. The game loads the matching world on `config.updated`, and refuses (logs an error and shows it on the big screen) a track it doesn't have.
 
 ## 2b. Language
@@ -70,19 +69,12 @@ The game manager picks the **language** (`language`: `"en"` English or `"de"` Ge
 
 ## 2c. Race start (countdown)
 
-Kids in a group press Go a few seconds apart; the countdown makes them race each other. When a run
-reaches the game and no countdown is open, the game opens one of `startCountdownMs`: the big screen
-shows the lights (3, 2, 1, GO) and the racers lined up, and every run that arrives before the lights
-go green joins it. The game sends `game.run.grid { runId, goInMs }` for each run as it joins; the
-server relays it to that racer's phone as `run.grid`, which counts down too. At green the group
-leaves together (`game.run.started` each): side by side in the four start slots, a second row as
-soon as the first has pulled away. A run that arrives after green opens the next countdown. With
-`startCountdownMs: 0` there is no countdown and no `game.run.grid`. Run times start when the racer
-leaves, so waiting on the grid never costs time.
-
-Every phone also hears `grid.updated { goInMs, racers: [{ playerId, nickname }] }` each time a run
-joins the open countdown, so friends still in the garage or on the result screen see "Mia is on the
-grid! Join the race: 2" and can press Go to join that start.
+Each run gets its own start lights in its half of the big screen (§2i). When a run reaches the
+game, it parks on the start line and the lights count down `startCountdownMs` (3, 2, 1, GO). The
+game sends `game.run.grid { runId, goInMs }`; the server relays it to that racer's phone as
+`run.grid`, which counts down too. At green the racer leaves (`game.run.started`). A run never
+waits for another one. With `startCountdownMs: 0` there is no countdown and no `game.run.grid`.
+Run times start when the racer leaves, so waiting on the grid never costs time.
 
 ## 2d. Stretches ("see why")
 
@@ -169,35 +161,33 @@ server stores `routes: routesFor(stars)` on the `Build`, so the game, setups (§
 read `build.routes` as before. The garage says which way the stars take ("6 water stars: you
 splash through the ford", "2 more jump stars and you take the kicker").
 
-## 2i. Duel mode (king of the hill)
+## 2i. The line (king of the hill)
 
-`config.mode` is `"race"` (free races: everything above, unchanged) or `"duel"`. The game manager
-picks it in the big screen's options menu like the track (`game.config.set { mode }`); it can't
-change while a session is running (`mode_locked`). In a duel the session's fastest racer is the
-**champion** and rests while their time stands; everyone else takes turns in a **line** to beat
-it, one lap each, against the clock.
+There is one way to race: against the clock, two at a time, in turns. The session's fastest
+racer is the **champion** and rests while their time stands; everyone else takes turns in a
+**line** to beat it, one lap each.
 
 - **The champion** is rank 1 on the leaderboard (best time; on a loop, best lap; ties to the
   first, rule 12). Nobody holds the title until the first finished lap of the session.
-- **The line.** In duel mode Go (`phone.go`, `POST …/runs`) joins the line instead of launching:
-  `queue.updated` shows the player at the back. `phone.queue.leave {}` (and Quit) leaves it. A
-  player can't join twice (`in_line`), nor while racing (`run_in_progress`). After a lap the
-  racer is out of the line and presses Go again to rejoin; nobody is put back automatically.
-  Stars can change at any time; a run uses the build saved when it is launched.
+- **The line.** Go (`phone.go`, `POST …/runs`) joins the line: `queue.updated` shows the player
+  at the back. `phone.queue.leave {}` (and Quit) leaves it. A player can't join twice (`in_line`),
+  nor while racing (`run_in_progress`). After a lap the racer is out of the line and presses Go
+  again to rejoin; nobody is put back automatically. Stars can change at any time (also while
+  waiting); a run uses the build saved when it is launched.
 - **The champion rests.** The champion may join, but always waits behind everyone else: they are
   launched only when nobody else is waiting, and anyone who joins later goes ahead of them. A
   dethroned champion is an ordinary racer again.
 - **Two halves.** The big screen has a `left` and a `right` half, each running one racer at a
   time. As soon as a half is free the server launches the first in line there (no press needed):
   `run.start` carries `side`, `Run.side` keeps it, and the phone says "You're on the left, in
-  red" (left red, right blue). Both halves free: left first. When a run ends its half shows the
-  result for `duelResultMs`, then takes the next in line. The halves start at different times.
-- **One lap.** Duel runs race one lap on a loop track (`lapsPerRun: 1` on `run.start`); the point
-  to point track is one trip anyway. Pit in is hidden.
-- **Against the clock, not each other.** Collisions are off in a duel: the two karts pass through
-  each other (no `bumped` events). Each run gets its own start lights in its half (§2c: a duel run
-  never joins another run's countdown; `run.grid` still counts it down on the phone). Weather
-  stays shared and random.
+  red" (left red, right blue). Both halves free: left first. While the screen isn't split only
+  the left half is used. When a run ends its half shows the result for `duelResultMs`, then
+  takes the next in line. The halves start at different times.
+- **One lap.** Runs race one lap on a loop track (`lapsPerRun: 1` on `run.start`); the point to
+  point track is one trip anyway.
+- **Against the clock, not each other.** Collisions are off: the two karts pass through each
+  other (no `bumped` events). Each run gets its own start lights in its half (§2c; `run.grid`
+  counts it down on the phone). Weather stays shared and random.
 - **Judging.** A lap is judged against the record as it stands when the lap ends: faster than the
   champion's time takes the title (`run.ended.duel.newChampion`); a failed lap has no time. The
   phone shows "New champion!" or "0.8 s short of Mia" (`duel.gapMs`, `duel.recordNickname`).
@@ -205,20 +195,22 @@ it, one lap each, against the clock.
   line and listed in `queue.updated.skipped` until they join again (the phone shows "Your phone
   was offline at your turn"). Facilitator-managed racers (no device) are never skipped.
 - **Waiting game.** The server launches only while the session is running, the game is online and
-  on the right track; otherwise the line holds. At session end the line closes (`queue.updated`
-  empty), runs on track finish, and the podium shows as usual.
-- **Screen layout.** `queue.updated.split` is true when the session has 2 or more racers (status
-  ready); the game then splits the screen vertically, an idle half showing who is next. With one
-  racer the game gives that racer the full screen. The picture-in-picture, the camera director's
-  cuts, "Show me on the big screen" and the "Join the race!" grid call are off in duel mode.
+  on the right track (`hello.track`); otherwise the line holds. At session end the line closes
+  (`queue.updated` empty), runs on track finish, and the podium shows as usual.
+- **Screen layout.** A person **plays** while they race in a half, wait in the line, or are back
+  in the garage less than `splitHoldMs` after their lap (setting their stars for the next one).
+  `queue.updated.split` turns on as soon as two people play (a second one joins the line), and
+  stays on while anyone plays; it turns off only when nobody has played for `splitHoldMs`. Split,
+  the game cuts the screen vertically, an idle half showing who is next. Not split, the one
+  racer has the whole screen; nobody playing, the big screen shows the course.
 
 ```ts
 interface QueueState {
   // queue.updated, to phones, admin and game: right after welcome and on every change
   line: { playerId: string; nickname: string }[]; // waiting, in launch order (the champion last)
   racing: { side: Side; playerId: string; nickname: string; runId: string }[]; // on track or on the grid
-  champion?: { playerId: string; nickname: string; timeMs: number; tries: number }; // tries: duel laps by others since the record was set
-  split: boolean; // 2+ racers in the session
+  champion?: { playerId: string; nickname: string; timeMs: number; tries: number }; // tries: laps by others since the record was set
+  split: boolean; // two people play (see Screen layout); stays on while anyone does
   skipped: string[]; // playerIds taken out of the line because their phone was offline at their turn
 }
 type Side = "left" | "right";
@@ -228,8 +220,7 @@ type Side = "left" | "right";
 
 ```ts
 type Ability = "speed" | "jump" | "grip" | "water" | "stability" | "bounce";
-type GameMode = "race" | "duel"; // GAME_MODES, see §2i
-type Side = "left" | "right"; // SIDES: the halves of the big screen in a duel (§2i)
+type Side = "left" | "right"; // SIDES: the halves of the big screen (§2i)
 type TrackId = "countryside" | "village"; // village is a loop (LOOP_TRACKS), see §2a
 type Language = "en" | "de"; // LANGUAGES, see §2b
 type SectionId = "hills" | "pond" | "crossing" | "bends"; // timed sections, in course order (both tracks)
@@ -329,8 +320,8 @@ interface Run {
   endedAt?: string;
   elapsedMs?: number; // sim time, finished runs only
   track?: TrackId; // set by the server when the run is queued
-  lapsPerRun?: number; // loop tracks: the laps this run races (config.lapsPerRun when queued; 1 in a duel); the big screen and the phone show and race this
-  side?: Side; // duel runs: the half of the big screen it races in (§2i)
+  lapsPerRun?: number; // loop tracks: the laps this run races (1, §2i); the big screen and the phone race this
+  side?: Side; // the half of the big screen it races in (§2i); runs saved before halves have none
   laps?: number[]; // loop tracks: every completed lap (ms), in order
   bestLapMs?: number; // loop tracks: fastest of laps; this ranks
   splits?: Partial<Record<SectionId, number>>; // ms spent in each section (loop tracks: of the best lap)
@@ -495,8 +486,8 @@ Phone auth: the server sets an httpOnly cookie `bk_device` on `POST /api/device`
 | `POST /api/players/me/reroll`                               | – → `AssetJob`                                                                   | "Try another look": DeepSeek designs a new interpretation. Max 3 per player.                                                                    |
 | `POST /api/players/me/drawings`                             | multipart `character`, `vehicle` (JPEG/PNG/HEIC/WebP, ≤ 15 MB each) → `AssetJob` | Starts or replaces the asset job. Both files required.                                                                                          |
 | `PUT /api/players/me/build`                                 | `{ stars }` → `Build`                                                            | 400 `invalid_build` if the star rules fail. The server adds `routes` (§2h); other fields are ignored. |
-| `POST /api/players/me/runs`                                 | – → `Run` (status `queued`); duel mode: → `QueueState` (202)                      | Uses the latest build. 409 `run_in_progress`, `cooldown`, `session_not_running`, `not_ready`; 400 `invalid_build` if that build breaks the star rules. Duel mode (§2i): joins the line instead; 409 `in_line` when already in it. |
-| `DELETE /api/players/me/queue`                              | – → `QueueState`                                                                 | Duel mode: leave the line (same as `phone.queue.leave`).                                                                                        |
+| `POST /api/players/me/runs`                                 | – → `QueueState` (202)                                                           | Go: joins the line (§2i); a free half launches the racer with their latest build. 409 `in_line` when already in it, `run_in_progress`, `session_not_running`, `not_ready`; 400 `invalid_build` if that build breaks the star rules. |
+| `DELETE /api/players/me/queue`                              | – → `QueueState`                                                                 | Leave the line (same as `phone.queue.leave`).                                                                                                   |
 | `POST /api/players/me/runs/current/boost`                   | – → `{ ok }`                                                                     | REST fallback; the phone normally sends `phone.boost` over WS.                                                                                  |
 | `GET /api/leaderboard`                                      | → `LeaderboardEntry[]`                                                           |                                                                                                                                                 |
 | `GET /api/players/me/runs?limit=10`                         | → `Run[]`                                                                        | History for the phone.                                                                                                                          |
@@ -558,19 +549,17 @@ interface Envelope<T extends string, P> {
 | Role    | `hello` payload                                    | Who                                                                |
 | ------- | -------------------------------------------------- | ------------------------------------------------------------------ |
 | `phone` | `{ role: "phone" }` (cookie identifies the device) | Phone app                                                          |
-| `game`  | `{ role: "game", gameKey, track? }` (`BK_GAME_KEY` env) | Big-screen game. **Exactly one**; a second one replaces the first. `track` = the course it has loaded: while it differs from `config.track` (the game reloads the new world once its track is empty), Go is refused with `track_changing`. |
+| `game`  | `{ role: "game", gameKey, track? }` (`BK_GAME_KEY` env) | Big-screen game. **Exactly one**; a second one replaces the first. `track` = the course it has loaded: while it differs from `config.track` (the game reloads the new world once its track is empty), the line holds (§2i). |
 | `admin` | `{ role: "admin", pin }`                           | Facilitator console                                                |
 
 ### Phone → Server
 
 | type          | payload                     |
 | ------------- | --------------------------- |
-| `phone.go`    | `{}`, same as `POST …/runs` |
+| `phone.go`    | `{}`, same as `POST …/runs`: join the line (§2i) |
 | `phone.boost` | `{ runId }`                 |
-| `phone.stop`  | `{ runId }`, loop tracks: "Pit in", finish at the next line crossing |
-| `phone.watch` | `{ runId }`, "Show me on the big screen": the camera cuts to this racer soon (see Camera below) |
 | `phone.push`  | `{ runId, on }`, Push held down (`on: true`) or let go (§2g) |
-| `phone.queue.leave` | `{}`, duel mode: leave the line (§2i) |
+| `phone.queue.leave` | `{}`, leave the line (§2i) |
 
 ### Server → Phone
 
@@ -580,20 +569,17 @@ interface Envelope<T extends string, P> {
 | `player.updated`             | `PlayerView`                                                                                   | Any change to this player (job progress, build, best) |
 | `player.removed`             | `{ playerId }`                                                                                 | The player quit or the admin removed them: back to the join screen |
 | `run.queued` / `run.started` | `{ run }`                                                                                      |                                                       |
-| `run.grid`                   | `{ runId, goInMs }`                                                                            | On the start grid: the lights go green in goInMs (§2c) |
-| `run.heat`                   | `{ heatId, done, entries: HeatEntry[] }`                                                       | A heat-mate's run ended (see "Heats" below)           |
-| `grid.updated`               | `{ goInMs, racers: [{ playerId, nickname }] }`                                                 | To every phone: a run joined the open countdown (§2c) |
+| `run.grid`                   | `{ runId, goInMs }`                                                                            | On the start line of its half: the lights go green in goInMs (§2c) |
 | `paddock.updated`            | `PaddockEntry[]`                                                                               | Everyone in the session (see "Paddock" below)         |
-| `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs?, place?, of? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1; `place` of `of` = position right now in its heat (racers home first, then by distance) |
+| `run.progress`               | `{ runId, progress: 0..1, elapsedMs, section: SectionId, deltaVsBestMs?: number, boostsLeft, lap?, lapMs? }` | ≤ 5 Hz; on a loop `progress` is of the current lap, `lap` counts from 1 |
 | `run.lap`                    | `{ runId, lap, lapMs, isLapBest, deltaVsBestLapMs? }`                                          | Loop tracks: each line crossing; `isLapBest` = the player's fastest lap this session |
 | `run.section`                | `{ runId, section, splitMs, bestSplitMs? }`                                                    | Each section line crossed                             |
-| `run.ended`                  | `{ run, isPersonalBest, rank?, coach: CoachTip, stretches: StretchResult[], duel? }`           | Finish or fail (stretches §2d; empty when aborted). Duel runs: `duel: { newChampion, gapMs?, recordNickname? }`, `gapMs` = this lap minus the record it was judged against (positive = slower; absent without a time or a record) |
-| `queue.updated`              | `QueueState`                                                                                   | Duel mode (§2i): right after welcome and on every change of the line, the halves or the champion |
+| `run.ended`                  | `{ run, isPersonalBest, rank?, coach: CoachTip, stretches: StretchResult[], duel? }`           | Finish or fail (stretches §2d; empty when aborted). `duel: { newChampion, gapMs?, recordNickname? }` (§2i), `gapMs` = this lap minus the record it was judged against (positive = slower; absent without a time or a record) |
+| `queue.updated`              | `QueueState`                                                                                   | Right after welcome and on every change of the line, the halves, the split or the champion (§2i) |
 | `leaderboard.updated`        | `LeaderboardEntry[]` (top 20)                                                                  |                                                       |
 | `session.updated`            | `Session`                                                                                      |                                                       |
 | `weather.updated`            | `WeatherState`                                                                                 | Every phase change (incl. `warning`)                  |
 | `config.updated`             | config                                                                                         |                                                       |
-| `camera.updated`             | `{ playerId?, runId? }`: the racer the big-screen camera follows now; empty when nobody         | Every camera cut (relayed `game.camera`)              |
 | `error`                      | `{ code, message, refId? }`                                                                    |                                                       |
 
 ### Paddock
@@ -614,27 +600,6 @@ interface PaddockEntry {
 }
 ```
 
-### Heats
-
-Runs that left from the same start countdown (§2c; however many rows it took to release them),
-or, without a countdown, within 2.5 s of each other, are a **heat**: they raced each other. Each time one of them ends, the
-server sends every phone in the heat `run.heat`, so a kid who is home first watches the others
-come in; `done` is true once the last one is home. `heatId` is the heat's first run id. A heat of
-one sends nothing.
-
-```ts
-interface HeatEntry {
-  playerId: string;
-  nickname: string;
-  avatarUrl?: string;
-  place?: number; // by time among the heat's racers with a time (finish time, or best lap on a loop)
-  timeMs?: number;
-  outcome?: RunOutcome; // absent: still racing
-  failReason?: FailReason;
-}
-// entries: placed racers by place, then those still racing, then the ones out without a time.
-```
-
 ### Server → Admin
 
 Everything a phone gets that isn't about one player's run (`leaderboard.updated`, `session.updated`, `weather.updated`, `config.updated`, `error`), plus:
@@ -644,11 +609,11 @@ Everything a phone gets that isn't about one player's run (`leaderboard.updated`
 | `welcome` | `{ session, config, players: PlayerView[], weather }` | On connect |
 | `player.updated` | `PlayerView` | Any change to any player |
 | `player.removed` | `{ playerId }` | Player deleted |
-| `queue.updated` | `QueueState` | Duel mode (§2i), as for phones |
+| `queue.updated` | `QueueState` | As for phones (§2i) |
 
 ### Error codes
 
-`bad_request`, `bad_message`, `unauthorized`, `not_found`, `invalid_build`, `player_exists`, `server_full`, `run_in_progress`, `cooldown`, `session_not_running`, `not_ready`, `game_offline`, `reroll_limit`, `track_locked`, `track_changing`, `mode_locked` (mode changed during a session), `in_line` (duel: already in the line). REST errors use the body `{ error: { code, message } }`.
+`bad_request`, `bad_message`, `unauthorized`, `not_found`, `invalid_build`, `player_exists`, `server_full`, `run_in_progress`, `session_not_running`, `not_ready`, `reroll_limit`, `track_locked`, `in_line` (already in the line). REST errors use the body `{ error: { code, message } }`.
 
 ### Server → Game
 
@@ -658,10 +623,8 @@ Everything a phone gets that isn't about one player's run (`leaderboard.updated`
 | `roster.updated`                                             | `RosterEntry[]`                                                      | Player joins, leaves, connects, gets assets, renames |
 | `run.start`                                                  | `RunStart`                                                           | Server admitted a run                                |
 | `run.boost`                                                  | `{ runId }`                                                          | Phone tapped Boost                                   |
-| `run.stop`                                                   | `{ runId }`                                                          | Loop tracks: phone tapped Pit in                     |
-| `run.watch`                                                  | `{ runId }`                                                          | Phone tapped "Show me on the big screen"             |
 | `run.push`                                                   | `{ runId, on }`                                                      | Phone pressed or let go of Push (§2g); `on: false` also when that phone disconnects |
-| `queue.updated`                                              | `QueueState`                                                         | Duel mode (§2i): after welcome and on every change   |
+| `queue.updated`                                              | `QueueState`                                                         | After welcome and on every change (§2i)              |
 | `run.abort`                                                  | `{ runId, reason }`                                                  | Admin stop, player deleted                           |
 | `session.updated` / `config.updated` / `leaderboard.updated` | as above                                                             |                                                      |
 
@@ -683,7 +646,7 @@ interface RunStart {
   bestTrace?: GhostTrace;
   bestSplits?: Partial<Record<SectionId, number>>;
   lapsPerRun?: number; // loop tracks, required there: the laps to race (no default; the game refuses a loop run without it)
-  side?: Side; // duel mode, required there: the half it races in (§2i); its own start lights, no collisions
+  side: Side; // the half it races in (§2i): its own start lights, no collisions
 }
 ```
 
@@ -692,7 +655,7 @@ interface RunStart {
 | type                | payload                                                                                      |
 | ------------------- | -------------------------------------------------------------------------------------------- |
 | `game.run.started`  | `{ runId }` (racer crossed the start line)                                                   |
-| `game.run.grid`     | `{ runId, goInMs }`: the run joined the start countdown (§2c); relayed to its phone as `run.grid` |
+| `game.run.grid`     | `{ runId, goInMs }`: the run is on its start line, the lights count down (§2c); relayed to its phone as `run.grid` |
 | `game.run.progress` | `{ runId, progress, elapsedMs, section, boostsLeft, lap?, lapMs? }`, ≤ 5 Hz (lap fields on loops) |
 | `game.run.section`  | `{ runId, section, splitMs }`                                                                |
 | `game.run.lap`      | `{ runId, lap, lapMs, elapsedMs, splits, stretches, weatherSeen, isBest }`: loop tracks, each line crossing (`isBest` within this run; `stretches` this lap's, §2d) |
@@ -700,16 +663,15 @@ interface RunStart {
 | `game.run.failed`   | `{ runId, reason: FailReason, section, stretch, elapsedMs, splits, stretches, events, boostsUsed, weatherSeen, laps?, bestLapMs? }` |
 | `game.weather`      | `WeatherState` (on every phase change)                                                       |
 | `game.capacity`     | `{ freeSlots }` (if the game ever wants fewer than `maxConcurrentRuns`)                      |
-| `game.config.set`   | `{ track?, lapsPerRun?, sessionMinutes?, language?, mode? }`: game manager options (see below) |
+| `game.config.set`   | `{ track?, sessionMinutes?, language? }`: game manager options (see below) |
 | `game.session.end`  | `{}`: ends the running session                                                                |
 | `game.session.start`| `{}`: starts a session (`sessionMinutes`); after an ended one, a **new** session with an empty leaderboard |
-| `game.camera`       | `{ runId? }`: the run the big-screen camera follows now (every cut; no `runId` when the course is empty) |
 
-**Game options live on the big screen.** Phones are players: they join, race and quit (Pit in), and never set options. The game manager sets the track, laps, session length and language in the game's options menu, which sends the `game.config.*` / `game.session.*` messages above. The server answers with `config.updated` / `session.updated` to every client, or with `error { code, message, refId }` where `refId` is the refused message's `id` (`track_locked` when the track changes during a running session, `mode_locked` likewise for the mode, `bad_request` when starting a running session, `bad_message` for any other field). Switching track = `game.session.end`, `game.config.set { track }`, `game.session.start`, sent back to back. Racers stay; bests and ghosts don't carry over to the new session. The admin REST routes do the same for scripts.
+**Game options live on the big screen.** Phones are players: they join, race and quit, and never set options. The game manager sets the track and language, and ends or starts the session at any time, in the game's options menu, which sends the `game.config.*` / `game.session.*` messages above. The server answers with `config.updated` / `session.updated` to every client, or with `error { code, message, refId }` where `refId` is the refused message's `id` (`track_locked` when the track changes during a running session, `bad_request` when starting a running session, `bad_message` for any other field). Switching track = `game.session.end`, `game.config.set { track }`, `game.session.start`, sent back to back. Racers stay; bests and ghosts don't carry over to the new session. The admin REST routes do the same for scripts.
 
 The **game is the authority** for timing and outcomes. The server trusts these messages and records them.
 
-**Camera.** The big screen's camera director takes turns between the racers on the course (every 8 s by default, set in the game's options menu). A phone's `phone.watch` reaches the game as `run.watch` for the player's current run (ignored without one; a run parked on the start grid during the countdown counts); the game queues that racer for one of the next cuts, at most one cut every 3 s, so taps from several phones can't make the camera flicker. On every cut the game sends `game.camera`, and the server tells every phone with `camera.updated` (`playerId` added from the run), so the racer on camera can show "You're on the big screen!".
+**Camera.** Each half of the big screen has its own chase camera on its racer (§2i); an idle half shows the course.
 
 ## 8. Coach tips (`packages/shared/src/coach.js`)
 

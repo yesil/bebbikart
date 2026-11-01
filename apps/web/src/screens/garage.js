@@ -1,9 +1,9 @@
 import { ABILITIES, ROUTE_STARS, routesFor, starsLeft, TRACK_STRETCHES } from "@bebbikart/shared";
 import { html } from "htm/preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
-import { Avatar, GridCall, isLoop, Paddock, secs, useGridCall } from "./common.js";
+import { Avatar, isLoop, Paddock, secs } from "./common.js";
 import { SetupCard } from "./setup-card.js";
 import { TrackMap } from "./track-map.js";
 
@@ -17,17 +17,11 @@ export function Garage({ ctx }) {
   const cfg = s.config;
   const [build, setBuild] = useState(() => pick(me.build));
   const [saving, setSaving] = useState(false);
-  const [now, setNow] = useState(Date.now());
   const saveTimer = useRef(null);
   const left = starsLeft(build.stars, cfg);
   const dirty = !same(build, me.build);
   // Highlight the row the coach suggested after the last run.
   const hint = s.lastCoach?.ability;
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
 
   async function save(b) {
     if (starsLeft(b.stars, cfg) !== 0 || same(b, me.build)) return;
@@ -51,23 +45,17 @@ export function Garage({ ctx }) {
     change({ ...build, stars: { ...build.stars, [a]: n } });
   };
 
-  const duel = cfg.mode === "duel";
   const routes = routesFor(build.stars);
-  const gridLeft = useGridCall(s);
-  const cooldownLeft =
-    !duel && me.lastRun?.endedAt ? Date.parse(me.lastRun.endedAt) + cfg.launchCooldownMs - now : 0;
-  // Duel mode: my place in the line (1 = next), 0 when I'm not in it.
-  const place = duel ? (s.queue?.line ?? []).findIndex((e) => e.playerId === me.id) + 1 : 0;
+  // My place in the line (1 = next), 0 when I'm not in it.
+  const place = (s.queue?.line ?? []).findIndex((e) => e.playerId === me.id) + 1;
   const blocked =
     left !== 0
       ? COPY.garage.starsLeft(left)
       : s.session?.status !== "running"
         ? COPY.errors.session_not_running
-        : cooldownLeft > 0
-          ? `${COPY.errors.cooldown} ${Math.ceil(cooldownLeft / 1000)}`
-          : null;
+        : null;
 
-  /** Free race: launch. Duel: join the line (the server launches me when a half is free). */
+  /** Join the line: the server launches me when a half is free (contracts §2i). */
   async function go() {
     if (blocked) return;
     clearTimeout(saveTimer.current);
@@ -105,7 +93,7 @@ export function Garage({ ctx }) {
         : null
     }
 
-    ${duel ? html`<${DuelCard} s=${s} place=${place} />` : null}
+    <${DuelCard} s=${s} place=${place} />
     <${Paddock} s=${s} />
 
     <${WeatherStrip} weather=${s.weather} />
@@ -142,16 +130,8 @@ export function Garage({ ctx }) {
             <button class="ghost" onClick=${leaveLine}>${COPY.duel.leave}</button>
           </div>`
         : html`<div class="go-bar">
-            ${
-              blocked
-                ? html`<div class="muted small center">${blocked}</div>`
-                : duel
-                  ? null
-                  : html`<${GridCall} s=${s} left=${gridLeft} />`
-            }
-            <button class="go" disabled=${!!blocked || saving} onClick=${go}>
-              ${duel ? COPY.duel.join : gridLeft && !blocked ? COPY.grid.join : COPY.garage.go}
-            </button>
+            ${blocked ? html`<div class="muted small center">${blocked}</div>` : null}
+            <button class="go" disabled=${!!blocked || saving} onClick=${go}>${COPY.duel.join}</button>
           </div>`
     }
   `;

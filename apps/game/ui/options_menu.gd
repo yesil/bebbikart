@@ -1,25 +1,22 @@
-# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, camera, sound, language, track
-# and quit.
+# In-game options menu (Esc, or ⌘, on a Mac): fullscreen, graphics, sound, language, track,
+# the session and quit.
 # The game manager sets the game options here, on the big screen; phones only join and quit.
 # It does not pause the sim: in server mode phones keep racing while it is open.
 # In server mode a track change during a running session ends that session (fresh
-# leaderboard), so the first click asks for a second click to confirm.
+# leaderboard), and so does "End session" (any time); both ask for a second click to confirm.
 # Every string comes from ui/i18n.gd; main.gd rebuilds the menu when the language changes.
 extends CanvasLayer
 
 const AudioSettings = preload("res://audio/audio_settings.gd")
 const I18n = preload("res://ui/i18n.gd")
-const CameraDirector = preload("res://world/camera_director.gd")
-const CameraHud = preload("res://ui/camera_hud.gd")
 
 signal fullscreen_toggled
 signal track_chosen(id: String)
-signal mode_chosen(id: String)
+signal session_end_pressed
+signal session_start_pressed
 signal quit_pressed
 signal quality_chosen(id: String)
 signal language_chosen(id: String)
-signal cam_cycle_chosen(seconds: float)
-signal inset_chosen(id: String)
 
 const MAC := "macOS"
 const COL_W := 440.0         # a column's width for the wrapping notes
@@ -28,14 +25,11 @@ var _panel: PanelContainer
 var _fullscreen: CheckButton
 var _tracks := {}            # TrackId -> Button
 var _qualities := {}         # preset id -> Button
-var _cycles := {}            # seconds -> Button (camera switch interval)
-var _insets := {}            # inset id -> Button (second camera)
 var _volumes := {}           # audio bus -> HSlider
 var _track_note: Label
-var _modes := {}             # GameMode -> Button
-var _mode_note: Label
-var _current_mode := ""
-var _confirm_mode := ""      # mode waiting for its confirming second click
+var _session_btn: Button     # End session (running) or Start a new session
+var _session_note: Label
+var _confirm_end := false    # End session waiting for its confirming second click
 var _resume: Button
 var _current_track := ""
 var _server := false
@@ -43,9 +37,8 @@ var _session := "?"          # server session status (server mode)
 var _confirm := ""           # track waiting for its confirming second click
 
 
-func setup(current_track: String, server_mode: bool, current_mode := "race") -> void:
+func setup(current_track: String, server_mode: bool) -> void:
 	_current_track = current_track
-	_current_mode = current_mode
 	_server = server_mode
 	layer = 10
 	var dim := ColorRect.new()
@@ -107,38 +100,6 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 	_wrap(qnote)
 	left.add_child(qnote)
 
-	left.add_child(_label(I18n.t("menu.camera"), 20))
-	var cgrid := GridContainer.new()
-	cgrid.columns = 2
-	cgrid.add_theme_constant_override("h_separation", 16)
-	cgrid.add_theme_constant_override("v_separation", 8)
-	left.add_child(cgrid)
-	cgrid.add_child(_label(I18n.t("menu.cam_cycle"), 17))
-	var crow := HBoxContainer.new()
-	crow.add_theme_constant_override("separation", 6)
-	cgrid.add_child(crow)
-	var cgroup := ButtonGroup.new()
-	for s in CameraDirector.CYCLE_CHOICES:
-		var b := _choice(I18n.f("menu.cam_seconds", [int(s)]) if s > 0.0 else I18n.t("menu.cam_never"), cgroup, 62)
-		b.pressed.connect(func(): cam_cycle_chosen.emit(float(s)))
-		crow.add_child(b)
-		_cycles[float(s)] = b
-	cgrid.add_child(_label(I18n.t("menu.cam_inset"), 17))
-	var irow := HBoxContainer.new()
-	irow.add_theme_constant_override("separation", 6)
-	cgrid.add_child(irow)
-	var igroup := ButtonGroup.new()
-	var inset_names := {"face": I18n.t("menu.inset_face"), "side": I18n.t("menu.inset_side"), "off": I18n.t("menu.inset_off")}
-	for id in CameraHud.INSET_IDS:
-		var b := _choice(inset_names[id], igroup, 92)
-		b.pressed.connect(func(): inset_chosen.emit(id))
-		irow.add_child(b)
-		_insets[id] = b
-	var cnote := _label(I18n.t("menu.camera_note"), 15)
-	cnote.modulate = Color(1, 1, 1, 0.75)
-	_wrap(cnote)
-	left.add_child(cnote)
-
 	left.add_child(_label(I18n.t("menu.sound"), 20))
 	var grid := GridContainer.new()
 	grid.columns = 2
@@ -197,25 +158,17 @@ func setup(current_track: String, server_mode: bool, current_mode := "race") -> 
 	right.add_child(_track_note)
 	_set_track_note()
 
-	right.add_child(_label(I18n.t("menu.mode"), 20))
-	var mrow := HBoxContainer.new()
-	mrow.add_theme_constant_override("separation", 10)
-	right.add_child(mrow)
-	for id in Protocol.GAME_MODES:
-		var b := Button.new()
-		b.text = I18n.t("mode." + id) + ("  ✓" if id == current_mode else "")
-		b.toggle_mode = true
-		b.button_pressed = id == current_mode
-		b.disabled = id == current_mode
-		b.custom_minimum_size = Vector2(190, 44)
-		b.add_theme_font_size_override("font_size", 18)
-		b.pressed.connect(_on_mode.bind(id))
-		mrow.add_child(b)
-		_modes[id] = b
-	_mode_note = _label(I18n.t("menu.mode_note"), 15)
-	_wrap(_mode_note)
-	_mode_note.modulate = Color(1, 1, 1, 0.75)
-	right.add_child(_mode_note)
+	right.add_child(_label(I18n.t("menu.session"), 20))
+	_session_btn = Button.new()
+	_session_btn.custom_minimum_size = Vector2(310, 44)
+	_session_btn.add_theme_font_size_override("font_size", 18)
+	_session_btn.pressed.connect(_on_session)
+	_session_btn.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	right.add_child(_session_btn)
+	_session_note = _label("", 15)
+	_wrap(_session_note)
+	right.add_child(_session_note)
+	_set_session_row()
 
 	box.add_child(HSeparator.new())
 	_resume = _button(I18n.t("menu.resume") + "    Esc", func(): close())
@@ -228,19 +181,12 @@ func set_session(status: String) -> void:
 	_session = status
 	if _confirm == "":
 		_set_track_note()
+	_confirm_end = false
+	_set_session_row()
 
 
 func set_quality(id: String) -> void:
 	_qualities[id].set_pressed_no_signal(true)
-
-
-## Shows the camera picks: switch interval (none pressed if it is not one of the choices, e.g.
-## from --cam-cycle) and second camera.
-func set_camera(cycle_s: float, inset: String) -> void:
-	for s in _cycles:
-		_cycles[s].set_pressed_no_signal(is_equal_approx(s, cycle_s))
-	for id in _insets:
-		_insets[id].set_pressed_no_signal(id == inset)
 
 
 func is_open() -> bool:
@@ -294,31 +240,54 @@ func _cancel_confirm() -> void:
 	if _confirm != "":
 		_tracks[_confirm].text = _track_name(_confirm)
 		_confirm = ""
-	if _confirm_mode != "":
-		_modes[_confirm_mode].text = I18n.t("mode." + _confirm_mode)
-		_confirm_mode = ""
-		_mode_note.modulate = Color(1, 1, 1, 0.75)
-		_mode_note.text = I18n.t("menu.mode_note")
 	_set_track_note()
+	_confirm_end = false
+	_set_session_row()
 
 
-## Game mode (contracts §2i): like a track switch, a running session ends first (second click).
-func _on_mode(id: String) -> void:
-	var name := I18n.t("mode." + id)
-	if _server and _session == "running" and _confirm_mode != id:
-		_cancel_confirm()
-		_confirm_mode = id
-		_modes[id].text = I18n.f("menu.end_session_to", [name])
-		_modes[id].set_pressed_no_signal(false)
-		_mode_note.modulate = Color(1.0, 0.85, 0.4)
-		_mode_note.text = I18n.f("menu.confirm_switch", [name])
+## End the running session (second click confirms) or start a new one.
+func _on_session() -> void:
+	if _session == "running":
+		if not _confirm_end:
+			_cancel_confirm()
+			_confirm_end = true
+			_session_btn.text = I18n.t("menu.end_session_confirm")
+			_session_note.modulate = Color(1.0, 0.85, 0.4)
+			_session_note.text = I18n.t("menu.end_session_note_confirm")
+			return
+		_confirm_end = false
+		_session_btn.disabled = true
+		_session_btn.text = I18n.t("menu.session_ending")
+		session_end_pressed.emit()
 		return
-	_confirm_mode = ""
-	for k in _modes:
-		_modes[k].disabled = true
-	_mode_note.modulate = Color(1, 1, 1, 0.75)
-	_mode_note.text = I18n.f("menu.mode_switching", [name])
-	mode_chosen.emit(id)
+	_session_btn.disabled = true
+	_session_btn.text = I18n.t("menu.session_starting")
+	session_start_pressed.emit()
+
+
+## The session button and its note for the session's status (waiting states keep their text
+## until set_session brings the new status).
+func _set_session_row() -> void:
+	if _session_btn == null:
+		return
+	_session_btn.disabled = not _server
+	_session_note.modulate = Color(1, 1, 1, 0.75)
+	if not _server:
+		_session_btn.text = I18n.t("menu.end_session")
+		_session_note.text = I18n.t("menu.session_mock")
+	elif _session == "running":
+		_session_btn.text = I18n.t("menu.end_session")
+		_session_note.text = I18n.t("menu.end_session_note")
+	else:
+		_session_btn.text = I18n.t("menu.start_session")
+		_session_note.text = I18n.f("menu.start_session_note", [I18n.t("session." + (_session if _session != "?" else "unknown"))])
+
+
+## Ending or starting the session failed: show why, in red, until the menu is reopened.
+func show_session_error(text: String) -> void:
+	_set_session_row()
+	_session_note.text = text
+	_session_note.modulate = Color(1.0, 0.45, 0.4)
 
 
 func _set_track_note() -> void:
@@ -355,17 +324,6 @@ func _label(text: String, size: int) -> Label:
 	l.text = text
 	l.add_theme_font_size_override("font_size", size)
 	return l
-
-
-## A toggle button in a one-of-several row.
-func _choice(text: String, group: ButtonGroup, width: float) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.toggle_mode = true
-	b.button_group = group
-	b.custom_minimum_size = Vector2(width, 38)
-	b.add_theme_font_size_override("font_size", 17)
-	return b
 
 
 func _button(text: String, cb: Callable) -> Button:
