@@ -11,6 +11,9 @@ uniform sampler2D rough_tex : hint_roughness_r, filter_linear_mipmap_anisotropic
 uniform vec4 tint : source_color = vec4(1.0);
 uniform float tile_m = 4.0;                 // metres per texture repeat
 uniform float roughness_bias = 0.0;
+uniform float normal_depth = 1.0;           // relief of the aggregate (1 = the texture's own)
+uniform float grain_blur = 0.0;             // mip bias: softens the stones in the texture
+uniform float desaturate = 0.0;             // 1 = plain grey (no coloured flecks)
 uniform bool edge_lines = true;
 uniform vec4 line_color : source_color = vec4(0.93, 0.93, 0.88, 1.0);
 uniform float line_inset = 0.025;           // fraction of the lane width
@@ -31,11 +34,12 @@ void vertex() {
 
 void fragment() {
 	vec2 uv = world_pos.xz / tile_m;
-	vec3 base = texture(albedo_tex, uv).rgb * tint.rgb;
+	vec3 base = texture(albedo_tex, uv, grain_blur).rgb;
+	base = mix(base, vec3(dot(base, vec3(0.299, 0.587, 0.114))), desaturate) * tint.rgb;
 	// Low-frequency patchiness so long straights don't read as one repeating tile.
 	float patch = texture(albedo_tex, world_pos.xz / (tile_m * 9.7) + vec2(0.37, 0.11)).r;
 	base *= mix(0.9, 1.08, patch);
-	float rough = clamp(texture(rough_tex, uv).r + roughness_bias, 0.0, 1.0);
+	float rough = clamp(texture(rough_tex, uv, grain_blur).r + roughness_bias, 0.0, 1.0);
 	float col = floor(UV.x * 8.0);
 	float lane = fract(UV.x * 8.0);
 	if (col < 0.5) {
@@ -54,7 +58,7 @@ void fragment() {
 	rough = mix(rough, 0.12, wet * 0.85);
 	ALBEDO = base;
 	ROUGHNESS = rough;
-	NORMAL_MAP = texture(normal_tex, uv).rgb;
-	NORMAL_MAP_DEPTH = mix(1.0, 0.4, wet);
+	NORMAL_MAP = texture(normal_tex, uv, grain_blur).rgb;
+	NORMAL_MAP_DEPTH = normal_depth * mix(1.0, 0.4, wet);
 	SPECULAR = 0.4;
 }

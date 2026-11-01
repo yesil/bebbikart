@@ -35,6 +35,9 @@ const TEX_DIR := "res://assets/textures/terrain/"
 const MAT_DIR := "res://world/materials/"
 const VMAT_DIR := "res://world/village/materials/"
 const BAKED_DIR := "res://world/village/baked/"
+## Village copies of shared road materials: the asphalt's stones and red flecks stood out in the
+## village's low alpine sun, so its copy is calmer (flatter relief, softer grain, grey).
+const VILLAGE_ROAD := {"road_asphalt": VMAT_DIR + "road_asphalt.tres"}
 ## Per layer: tiling (uv_scale) and tint (lusher alpine grass than the countryside).
 const LAYER_LOOK := {
 	"grass": [0.12, Color(0.78, 0.9, 0.62)],
@@ -323,7 +326,7 @@ func _container(mgr: Node, name: String, material: String, thickness: float, pts
 	cont.name = name
 	_mark(cont)
 	cont.flatten_terrain = false
-	cont.material_resource = _res(MAT_DIR + material + ".tres")
+	cont.material_resource = _road_material(material)
 	cont.underside_thickness = thickness
 	mgr.add_child(cont)
 	var prev: RoadPoint = null
@@ -346,6 +349,11 @@ func _container(mgr: Node, name: String, material: String, thickness: float, pts
 		if prev != null:
 			prev.connect_roadpoint(RoadPoint.PointInit.NEXT, rp, RoadPoint.PointInit.PRIOR)
 		prev = rp
+
+
+## A road material by name: the village's own copy where it has one, else the shared one.
+func _road_material(name: String) -> Material:
+	return _res(VILLAGE_ROAD[name] if VILLAGE_ROAD.has(name) else MAT_DIR + name + ".tres")
 
 
 ## Junction half width: the widest trunk segment touching the junction, else the widest of any.
@@ -438,7 +446,7 @@ func _bake_roads() -> void:
 ## (lane UVs so the edge lines are painted), a hair under the raced roads, plus the island's
 ## white kerb. The raced part of the ring is the "bends" road on top.
 func _roundabout() -> void:
-	var asphalt: Material = _res(MAT_DIR + "road_asphalt.tres")
+	var asphalt: Material = _road_material("road_asphalt")
 	var stone := _std_material("kerb_stone", "", Color(0.86, 0.85, 0.82), 0.8)
 	if asphalt == null:
 		return

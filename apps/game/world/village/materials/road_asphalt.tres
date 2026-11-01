@@ -1,0 +1,21 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="res://world/materials/road.gdshader" id="1_sm6q6"]
+[ext_resource type="Texture2D" path="res://assets/textures/Asphalt012/Asphalt012_1K-JPG_Color.jpg" id="2_epm6t"]
+[ext_resource type="Texture2D" path="res://assets/textures/Asphalt012/Asphalt012_1K-JPG_NormalGL.jpg" id="3_4m0lq"]
+[ext_resource type="Texture2D" path="res://assets/textures/Asphalt012/Asphalt012_1K-JPG_Roughness.jpg" id="4_t0t28"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_sm6q6")
+shader_parameter/albedo_tex = ExtResource("2_epm6t")
+shader_parameter/normal_tex = ExtResource("3_4m0lq")
+shader_parameter/rough_tex = ExtResource("4_t0t28")
+shader_parameter/tint = Color(0.8, 0.81, 0.84, 1)
+shader_parameter/tile_m = 4.0
+shader_parameter/roughness_bias = 0.12
+shader_parameter/normal_depth = 0.3
+shader_parameter/grain_blur = 1.5
+shader_parameter/desaturate = 0.85
+shader_parameter/edge_lines = true
+shader_parameter/depth_pull = 0.0
