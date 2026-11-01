@@ -137,6 +137,14 @@ var obstacles_hit := 0
 var obstacle_care := false     # hands off, slowed down for one this tick
 var dodge_side := 0            # the side it is passing the surprise ahead on (-1, 1), 0 when none
 var dodging := false           # hands off, swerving round one: it steers as sharply as a thumb
+# Chocolate coins (sim/coins.gd): set by Sim.add_run when the game has them on. Laid afresh each
+# lap; the counts are this lap's (coins_run: the whole run's).
+var coin_layout = null
+var coins: Array = []          # this lap's, {seg, s, d, line, taken}
+var coins_lap := -1            # the lap they were laid for
+var coins_taken := 0
+var coin_lines := 0            # whole lines taken
+var coins_run := 0
 
 
 ## `course` is sim/course.gd or sim/village_course.gd (same segment interface; a loop track has `loop`).
@@ -348,14 +356,18 @@ func bot_steer(arrows := true, forks := true) -> void:
 
 
 ## Bots (mock players, the sweep): the lane a kid who knows the track steers to, or null to leave
-## it to the autopilot: onto a boost arrow strip coming up, else towards its stars' way at a fork.
-## `arrows` / `forks`: whether it goes for each at all.
+## it to the autopilot: onto a boost arrow strip coming up (or the next chocolate coin), else
+## towards its stars' way at a fork. `arrows` / `forks`: whether it goes for each at all.
 func bot_lane(arrows := true, forks := true):
 	var x = null
 	if arrows:
 		var ar := _arrow_ahead(maxf(12.0, v * 1.5))
 		if not ar.is_empty():
 			x = clampf(float(ar[0]) / steer_lim(), -1.0, 1.0)
+		else:
+			var co = _coin_ahead(maxf(10.0, v * 1.2))
+			if co != null:
+				x = clampf(float(co) / steer_lim(), -1.0, 1.0)
 	if x == null and forks and fork_ahead_m() <= Tuning.FORK_APPROACH_M * 0.7:
 		var i := next_fork_idx()
 		var star: Dictionary = course_ref.segments[star_path[i]]
@@ -365,6 +377,28 @@ func bot_lane(arrows := true, forks := true):
 	if dodge != null:
 		return clampf(float(dodge) / steer_lim(), -1.0, 1.0)
 	return x
+
+
+## The lane of the next chocolate coin not taken yet within `reach` metres on this segment or
+## the next, or null.
+func _coin_ahead(reach: float):
+	if coins.is_empty() or not detour.is_empty():
+		return null
+	var next_id: String = segs[seg_idx + 1]["id"] if seg_idx < segs.size() - 1 else ""
+	var best := reach
+	var lane = null
+	for c in coins:
+		if c["taken"]:
+			continue
+		var ds := INF
+		if c["seg"] == seg_id:
+			ds = float(c["s"]) - ls
+		elif c["seg"] == next_id:
+			ds = route().length - ls + float(c["s"])
+		if ds > -0.5 and ds < best:
+			best = ds
+			lane = float(c["d"])
+	return lane
 
 
 # ---------------------------------------------------------------- planning
@@ -751,6 +785,14 @@ func step(sim) -> void:
 
 	# ---- vertical
 	var ground: float = sim.course.surface_y(seg, ls)
+	if coin_layout != null:
+		if coins_lap != lap:
+			coins_lap = lap
+			coins = coin_layout.lay(hash(run_id) + lap * 7919, path)
+			coins_taken = 0
+			coin_lines = 0
+		if y - ground < 1.0:
+			_catch_coins(sim)
 	if airborne:
 		vy -= Tuning.GRAVITY * dt
 		y += vy * dt
@@ -863,6 +905,32 @@ func _catch_arrows(sim) -> void:
 		v *= 1.06
 		_add_event({"kind": "boost_perfect", "section": section, "atMs": elapsed_ms()})
 		sim.emit("sim.boost", {"runId": run_id, "kind": "boost_perfect"})
+
+
+## Chocolate coins under the kart (sim/coins.gd): each counts; the last of a line surges it.
+func _catch_coins(sim) -> void:
+	for c in coins:
+		if c["taken"] or c["seg"] != seg_id or not detour.is_empty():
+			continue
+		if absf(ls - float(c["s"])) > half_len + Tuning.COIN_CATCH or absf(d - float(c["d"])) > radius + Tuning.COIN_CATCH:
+			continue
+		c["taken"] = true
+		coins_taken += 1
+		coins_run += 1
+		var done := true
+		var in_line := 0
+		for o in coins:
+			if int(o["line"]) == int(c["line"]):
+				if o["taken"]:
+					in_line += 1
+				else:
+					done = false
+		if done:
+			coin_lines += 1
+			boost_amt = maxf(boost_amt, Tuning.COIN_LINE_BOOST)
+			boost_t = maxf(boost_t, Tuning.COIN_LINE_BOOST_S)
+			v *= Tuning.COIN_LINE_KICK
+		sim.emit("sim.coin", {"runId": run_id, "line": c["line"], "inLine": in_line, "lineDone": done})
 
 
 func got_bumped(other_player: String) -> void:

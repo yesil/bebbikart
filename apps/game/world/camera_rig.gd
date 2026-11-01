@@ -55,6 +55,7 @@ var _chase_t := 0.0
 var front := false           # frame the racer from the front (see SWING_S)
 var _front_k := 0.0          # 0 behind the racer, 1 in front of it; moves at 1 / SWING_S
 var front_hide := 0          # layers left out while the camera is round the front (the other half's racer)
+var always_hide := 0         # layers this camera never draws (the other half's chocolate coins)
 
 
 func _ready() -> void:
@@ -144,7 +145,7 @@ func _process(delta: float) -> void:
 	# other half's racer. The chase keeps them (they say where the fork goes), and so do the fork
 	# shots (an idle half's _front_k stays where its last racer left it).
 	var left_out := front_hide | SteerMarks.SIGN_LAYER if mode == Mode.FOLLOW and _front_k > 0.0 else 0
-	cull_mask = 0xFFFFF & ~left_out
+	cull_mask = 0xFFFFF & ~(left_out | always_hide)
 
 
 ## Where the follow camera wants to be: s 0 is the chase spot behind the racer, 1 the front spot;

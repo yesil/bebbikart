@@ -12,6 +12,7 @@
 #   --kit (mock mode: fake racers built with the racer kit from res://racer_kit/samples, in turn),
 #   --quality=low|medium|high (default: last pick in the options menu, else medium),
 #   --no-obstacles (village: no cows, sheep, cheese wheels or hay bales turn up on the road),
+#   --no-coins (village: no chocolate coins on the road),
 #   --language=en|de (default: last pick in the options menu, else config.language; server mode
 #   sends it to the server so every phone follows it)
 # One way to race (contracts §2i, king of the hill): the racers take turns from a line, one lap
@@ -54,6 +55,8 @@ const DuelHud = preload("res://ui/duel_hud.gd")
 const SteerMarks = preload("res://world/steer_marks.gd")
 const Obstacles = preload("res://sim/obstacles.gd")
 const ObstacleViews = preload("res://world/obstacle_views.gd")
+const Coins = preload("res://sim/coins.gd")
+const CoinViews = preload("res://world/coin_views.gd")
 
 ## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
 ## resolution (0 = native; upscaled with MetalFX on Metal, FSR elsewhere), so a fullscreen 5K
@@ -179,6 +182,14 @@ func _ready() -> void:
 			get_tree().quit(1)
 			return
 		sim.obstacles.enabled = bool(_saved_setting("game", "surprises", true))
+	# Chocolate coins: each racer's own lines of coins to steer through, new ones every lap.
+	if course.get("coin_ranges") != null and not args.has("no-coins"):
+		sim.coins = Coins.new(course)
+		var bad: String = sim.coins.check()
+		if bad != "":
+			push_error("chocolate coins: " + bad)
+			get_tree().quit(1)
+			return
 	if args.has("weather"):
 		var w: Array = FORCED.get(args["weather"], [0.0, 0.0])
 		sim.weather.force(w[0], w[1], 30.0)
@@ -255,6 +266,14 @@ func _build_scene() -> void:
 			push_error("village surprises: " + ob_err)
 			_result(("village surprises: " + ob_err).left(160))
 			hud.problem("village surprises: " + ob_err)
+	if sim.coins != null:
+		var coin_views := CoinViews.new()
+		add_child(coin_views)
+		var coin_err := coin_views.setup(sim, func(rid: String) -> String: return String(duel_sides.get(rid, "")) if duel_screen != null and duel_screen.split else "")
+		if coin_err != "":
+			push_error("chocolate coins: " + coin_err)
+			_result(("chocolate coins: " + coin_err).left(160))
+			hud.problem("chocolate coins: " + coin_err)
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)
@@ -882,7 +901,7 @@ func _on_racer_ready(player_id: String) -> void:
 
 func _outgoing(type: String, pl: Dictionary) -> void:
 	match type:
-		"sim.boost", "sim.bump", "sim.fork", "sim.obstacle_spawned":
+		"sim.boost", "sim.bump", "sim.fork", "sim.obstacle_spawned", "sim.coin":
 			return
 		"sim.obstacle":
 			print("surprise: %s hit a %s (%.1f s)" % [_nick_of(pl["runId"]), pl["kind"], run_time])
@@ -1069,6 +1088,10 @@ func _tag_side_layers(n: Node, side: String) -> void:
 ## server's queue.updated with the new champion comes after it).
 func _duel_verdict(run_id: String, pid: String, ok: bool, ms: int, reason: String) -> void:
 	var side: String = duel_sides[run_id] if duel_screen.split else "left"
+	# The chocolate coins taken on the lap, under the verdict.
+	var v = views.get(run_id)
+	if v != null and not v.racer.coins.is_empty():
+		duel_hud.coins_result(side, I18n.f("duel.coins_lap", [v.racer.coins_taken, v.racer.coins.size()]))
 	if not ok:
 		duel_hud.result(side, I18n.t("hud.oops").to_upper() + "!", I18n.t("fail." + reason) if reason != "" else "", false)
 		return

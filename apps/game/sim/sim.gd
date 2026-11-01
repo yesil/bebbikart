@@ -33,6 +33,9 @@ var grid_slot := {}             # runId -> front-row start lane it waits in, vis
 ## Village surprises (sim/obstacles.gd): cows, sheep, cheese wheels and hay bales on the road.
 ## The game turns them on (main.gd); null in the tools, so their baselines stay the same.
 var obstacles = null
+## Chocolate coins (sim/coins.gd): each racer's own lines of coins to collect. The game turns them
+## on (main.gd); null in the tools, so their baselines stay the same.
+var coins = null
 
 
 func _init(p_course, p_config: Dictionary, seed_: int) -> void:
@@ -65,6 +68,7 @@ func add_run(run_id: String, player_id: String, build: Dictionary, size: Vector2
 	var r := Racer.new()
 	r.setup(run_id, player_id, build, course, config, rng.randi(), size)
 	r.obstacles = obstacles
+	r.coin_layout = coins
 	if laps > 0:
 		r.laps_max = laps
 	by_run[run_id] = r

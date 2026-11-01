@@ -23,6 +23,9 @@ const DIVIDER_W := 6.0       # the line between the halves, in 2D units
 ## half's front shot and face cam can leave it out: the two duel racers wait in separate grid
 ## slots, but their karts drive through each other on their own lines.
 const SIDE_LAYER := {"left": 1 << 10, "right": 1 << 11}
+## Each racer's chocolate coins (world/coin_views.gd) are drawn on its side's coin layer, which the
+## other half's camera always leaves out: each kid sees only their own coins.
+const COIN_LAYER := {"left": 1 << 13, "right": 1 << 14}
 
 var split := false
 var main_camera: CameraRig
@@ -59,6 +62,7 @@ func setup(p_main_camera: CameraRig, fork_shots: Array) -> void:
 		rig.mode = CameraRig.Mode.FORKS
 		rig.fork_idx = 0 if side == "left" else 1
 		rig.front_hide = SIDE_LAYER["right" if side == "left" else "left"]
+		rig.always_hide = COIN_LAYER["right" if side == "left" else "left"]
 		sv.add_child(rig)
 		rig.make_current()
 		var tex := TextureRect.new()
