@@ -33,6 +33,7 @@ Game flags (after `--`):
 | `--overlay` | Start with the debug text overlay shown (H toggles it); by default the race HUD is all you see |
 | `--cam-cycle=SEC` | Switch the followed racer every SEC seconds, 0 = never (default: the options menu's pick, else 8) |
 | `--inset=face\|side\|off` | Second camera, picture in picture (default: the options menu's pick, else face) |
+| `--mode=race\|duel` | Mock mode: free races (default) or king of the hill (see **Duel mode**); with `--server` the session config picks it and the options menu switches it |
 
 Keys:
 
@@ -97,7 +98,7 @@ Sweep flags:
   - `messages.gd`: envelope helpers.
   - `server_net.gd`: the real WebSocket client (`--server`): hello with the game key, auto-reconnect, unpacks `welcome`, merges `config.updated`.
   - `roster_assets.gd`: per-player specs from the roster, ride-drawing downloads, and hero/avatar renders + uploads via `AvatarRenderer`.
-  - `mock_net.gd`: the fake server and phones. It spawns players with random builds, routes and styles, launches runs, taps boosts (skilled players tap inside zones) and logs the `game.run.*` messages it would send.
+  - `mock_net.gd`: the fake server and phones. It spawns players with random builds (the stars choose the routes), launches runs, taps boosts (skilled players tap inside zones), holds Push (skilled players let go before the bends), queues them like the server in a duel, and logs the `game.run.*` messages it would send.
 - `world/`: the countryside world (see **World pipeline** below).
   - `course_world.tscn`: baked from the course by `tools/bake_world.gd`. Don't hand-edit.
   - `decor.tscn`, `environment.tscn`: hand-editable landmarks, sky and lighting.
@@ -111,6 +112,8 @@ Sweep flags:
 - `ui/race_hud.gd`: the big-screen race HUD for groups: a place + name tag over every kart (pushed apart, never overlapping), the race board (top right: place, avatar, lap or section, time; finishers keep their time until the group is home), the standings (top left: everyone by best time, or what the designer is doing), finish and oops banners, problems in red, and the podium when a session ends. Colours come from its palette in join order and are shared with the camera's name tags.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
+- `world/duel_screen.gd`, `ui/duel_hud.gd`: duel mode's split screen and its HUD (see **Duel mode**).
+- `tools/duel_check.gd`: headless duel check: the mock line, the halves, the champion who rests, one-lap runs without bumps, Push reaching the racers, then the split screen and HUD driven for a few frames. Exit 1 on a broken rule: `godot --headless --path . --script res://tools/duel_check.gd`.
 - `tools/start_crowd_check.gd`: groups of 4, 6 and 8 pressing Go together on both tracks (with the start countdown), with early Boost taps: start bumps, early crashes and release spread; exits 1 if the crowd knocks racers off. `--boost=onetap` is the gameplay thread's one-tap regression mode.
 - `tools/hud_check.gd` (windowed): renders the race HUD's podium, a 20-racer standings and a 16-racer race board from test data; exits 1 if they run into the camera HUD's corners.
 - `tools/layout_map.gd`: top-down layout map (`docs/layout_map.png`) plus geometry checks (spacing, crossings, slopes, curvature, junctions, fork angles, terrain features). Exits 1 on failure: `godot --headless --path . --script res://tools/layout_map.gd`.
@@ -222,7 +225,35 @@ on the terrain). The mock summary says how long the camera was pulled in.
   The inset is a second view of the same world (about the cost of a 576×340 render), off when set
   to Off. Racer name tags are on render layer 20, which the inset leaves out.
 
+## Duel mode
+
+King of the hill (contracts §2i): the fastest lap holds the crown and rests; everyone else lines
+up on their phone to beat it, one lap each, two at a time, against the clock. The sim runs duel
+runs solo (`sim.solo`): each gets its own start lights, the karts pass through each other and the
+autopilot ignores the other kart.
+
+- **Split screen** (2+ racers in the session, `queue.updated.split`): two SubViewports on the main
+  viewport's World3D, left red, right blue, each with its own `CameraRig` chasing its racer (an
+  idle half shows the fork shots and who is next). The main viewport stops drawing 3D; its camera
+  sits between the two halves' cameras, where the terrain's detail and the audio centre. With one
+  racer the main camera gives them the full screen.
+- **HUD** (`ui/duel_hud.gd`): per half the name, lap time, record, boosts, PUSH! while Push is
+  held and SLIDE! after a slide with it, its own start lights and the lap's verdict for
+  `duelResultMs`; the crown and the line top centre. The race HUD keeps only banners, problems
+  and the podium; the camera director, the picture in picture and Show me are off.
+- **Performance (Mac M3):** each half has half the pixels, so the 3D pixel count is the same as
+  full screen; what doubles is culling, draw calls and the sun's shadow cascades. In split screen
+  the sun casts two cascades within 80 m (instead of the preset's distance and four), vegetation
+  ranges are 0.8 of the preset, and each camera has its own rain volume with half the drops.
+  Measure with `tools/bench.gd -- --mode=duel --racers=4 --track=village`.
+- **Options menu:** Game mode switches between free races and king of the hill (server mode:
+  like a track change, a running session ends first).
+
 ## Known issues and deviations
+
+- Duel split screen: the terrain's level of detail centres between the two cameras, so the far
+  ends of the village may show coarser terrain in a half; check on the Mac (Terrain3D's
+  `mesh_size` can go up in split screen if it shows).
 
 - Racers are placeholder shapes in mock mode. The HUD (session clock, leaderboard, paddock, mini-map) is still to come; the camera HUD's inset sits where game.md puts the mini-map, so they will need to share that corner.
 - `splitMs` is the time spent in each section.
