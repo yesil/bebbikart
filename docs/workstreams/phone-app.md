@@ -52,19 +52,19 @@ Short, warm, no jargon, no failure shaming. Every string goes in one `copy.js` f
 
 ## Task list
 
-| #   | Task                                                                      | Size | Milestone |
-| --- | ------------------------------------------------------------------------- | ---- | --------- |
-| 1   | App shell, routing, WS client with reconnect, device bootstrap, MSW mocks | M    | M1        |
-| 2   | Create racer flow with client-side downscale + upload progress            | M    | M1        |
-| 3   | Job status screen incl. reject/retake and needs-review states             | S    | M1        |
-| 4   | Garage: stars editor with rules, routes, style, weather strip, Go!        | M    | M1        |
+| #   | Task                                                                       | Size | Milestone |
+| --- | -------------------------------------------------------------------------- | ---- | --------- |
+| 1   | App shell, routing, WS client with reconnect, device bootstrap, MSW mocks  | M    | M1        |
+| 2   | Create racer flow with client-side downscale + upload progress             | M    | M1        |
+| 3   | Job status screen incl. reject/retake and needs-review states              | S    | M1        |
+| 4   | Garage: stars editor with rules, routes, style, weather strip, Go!         | M    | M1        |
 | 5   | Run screen: steering pad, fork signs, live timer, section ticks and deltas | M    | M1        |
-| 6   | Result screen: splits table, coach tip highlight, PB/rank                 | M    | M1        |
-| 7   | Leaderboard + history tabs                                                | S    | M2        |
-| 8   | Admin console                                                             | M    | M2        |
-| 8b  | PWA basics: manifest, icons, standalone display                           | S    | M2        |
-| 9   | Quick check on one iPhone and one Android phone                           | S    | M3        |
-| 10  | Copy review with someone who knows the kids' age group                    | S    | M3        |
+| 6   | Result screen: splits table, coach tip highlight, PB/rank                  | M    | M1        |
+| 7   | Leaderboard + history tabs                                                 | S    | M2        |
+| 8   | Admin console                                                              | M    | M2        |
+| 8b  | PWA basics: manifest, icons, standalone display                            | S    | M2        |
+| 9   | Quick check on one iPhone and one Android phone                            | S    | M3        |
+| 10  | Copy review with someone who knows the kids' age group                     | S    | M3        |
 
 ## Done when
 
