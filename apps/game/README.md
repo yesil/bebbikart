@@ -172,6 +172,23 @@ godot --headless --path . --script res://tools/village_world_check.gd
 
 `world/village/village_decor.tscn` (optional) is loaded on top for hand-placed extras; the bake never touches it.
 
+### Chocolate coins
+
+Every racer gets its own gold-foil chocolate coins on the village road: seven short lines of five, laid afresh each lap at random places on the plain stretches (never on a fork's way, its run-in, a boost strip, the start or the roundabout), straight, slanting across the road or curving. Each coin counts (the half's plate shows "12/35"); a whole line taken surges the kart like a boost arrow, a little less. Hands off, the autopilot doesn't go for them. In a split screen each half shows only its own racer's coins (`DuelScreen.COIN_LAYER`, which the other half's camera leaves out). A kid steering through them gains about 1.5 s a lap (`tools/coin_check.gd`).
+
+| File | What |
+|---|---|
+| `sim/coins.gd` | Lays a lap of lines from `VillageCourse.coin_ranges` |
+| `sim/racer.gd` `_catch_coins` | Takes them, surges the kart on a whole line; bots go for them |
+| `world/coin_views.gd` | The spinning coins, each racer's on its side's layer; a taken one jumps and spins away |
+| `tools/coin_check.gd` | Hands off and kid-steered karts with and without coins; 500 layouts checked |
+
+The coin's "bling" is made in `audio/audio_director.gd` (`_coin_sound`), no file. `--no-coins` leaves them out of a game run; the balance tools build their sims without them.
+
+```sh
+godot --headless --path . --script res://tools/coin_check.gd
+```
+
 Look: the Kenney kit's colour map is recoloured to a Swiss palette at every bake (`village_kit.gd` `_recolour`; the roof modules get a copy with wooden eaves). Trees and flowers are the countryside's prepared plant meshes (`world/vegetation/meshes/`, from `tools/bake_world.gd`), so they sway with the wind. The village roads use their own calmer asphalt (`world/village/materials/road_asphalt.tres`, `VILLAGE_ROAD` in the bake): the shared texture's stones and red flecks stood out in the village sun. Animals are skinned models posed on their rest pose for the MultiMesh (`instanced_model.gd`).
 
 ## Balance snapshot

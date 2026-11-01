@@ -44,9 +44,11 @@ const AMBIENCE := {
 }
 # Per-sound level (dB) and minimum gap between plays (s).
 const LEVEL := {"start": -10.0, "lap": -8.0, "best_lap": -4.0, "finish": -2.0, "cheer": -6.0,
-	"failed": -6.0, "boost": -6.0, "bump": -8.0, "land": -8.0, "splash": -4.0, "thunder": -3.0}
+	"failed": -6.0, "boost": -6.0, "bump": -8.0, "land": -8.0, "splash": -4.0, "thunder": -3.0,
+	"coin": -9.0}
 const GAP := {"start": 0.5, "lap": 0.3, "best_lap": 3.0, "finish": 3.0, "cheer": 3.0,
-	"failed": 2.0, "boost": 0.15, "bump": 0.4, "land": 0.3, "splash": 0.5, "thunder": 0.0}
+	"failed": 2.0, "boost": 0.15, "bump": 0.4, "land": 0.3, "splash": 0.5, "thunder": 0.0,
+	"coin": 0.05}
 
 const RACERS_DIR := "racers/"   # engine_<name>.wav loops and horn_<name>.wav one-shots
 const HORN_DB := -4.0
@@ -125,6 +127,8 @@ func setup(p_sim, p_track: String, p_camera: Node3D, mute: bool) -> bool:
 			if s == null:
 				problems.append("missing audio file %s" % path)
 			_streams["%s:%s" % [kind, n]] = s
+	# A chocolate coin's "bling" (sim/coins.gd) is made here, not loaded: two quick bell notes.
+	_streams["sfx:coin"] = _coin_sound()
 	if not problems.is_empty():
 		_show_errors(problems)
 		return false
@@ -191,6 +195,12 @@ func on_event(type: String, pl: Dictionary) -> void:
 		"sim.bump":
 			if _near(pl["hitter"]) or _near(pl["victim"]):
 				_play("bump")
+		"sim.coin":
+			if _near(pl["runId"]):
+				# Each coin of a line a little higher; the whole line surges like a boost arrow.
+				_play("coin", 1.0 + 0.07 * (int(pl["inLine"]) - 1))
+				if pl["lineDone"]:
+					_play("boost", 1.15)
 
 
 func _physics_process(_delta: float) -> void:
@@ -284,6 +294,29 @@ func _fade_music(delta: float) -> void:
 
 
 # ---------------------------------------------------------------- one-shots
+
+## A chocolate coin's "bling": B5 then E6, a sine with a soft octave, each note dying away.
+static func _coin_sound() -> AudioStreamWAV:
+	var rate := 44100
+	var n := int(rate * 0.26)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var step := 0.07
+	for i in n:
+		var t := float(i) / rate
+		var second := t >= step
+		var f := 1318.5 if second else 987.8
+		var tn := t - step if second else t
+		var env := minf(1.0, tn / 0.003) * exp(-tn * (11.0 if second else 22.0))
+		var a := (sin(TAU * f * t) * 0.7 + sin(TAU * f * 2.0 * t) * 0.18) * env
+		data.encode_s16(i * 2, int(clampf(a, -1.0, 1.0) * 30000.0))
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = rate
+	w.stereo = false
+	w.data = data
+	return w
+
 
 ## Plays a one-shot unless it played too recently or all voices are busy (dropped, not queued).
 func _play(key: String, pitch: float = 1.0) -> bool:

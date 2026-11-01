@@ -52,6 +52,10 @@ var free_north := 0.0
 var roundabout := {}
 ## The forks' ways and the side each leaves on (sim/forks.gd ways()).
 var forks := {}
+## Chocolate coins (sim/coins.gd): where their lines may lie, {seg, a, b (metres along it)}.
+## Plain stretches only: clear of the start, the boost arrows, the roundabout, the forks and
+## the run-in to each (a kid steering for a fork's side needs that road free).
+var coin_ranges: Array = []
 
 
 func _init() -> void:
@@ -74,6 +78,15 @@ func _init() -> void:
 		_error("loop misses the start line by %.2f m" % miss)
 	for e in Course.stretch_errors(segments, NAME):
 		_error(e)
+	var seg_len := func(id: String) -> float: return (segments[id]["route"] as Route).length
+	coin_ranges = [
+		{"seg": "hills2", "a": 36.0, "b": seg_len.call("hills2") - Tuning.FORK_APPROACH_M * 0.75},
+		{"seg": "farm", "a": 3.0, "b": seg_len.call("farm") - 3.0},
+		{"seg": "cobbles", "a": 2.0, "b": seg_len.call("cobbles") - 2.0},
+		{"seg": "ridge", "a": 4.0, "b": seg_len.call("ridge") - 4.0},
+		{"seg": "alpbach", "a": 2.0, "b": seg_len.call("alpbach") - Tuning.FORK_APPROACH_M * 0.75},
+		{"seg": "bends", "a": 3.0, "b": float(roundabout["s0"]) - 4.0},
+	]
 	forks = Forks.ways(self)
 	for e in Forks.errors(forks):
 		_error(e)

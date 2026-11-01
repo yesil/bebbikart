@@ -3,8 +3,10 @@ extends CanvasLayer
 ##  - Each racing half, in its outer top corner (left half top left, right half top right, so the
 ##    crown fits between them): a live face cam of the racer (face and hands, ui/face_cam.gd, on
 ##    the outer edge) beside its name on its side's colour (left red, right blue), the lap time,
-##    their own best lap, the record to beat (once there is one), and under it BOOST! while a
-##    boost arrow the kid steered onto surges the kart (contracts §2g).
+##    their own best lap, the record to beat (once there is one), under it the chocolate coins
+##    taken on this lap (sim/coins.gd, a gold coin and "12/35"; it bounces as one is taken), and
+##    BOOST! while a boost arrow or a whole line of coins the kid steered onto surges the kart
+##    (contracts §2g).
 ##  - Each half's own start lights (a duel run never shares a countdown), then GO!.
 ##  - A finished lap's verdict in its half for duelResultMs: NEW CHAMPION!, or how far short of
 ##    whose record; a failed lap says oops and why.
@@ -30,7 +32,9 @@ var result_s := 5.0          # how long a verdict stays (config.duelResultMs)
 var bests := {}              # playerId -> best lap in ms this session (main.gd keeps it)
 var _font: SystemFont
 var _queue := {}
-var _halves := {}            # side -> {root, plate, face, cam, name, time, record, boost, lights, verdict, verdict_big, verdict_small, idle}
+var _halves := {}            # side -> {root, plate, face, cam, name, time, record, coins, coins_label, boost, lights, verdict, verdict_big, verdict_small, idle}
+var _coins_was := {}         # side -> coins taken last frame (the counter bounces on a new one)
+var _coin_pop := {}          # side -> seconds left of its bounce
 var _crown: PanelContainer
 var _crown_label: Label
 var _line_label: Label
@@ -114,6 +118,24 @@ func _build_half(side: String) -> Dictionary:
 	if side == "right":  # its plate sits in the right corner: the text hugs the outer edge
 		for l in pbox.get_children():
 			(l as Label).horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var coins := _panel(Color(0.08, 0.08, 0.12, 0.82), 12, Color("#ffd23a"), 3)
+	var crow := HBoxContainer.new()
+	crow.add_theme_constant_override("separation", 10)
+	coins.add_child(crow)
+	var coin := Panel.new()
+	var csb := StyleBoxFlat.new()
+	csb.bg_color = Color("#ffc61a")
+	csb.border_color = Color("#b8860b")
+	csb.set_border_width_all(3)
+	csb.set_corner_radius_all(16)
+	coin.add_theme_stylebox_override("panel", csb)
+	coin.custom_minimum_size = Vector2(32, 32)
+	coin.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	coin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crow.add_child(coin)
+	var coins_l := _label("", 30, Color("#ffd23a"))
+	crow.add_child(coins_l)
+	root.add_child(coins)
 	var boost := _panel(Color("#ff6b35"), 12, Color.WHITE, 3)
 	boost.add_child(_label(I18n.t("duel.boost"), 34, Color.WHITE))
 	root.add_child(boost)
@@ -136,7 +158,7 @@ func _build_half(side: String) -> Dictionary:
 	idle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	root.add_child(idle)
 	return {"root": root, "plate": plate, "face": face, "cam": cam, "name": name_l, "time": time_l, "best": best_l, "record": record_l,
-		"boost": boost, "lights": lights, "verdict": verdict,
+		"coins": coins, "coins_label": coins_l, "boost": boost, "lights": lights, "verdict": verdict,
 		"verdict_big": big, "verdict_small": small, "idle": idle}
 
 
@@ -211,6 +233,7 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		h["plate"].visible = r != null
 		h["idle"].visible = r == null and not verdict
 		h["boost"].visible = false
+		h["coins"].visible = false
 		h["lights"].visible = false
 		if r == null:
 			# Who is next; with nobody waiting the crown at the top already says to press Go.
@@ -244,12 +267,26 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 		plate.reset_size()
 		plate.position = Vector2(MARGIN if side == "left" else rect.size.x - plate.size.x - MARGIN, MARGIN)
 		# BOOST! while a boost arrow surges the kart.
+		var below := plate.position.y + plate.size.y + 10.0
+		# The chocolate coins taken on this lap; a new one bounces the counter.
+		if r.state == "racing" and not r.coins.is_empty():
+			var coins: PanelContainer = h["coins"]
+			h["coins_label"].text = "%d/%d" % [r.coins_taken, r.coins.size()]
+			if r.coins_taken > int(_coins_was.get(side, 0)):
+				_coin_pop[side] = 0.25
+			_coins_was[side] = r.coins_taken
+			_coin_pop[side] = maxf(0.0, float(_coin_pop.get(side, 0.0)) - delta)
+			coins.visible = true
+			coins.reset_size()
+			coins.pivot_offset = coins.size * 0.5
+			coins.scale = Vector2.ONE * (1.0 + 0.6 * float(_coin_pop[side]))
+			coins.position = Vector2(MARGIN if side == "left" else rect.size.x - coins.size.x - MARGIN, below)
+			below += coins.size.y + 10.0
 		if r.boost_t > 0.0:
 			var boost: PanelContainer = h["boost"]
 			boost.visible = true
 			boost.reset_size()
-			var y := plate.position.y + plate.size.y + 10.0
-			boost.position = Vector2(MARGIN if side == "left" else rect.size.x - boost.size.x - MARGIN, y)
+			boost.position = Vector2(MARGIN if side == "left" else rect.size.x - boost.size.x - MARGIN, below)
 		# The half's own start lights, then GO!.
 		var lights: Label = h["lights"]
 		if on_grid:

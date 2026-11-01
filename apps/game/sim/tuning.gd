@@ -127,6 +127,14 @@ const BOOST_PERFECT_S := 1.2
 const BOOST_ARROW_HALF := 1.1     # half width of a strip (m)
 const BOOST_ARROW_CATCH := 0.3    # the kart's centre may be this far outside the strip and still catch it
 
+# Chocolate coins (sim/coins.gd): lines of coins on the road for a steering kid. A kart's centre
+# within COIN_CATCH of a coin (beyond its own half width and half length) takes it; a whole line
+# taken surges the kart like a boost arrow, a little less.
+const COIN_CATCH := 0.35
+const COIN_LINE_BOOST := 0.3
+const COIN_LINE_BOOST_S := 1.0
+const COIN_LINE_KICK := 1.04       # speed multiplier the moment a line is complete
+
 # Collisions. Each racer is its footprint rectangle along its yaw, as wide and long as its built
 # toy (main.gd measures it). Sizes are clamped so a big hat or wings never make a racer a wall.
 # Headless tools and mock racers pass DEFAULT_SIZE.
