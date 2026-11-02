@@ -18,6 +18,7 @@ All audio here is CC0 1.0 (public domain) except `sfx/cheer.wav` (CC BY 4.0) and
 | `sfx/failed.ogg` | `impactSoft_medium_000.ogg` | [Impact Sounds](https://kenney.nl/assets/impact-sounds) | Kenney | CC0 1.0 (`licenses/Kenney_impact-sounds.txt`) |
 | `sfx/boost.ogg` | `sfx100v2_air_02.ogg` | [100 CC0 SFX #2](https://opengameart.org/content/100-cc0-sfx-2) | rubberduck | CC0 1.0 |
 | `sfx/splash.ogg` | `splash_04.ogg` | [40 CC0 water / splash / slime SFX](https://opengameart.org/content/40-cc0-water-splash-slime-sfx) | rubberduck | CC0 1.0 |
+| `sfx/sheep_baa.ogg` | `sheep_baa.ogg`, cut from `Sheep bleat.wav` ([Freesound 414342](https://freesound.org/s/414342/), mikewest, CC0 1.0) | [Sheep Baa](https://opengameart.org/node/132779) | AntumDeluge (recording by mikewest) | CC0 1.0 |
 | `sfx/cheer.wav` | `Gregor Quendel - Crowd Cheering Sounds - 04 - Strong cheering - II - Short.mp3` | [Free Crowd Cheering Sounds](https://opengameart.org/content/free-crowd-cheering-sounds) | Gregor Quendel | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (`licenses/CC-BY-4.0.txt`) |
 | `ambience/rain_loop.ogg` | `amb_rain_loop_1.ogg` | [Amb Rain Loop 1](https://opengameart.org/content/amb-rain-loop-1) | Kresiek The Furry | CC0 1.0 |
 | `ambience/wind_loop.ogg` | `noise_01.ogg` | [30 CC0 SFX loops](https://opengameart.org/content/30-cc0-sfx-loops) | rubberduck | CC0 1.0 |

@@ -11,7 +11,7 @@ extends SceneTree
 ## (hit_<kind>_<n>.png).
 ## --close: instead, a cow and a flock of sheep up close: front three-quarter and side while
 ## grazing or crossing (close_<kind>_front.png, close_<kind>_side.png), then knocked by a kart
-## that isn't there, shot from the front as they react and run off (close_<kind>_hit_<n>.png).
+## that isn't there, shot from the road behind as they react and run off (close_<kind>_hit_<n>.png).
 
 const VillageCourse = preload("res://sim/village_course.gd")
 const Obstacles = preload("res://sim/obstacles.gd")
@@ -232,7 +232,7 @@ func _gap(sim, run_id: String, gid: int) -> float:
 
 ## Each animal up close: it walks in (the sim stepping), then the sim holds it still while its view
 ## goes on moving, shot from the front three-quarter and the side; then it is knocked as if a kart
-## passed just beside it and shot from the front as it reacts and runs off.
+## passed just beside it and shot from the road behind as it reacts and runs off.
 func _close(sim, cam: Camera3D, views: Node) -> void:
 	cam.fov = 40.0
 	cam.cull_mask &= ~SteerMarks.SIGN_LAYER   # no "!" or "MOO!" in the way this close
@@ -268,8 +268,11 @@ func _close(sim, cam: Camera3D, views: Node) -> void:
 			if int(o["group"]) == gid and (o == it or kind == "sheep"):
 				sim.obstacles._scare(o, signf(float(o["d"]) - kart_d))
 		views.call("on_hit", {"kind": kind, "pos": at, "runId": "", "item": it["id"]})
-		cam.global_position = at + fwd.rotated(Vector3.UP, 0.7) * dist * 1.8 + Vector3.UP * 1.6
-		cam.look_at(at + Vector3.UP * 0.7, Vector3.UP)
+		# Shot from the road a little way back, where the kart came from (never inside a house).
+		var back: Vector3 = r.world_at(maxf(0.0, s - 9.0), 0.0)
+		back.y = sim.course.surface_y(seg, maxf(0.0, s - 9.0)) + 2.2
+		cam.global_position = back
+		cam.look_at(at + Vector3.UP * 0.6, Vector3.UP)
 		var t0 := 0.0
 		for i in CLOSE_HIT_AT.size():
 			await _run_sim(sim, float(CLOSE_HIT_AT[i]) - t0)

@@ -39,6 +39,7 @@ const SFX := {
 	# bell when a cow turns up. Village life (world/village_life.gd): the roadside crowd's cheer,
 	# cow bells on the alp.
 	"moo": "racers/horn_moo.wav",
+	"baa": "sfx/sheep_baa.ogg",
 	"boing": "racers/horn_boing.wav",
 	"crowd": "sfx/cheer.wav",
 	"cowbell": "racers/horn_bell.wav",
@@ -52,10 +53,10 @@ const AMBIENCE := {
 # Per-sound level (dB) and minimum gap between plays (s).
 const LEVEL := {"start": -10.0, "lap": -8.0, "best_lap": -4.0, "finish": -2.0, "cheer": -6.0,
 	"failed": -6.0, "boost": -6.0, "bump": -8.0, "land": -8.0, "splash": -4.0, "thunder": -3.0,
-	"moo": -3.0, "boing": -5.0, "cowbell": -15.0, "coin": -9.0, "crowd": -15.0}
+	"moo": -3.0, "baa": -4.0, "boing": -5.0, "cowbell": -15.0, "coin": -9.0, "crowd": -15.0}
 const GAP := {"start": 0.5, "lap": 0.3, "best_lap": 3.0, "finish": 3.0, "cheer": 3.0,
 	"failed": 2.0, "boost": 0.15, "bump": 0.4, "land": 0.3, "splash": 0.5, "thunder": 0.0,
-	"moo": 0.8, "boing": 0.3, "cowbell": 0.8, "coin": 0.05, "crowd": 2.5}
+	"moo": 0.8, "baa": 0.4, "boing": 0.3, "cowbell": 0.8, "coin": 0.05, "crowd": 2.5}
 
 const RACERS_DIR := "racers/"   # engine_<name>.wav loops and horn_<name>.wav one-shots
 const HORN_DB := -4.0
@@ -212,7 +213,7 @@ func on_event(type: String, pl: Dictionary) -> void:
 					_play("moo", _rng.randf_range(0.9, 1.05))
 					_play("cowbell", 1.3)    # its bell clangs as it spins
 				"sheep":
-					_play("boing", 1.35)
+					_play("baa", _rng.randf_range(0.95, 1.15))
 				"cheese":
 					_play("boing", 0.9)
 				"hay":
