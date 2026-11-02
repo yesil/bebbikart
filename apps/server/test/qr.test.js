@@ -96,8 +96,9 @@ test("QR codes grow with the text, keep their finders and say level M", () => {
 
 let srv;
 let base;
+let settings;
 beforeAll(() => {
-  const settings = {
+  settings = {
     ...loadSettings({}),
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-qr-")),
@@ -119,4 +120,18 @@ test("GET /api/join: the phone address, its QR code, and whether the phone site 
   expect(join.url).toBe(URL);
   expect(join.qr).toEqual(qrRows(URL));
   expect(join.phoneSite).toBe(false);
+});
+
+test("GET /api/join under bun run dev: Vite's address, whose phone site needs no build", async () => {
+  settings.phoneVitePort = 5173;
+  try {
+    const join = await (await fetch(`${base}/api/join`)).json();
+    expect(join.url).toBe("http://192.168.1.23:5173");
+    expect(join.qr).toEqual(qrRows("http://192.168.1.23:5173"));
+    expect(join.phoneSite).toBe(true);
+    const page = await (await fetch(`${base}/`)).text();
+    expect(page).toContain('href="http://192.168.1.23:5173"');
+  } finally {
+    settings.phoneVitePort = null;
+  }
 });

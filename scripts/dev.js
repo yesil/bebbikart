@@ -6,6 +6,8 @@
 import { ensureImported } from "./godot-import.js";
 import { freePort } from "./ports.js";
 
+const VITE_PORT = 5173; // apps/web/vite.config.js
+
 function fail(message) {
   console.error(`[dev] ERROR: ${message}`);
   process.exit(1);
@@ -14,7 +16,7 @@ function fail(message) {
 try {
   ensureImported();
   await freePort(Number(process.env.PORT ?? 8080), "server");
-  await freePort(5173, "phone site's Vite"); // apps/web/vite.config.js
+  await freePort(VITE_PORT, "phone site's Vite");
 } catch (err) {
   fail(err.message);
 }
@@ -31,13 +33,15 @@ async function stopAll(code) {
   process.exit(code);
 }
 
-for (const [name, cmd] of [
-  ["server", ["bun", "run", "--cwd", "apps/server", "dev"]],
+for (const [name, cmd, extraEnv] of [
+  // The server sends phones (the big screen's QR code) to Vite, which has the phone site.
+  ["server", ["bun", "run", "--cwd", "apps/server", "dev"], { BK_PHONE_VITE_PORT: `${VITE_PORT}` }],
   ["web", ["bun", "run", "--cwd", "apps/web", "dev"]],
   ["game", ["godot", "--path", "apps/game", "--", server, ...process.argv.slice(2)]],
 ]) {
   try {
-    procs.push({ name, proc: Bun.spawn(cmd, { stdout: "inherit", stderr: "inherit" }) });
+    const env = { ...process.env, ...extraEnv };
+    procs.push({ name, proc: Bun.spawn(cmd, { env, stdout: "inherit", stderr: "inherit" }) });
   } catch (err) {
     // Without this the ones already started would keep running and hold their ports.
     console.error(`[dev] ERROR: could not start the ${name}: ${err.message}`);

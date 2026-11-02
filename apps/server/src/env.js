@@ -56,6 +56,15 @@ export const DOTENV_FILES = [
   join(REPO_ROOT, "packages/asset-pipeline/.env"),
 ];
 
+/** Where phones open the site: the server itself, or Vite under bun run dev (phoneVitePort), which
+ * serves the phone site from source and forwards the rest to the server. */
+export function phoneUrl(settings) {
+  if (!settings.phoneVitePort) return settings.publicUrl;
+  const url = new URL(settings.publicUrl);
+  url.port = String(settings.phoneVitePort);
+  return url.origin;
+}
+
 export function loadSettings(env = process.env) {
   const port = Number(env.PORT ?? 8080);
   let config = mergeConfig(DEFAULT_CONFIG, fileConfig());
@@ -66,6 +75,8 @@ export function loadSettings(env = process.env) {
     port,
     config,
     publicUrl: (env.PUBLIC_URL ?? `http://${lanIp()}:${port}`).replace(/\/$/, ""),
+    // Set by bun run dev (scripts/dev.js): phones go to Vite on this port, not to the server.
+    phoneVitePort: env.BK_PHONE_VITE_PORT ? Number(env.BK_PHONE_VITE_PORT) : null,
     adminPin: env.BK_ADMIN_PIN ?? "1234",
     gameKey: env.BK_GAME_KEY ?? "bebbikart-dev",
     dataDir: resolve(env.BK_DATA_DIR ?? join(REPO_ROOT, "apps/server/data")),

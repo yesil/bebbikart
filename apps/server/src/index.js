@@ -6,7 +6,7 @@
 //      BK_DATA_DIR (apps/server/data), BK_SESSION_MINUTES, BK_MAX_PLAYERS
 import { join } from "node:path";
 import { openDb } from "./db.js";
-import { DOTENV_FILES, loadDotEnvs, loadSettings, REPO_ROOT } from "./env.js";
+import { DOTENV_FILES, loadDotEnvs, loadSettings, phoneUrl, REPO_ROOT } from "./env.js";
 
 const DOTENV_FILES_HINT = DOTENV_FILES.map((f) => `    ${f}`).join("\n");
 
@@ -70,8 +70,7 @@ ${DOTENV_FILES_HINT}
   const { server } = startServer(settings);
   console.log(`
   BebbiKart server on port ${server.port}
-    Phones:   ${settings.publicUrl}   (built site: bun run build:web)
-              ${settings.publicUrl.replace(/:\d+$/, ":5173")}   (Vite, with bun run dev)
+    Phones:   ${phoneUrl(settings)}   (${settings.phoneVitePort ? "Vite, under bun run dev" : "built site: bun run build:web"})
     Game:     ws://localhost:${server.port}/ws  (game key "${settings.gameKey}")
     Admin PIN ${settings.adminPin} · data ${settings.dataDir}
     Pipeline: Claude (key from ${envFiles.length ? envFiles.map((f) => f.replace(`${REPO_ROOT}/`, "")).join(", ") : "the environment"})

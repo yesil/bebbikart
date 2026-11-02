@@ -7,6 +7,7 @@ import {
   RENDER_KEYS,
   SessionStartBodySchema,
 } from "@bebbikart/shared";
+import { phoneUrl } from "./env.js";
 import { ApiError } from "./errors.js";
 import { qrRows } from "./qr.js";
 
@@ -66,17 +67,20 @@ export function createHttp({ game, jobs, settings }) {
   /** [method, pattern, handler(req, params, url)] */
   const routes = [
     ["GET", "/api/health", () => json({ ok: true, gameOnline: null })],
-    // The phone address and its QR code, for the big screen's options menu. phoneSite: false
-    // when the built phone site is missing (the address then only shows how to build it).
+    // The phone address and its QR code, for the big screen's options menu: Vite's under bun run
+    // dev, else the server's own. phoneSite: false when the server would serve the phone site but
+    // it isn't built (the address then only shows how to build it).
     [
       "GET",
       "/api/join",
-      () =>
-        json({
-          url: settings.publicUrl,
-          qr: qrRows(settings.publicUrl),
-          phoneSite: existsSync(join(settings.webDist, "index.html")),
-        }),
+      () => {
+        const url = phoneUrl(settings);
+        return json({
+          url,
+          qr: qrRows(url),
+          phoneSite: !!settings.phoneVitePort || existsSync(join(settings.webDist, "index.html")),
+        });
+      },
     ],
     [
       "POST",
@@ -311,8 +315,11 @@ export function createHttp({ game, jobs, settings }) {
       const index = serveFile(settings.webDist, "index.html");
       if (index) return index;
     }
+    const advice = settings.phoneVitePort
+      ? `Under <code>bun run dev</code> it runs on Vite: <a href="${phoneUrl(settings)}">${phoneUrl(settings)}</a>.`
+      : "Run <code>bun run --cwd apps/web build</code>, or use the Vite dev server on port 5173.";
     return new Response(
-      `<h1>BebbiKart server</h1><p>The phone site isn't built yet. Run <code>bun run --cwd apps/web build</code>, or use the Vite dev server on port 5173.</p>`,
+      `<h1>BebbiKart server</h1><p>The phone site isn't built yet. ${advice}</p>`,
       { headers: { "content-type": "text/html" } },
     );
   };
