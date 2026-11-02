@@ -26,7 +26,7 @@ export const DEFAULT_CONFIG = {
   maxConcurrentRuns: 20,
   starsTotal: 20,
   starsMaxPerAbility: 10,
-  runTimeCapMs: 90_000,
+  runTimeCapMs: 100_000,
   stuckTimeoutMs: 3_000,
   startCountdownMs: 3_000, // race start countdown (§2c); 0 = each racer leaves as soon as there is room
   track: "village", // TrackId; changes only while no session is running (409 track_locked)
