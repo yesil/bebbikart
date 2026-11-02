@@ -68,7 +68,7 @@ function schemaText(L = SPEC_LIMITS) {
     "base": <ride base>, "color": <palette index>, "accent": <palette index>, "scale": [x,y,z] each ${r(L.rideScale)},
     "pattern": <pattern> (optional, painted on the parts in the ride's main colour), "finish": <finish> (optional),
     "number": { "value": ${r(L.rideNumber)} whole number, "color": <palette index> } (optional, racing number on both sides),
-    "wheels": { "count": 2|3|4, "style": <wheel style>, "color": <palette index>, "size": ${r(L.wheelSize)} } (optional),
+    "wheels": { "count": 2|3|4, "style": <wheel style>, "color": <palette index>, "size": ${r(L.wheelSize)} } (optional; color = the tyres as drawn, the hubs take the accent, or the main colour when the tyres are in the accent),
     "legs": { "style": <leg style>, "color": <palette index> } (optional),
     "wings": { "style": <wing style>, "color": <palette index>, "size": ${r(L.wingSize)} } (optional),
     "tail": { "style": <tail style>, "color": <palette index> } (optional),
@@ -127,8 +127,9 @@ Ride colours: "color" paints the ride's main body; "accent" paints bumpers, seat
   ride.finish covers the ride's extras too, and ride.pattern paints every ride part (extras too) in the main colour.
 
 CHASSIS BUILDING (ride.base "chassis": for everyday objects, food, furniture, toys…)
-The chassis is only a dark floor 0.2 m above the ground, a small seat pad in ride.color and the wheels (at x ±0.5,
-z ±0.47, radius 0.18 × wheels.size). The driver sits on the seat at y 0.36, z -0.1, facing forward (+z): about
+The chassis is only a small seat pad in ride.color and, when you give ride.wheels, a dark floor 0.2 m above the
+ground with the wheels (at x ±0.5, z ±0.47, radius 0.18 × wheels.size). It has NO wheels by default: give them as
+drawn (count, size, tyre colour), and leave them out when the child drew none (a duck boat on water glides). The driver sits on the seat at y 0.36, z -0.1, facing forward (+z): about
 0.35 m wide, 0.3 m deep and 1 m tall to the top of the head. You build the drawn object AROUND the driver with ride
 extras on "ride_center" = the middle of the floor, (0, 0.2, 0) above the ground; its offsets go up to ±1.5, so the
 whole object fits on this one socket. Keep ride.scale [1,1,1] on a chassis and size the parts instead.
@@ -177,7 +178,8 @@ const LOOK_RULES = `LOOK at each drawing closely before designing, and write dow
   label, translate it, and note which part it points at: the child's words are instructions and override guesses;
 - the colours: crayon/marker colours as vivid toy-like hex codes. Parts left uncoloured keep their natural reading:
   white paper inside an outline = white (a white skirt, white socks), grey pencil shading = a real mid grey or
-  silver such as #a9a9b8 (never pure white, which reads as a helmet);
+  silver such as #a9a9b8 (never pure white, which reads as a helmet). The black outline is only how the child draws:
+  little circles drawn as outlines (bubbles, popcorn, puffs, pearls) are solid white balls, not black rings;
 - proportions and exaggerations (a huge head, very long hair, an enormous wheel): what the child cared about most;
 - for the VEHICLE, its SHAPE: what real thing it is (a go-kart, car, boat, rocket… or an everyday object, food,
   furniture, an animal, a toy), its outline, the view it is drawn from (front or side), and each big part in its place
