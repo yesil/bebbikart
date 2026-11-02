@@ -6,7 +6,8 @@ extends CanvasLayer
 ##    Top right on the full screen; on the split screen under the crown, between the halves.
 ##    No fallbacks: a picture that hasn't come AVATAR_WAIT_S after its row appeared turns the
 ##    row's picture red with "no picture" under the name, and is reported as a problem.
-##  - Problems (top centre, red): errors for the facilitator. No fallbacks: shown, never hidden.
+##  - Problems (red): errors for the facilitator. No fallbacks: shown, never hidden. Top centre;
+##    at the bottom centre while the board sits between the halves or the podium shows.
 ##  - Podium (centre): the session's top three when it ends, for PODIUM_S.
 ## main.gd feeds it (set_roster, set_leaderboard, set_session, run_result, problem, split,
 ## crown_bottom) and calls update() every frame.
@@ -21,6 +22,7 @@ const PALETTE := [
 ]
 const PROBLEM_S := 30.0
 const PROBLEMS_TOP := 300.0     # the problems' top edge, under the crown
+const PROBLEMS_HALF_W := 380.0
 const PODIUM_S := 30.0
 const FONT_NAMES := ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue", "Arial"]
 const BOARD_ROWS := 6           # rows on the big screen (the phones list the whole leaderboard)
@@ -46,6 +48,7 @@ var _colors := {}               # pid -> Color
 var _roster := {}               # pid -> RosterEntry-like {nickname, status, stage, connected}
 var _ranks := {}                # pid -> {rank, bestTimeMs, nickname, racerTitle?}
 var _problems: VBoxContainer
+var _problems_bottom := false  # the problems sit at the bottom centre (see _place_problems)
 var _session := ""
 var _podium: Control = null
 var _board: PanelContainer
@@ -63,12 +66,10 @@ func _ready() -> void:
 	_font.font_weight = 700
 	_build_board_panel()  # before the problems, so a problem is drawn over the board
 	_problems = VBoxContainer.new()
-	_problems.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_problems.offset_left = -380
-	_problems.offset_right = 380
-	_problems.offset_top = PROBLEMS_TOP
 	_problems.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_problems)
+	_problems_bottom = true
+	_place_problems(false)
 
 
 # ---------------------------------------------------------------- data in
@@ -161,6 +162,22 @@ func update(delta: float) -> void:
 	if _board_dirty:
 		_build_board_rows()
 	_update_board()
+	_place_problems(_podium != null or (split and _board.visible))
+
+
+## The problems: top centre under the crown; at the bottom centre while the middle of the screen
+## is taken (the board between the halves, or the podium), so they never cover it, and never the
+## halves' messages (who is next, a lap's verdict) around the middle either.
+func _place_problems(bottom: bool) -> void:
+	if bottom == _problems_bottom:
+		return
+	_problems_bottom = bottom
+	_problems.set_anchors_preset(Control.PRESET_CENTER_BOTTOM if bottom else Control.PRESET_CENTER_TOP)
+	_problems.grow_vertical = Control.GROW_DIRECTION_BEGIN if bottom else Control.GROW_DIRECTION_END
+	_problems.offset_left = -PROBLEMS_HALF_W
+	_problems.offset_right = PROBLEMS_HALF_W
+	_problems.offset_top = -MARGIN if bottom else PROBLEMS_TOP
+	_problems.offset_bottom = _problems.offset_top
 
 
 # ---------------------------------------------------------------- leaderboard
@@ -238,7 +255,6 @@ func _board_row(pid: String) -> Dictionary:
 func _update_board() -> void:
 	_board.visible = not _rows.is_empty() and _podium == null
 	if not _board.visible:
-		_problems.offset_top = PROBLEMS_TOP
 		return
 	for pid in _rows:
 		var row: Dictionary = _rows[pid]
@@ -262,8 +278,6 @@ func _update_board() -> void:
 		_board.position = Vector2((vp.x - _board.size.x) * 0.5, crown_bottom + CROWN_GAP)
 	else:
 		_board.position = Vector2(vp.x - _board.size.x - MARGIN, MARGIN)
-	# The problems sit top centre: under the board when it is there too, never over it.
-	_problems.offset_top = maxf(PROBLEMS_TOP, _board.position.y + _board.size.y + CROWN_GAP) if split else PROBLEMS_TOP
 
 
 func _report_no_picture(pid: String) -> void:

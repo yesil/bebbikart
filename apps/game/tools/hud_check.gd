@@ -6,8 +6,8 @@ extends SceneTree
 ## tools/duel_check.gd. Must run windowed (the dummy renderer saves blank images):
 ##   godot --path apps/game --resolution 1920x1080 --script res://tools/hud_check.gd -- --out=DIR [--language=de]
 ## Exits 1 if the board or the podium is missing, doesn't fit the screen, covers the crown or is
-## covered by a problem, shows a picture that isn't the racer's, or a missing picture isn't shown
-## and reported.
+## covered by a problem (nor may a problem cover the podium or the halves' messages), shows a
+## picture that isn't the racer's, or a missing picture isn't shown and reported.
 
 const RaceHud = preload("res://ui/race_hud.gd")
 const DuelHud = preload("res://ui/duel_hud.gd")
@@ -91,6 +91,13 @@ func _initialize() -> void:
 		_fail("the split screen's board isn't centred: %s" % b.get_global_rect())
 	if problems.get_global_rect().intersects(b.get_global_rect()):
 		_fail("the problem covers the split screen's board: %s" % problems.get_global_rect())
+	var halves: Dictionary = duel.get("_halves")
+	for side in halves:
+		var idle: Control = halves[side]["idle"]
+		if idle.visible and problems.get_global_rect().intersects(idle.get_global_rect()):
+			_fail("the problem covers the %s half's message: %s" % [side, problems.get_global_rect()])
+	if not screen.encloses(problems.get_global_rect()):
+		_fail("the problem is off the screen: %s" % problems.get_global_rect())
 
 	# The podium, the board out of its way.
 	hud.set_session("ended")
@@ -106,6 +113,8 @@ func _initialize() -> void:
 			_fail("the podium doesn't fit the screen")
 	if b.visible:
 		_fail("the board shows over the podium")
+	if podium != null and problems.get_global_rect().intersects(podium.get_global_rect()):
+		_fail("the problem covers the podium: %s" % problems.get_global_rect())
 	if not _fails.is_empty():
 		for f in _fails:
 			print("HUD CHECK FAILED: ", f)
