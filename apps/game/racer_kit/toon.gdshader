@@ -1,12 +1,16 @@
 // Shared soft "vinyl toy" material for every racer part.
 // Colour, pattern and finish come from per-instance uniforms, so all parts share one material.
+// Vertex colours (white when a mesh has none) tint the albedo, and their alpha says where the
+// pattern may show: the village surprises' animals (world/toy_animal.gd) merge differently
+// coloured pieces into one mesh that way.
 shader_type spatial;
 render_mode depth_draw_opaque;
 
 instance uniform vec4 albedo : source_color = vec4(1.0);
 instance uniform float glow = 0.0;
 // Pattern painted over the part (RacerSpec pattern.type, see KitMaterial.PATTERNS):
-// 0 none, 1 stripes, 2 spots, 3 stars, 4 hearts, 5 zigzag, 6 checks, 7 crayon, 8 swirl.
+// 0 none, 1 stripes, 2 spots, 3 stars, 4 hearts, 5 zigzag, 6 checks, 7 crayon, 8 swirl,
+// 9 patches (a cow's big blotches; the animals only, not offered to racer specs).
 instance uniform int pattern = 0;
 instance uniform vec4 pattern_color : source_color = vec4(1.0);
 instance uniform float pattern_scale = 1.0;
@@ -52,6 +56,18 @@ float heart_sdf(vec2 p) {
 		return sqrt(dot(p - vec2(0.25, 0.75), p - vec2(0.25, 0.75))) - sqrt(2.0) / 4.0;
 	return sqrt(min(dot(p - vec2(0.0, 1.0), p - vec2(0.0, 1.0)),
 		dot(p - 0.5 * max(p.x + p.y, 0.0), p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y);
+}
+
+// Smooth 3D value noise in 0..1.
+float value_noise(vec3 p) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float a = mix(hash13(i), hash13(i + vec3(1.0, 0.0, 0.0)), f.x);
+	float b = mix(hash13(i + vec3(0.0, 1.0, 0.0)), hash13(i + vec3(1.0, 1.0, 0.0)), f.x);
+	float c = mix(hash13(i + vec3(0.0, 0.0, 1.0)), hash13(i + vec3(1.0, 0.0, 1.0)), f.x);
+	float d = mix(hash13(i + vec3(0.0, 1.0, 1.0)), hash13(i + vec3(1.0, 1.0, 1.0)), f.x);
+	return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
 }
 
 // Projects onto the plane facing the dominant normal axis (cheap triplanar).
@@ -104,6 +120,10 @@ float pattern_mask(vec3 p, vec3 n) {
 		float a = atan(q.x, q.z);
 		float v = sin(a * 3.0 + q.y * 30.0 + length(q.xz) * 20.0);
 		return smoothstep(0.2 - aa * 6.0, 0.2 + aa * 6.0, v);
+	} else if (pattern == 9) { // patches: big blotches with wobbly edges
+		vec3 c = q * 2.6;
+		float v = value_noise(c) * 0.75 + value_noise(c * 2.9 + 5.3) * 0.25;
+		return smoothstep(0.56 - aa * 0.4, 0.56 + aa * 0.4, v);
 	}
 	return 0.0;
 }
@@ -115,9 +135,9 @@ void vertex() {
 }
 
 void fragment() {
-	vec3 col = albedo.rgb;
+	vec3 col = albedo.rgb * COLOR.rgb;
 	if (pattern > 0) {
-		col = mix(col, pattern_color.rgb, pattern_mask(obj_pos, normalize(obj_nrm)));
+		col = mix(col, pattern_color.rgb, pattern_mask(obj_pos, normalize(obj_nrm)) * COLOR.a);
 	}
 	ALBEDO = col;
 	EMISSION = col * glow;
