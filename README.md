@@ -53,7 +53,7 @@ whole thing with a phone on the same Wi-Fi, see [`docs/local-testing.md`](docs/l
 
 | Command | What it does |
 |---|---|
-| `bun run dev` | Starts server, phone site and game together |
+| `bun run dev` | Starts server, phone site and game together; when one stops, all three stop |
 | `bun run play` | Real play on the big screen: built phone site on :8080 and the game's release build (no debug runtime); exports the game when needed |
 | `bun run game:export` | Exports the game's release build to `apps/game/export/BebbiKart.app` (needs Godot's export templates) |
 | `bun run start` | Builds the phone site and serves everything from the server on :8080 |
