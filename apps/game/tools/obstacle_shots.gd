@@ -7,7 +7,8 @@ extends SceneTree
 ## group at a fixed spot, lets it walk, roll or drop in, and shoots it at a few moments.
 ## --hit: instead, lets the mock race run and drops a grazing cow (then sheep, cheese, hay) in the
 ## lane of the first racer to reach a surprise spot, holds its thumb there so it can't dodge, and
-## shoots the race camera every 0.15 s round the hit (hit_<kind>_<n>.png).
+## shoots the race camera every 0.15 s from when it is APPROACH_M off until after the hit
+## (hit_<kind>_<n>.png).
 ## --close: instead, a cow and a flock of sheep up close: front three-quarter and side while
 ## grazing or crossing (close_<kind>_front.png, close_<kind>_side.png), then knocked by a kart
 ## that isn't there, shot from the front as they react and run off (close_<kind>_hit_<n>.png).
@@ -17,6 +18,7 @@ const Obstacles = preload("res://sim/obstacles.gd")
 const ObstacleViews = preload("res://world/obstacle_views.gd")
 const Route = preload("res://sim/route.gd")
 const Tuning = preload("res://sim/tuning.gd")
+const SteerMarks = preload("res://world/steer_marks.gd")
 
 ## [name, spot index, kind, s on the spot's segment, side, seconds to shoot at]
 const SHOTS := [
@@ -31,6 +33,8 @@ const CLOSE := [
 	["sheep", 3, 30.0, -1.0, 2.6, 3.4],
 ]
 const CLOSE_HIT_AT := [0.1, 0.25, 0.45, 0.7, 1.0, 1.4]   # seconds after the knock
+const APPROACH_M := 12.0     # --hit: shots start when the kart is this close
+const HIT_SHOTS := 16
 
 var out := ""
 var hit_mode := false
@@ -167,6 +171,16 @@ func _hits(main: Node, sim) -> void:
 								it["stay"] = 8.0
 								it["t"] = 0.0
 							first = false
+					if kind == "sheep":
+						# The flock already crossing, its first sheep just beside the lane: it walks
+						# into the kart's way as the kart gets there.
+						var lead := INF
+						for it in sim.obstacles.items:
+							if int(it["group"]) == gid:
+								lead = minf(lead, float(it["d"]))
+						for it in sim.obstacles.items:
+							if int(it["group"]) == gid:
+								it["d"] = float(it["d"]) + r.d + 1.4 - lead
 					held = r.run_id
 					held_x = r.lane_x()
 					placed = true
@@ -181,9 +195,11 @@ func _hits(main: Node, sim) -> void:
 						hit_at = waited
 				if hit_at < 0.0 and waited > 60.0:
 					break
-				if hit_at < 0.0:
+				if hit_at < 0.0 and (n == 0 and _gap(sim, held, gid) > APPROACH_M):
 					continue
-			if n < 14:
+				if hit_at >= 0.0:
+					print("hit before shot %d" % n)
+			if n < HIT_SHOTS:
 				await RenderingServer.frame_post_draw
 				var path := out.path_join("hit_%s_%02d.png" % [kind, n])
 				get_root().get_texture().get_image().save_png(path)
@@ -201,11 +217,25 @@ func _hits(main: Node, sim) -> void:
 			push_error("obstacle_shots: no racer hit the %s" % kind)
 
 
+## Metres from racer run_id to the nearest item of group gid (INF when either is gone).
+func _gap(sim, run_id: String, gid: int) -> float:
+	var r = sim.by_run.get(run_id)
+	if r == null:
+		return INF
+	var best := INF
+	for it in sim.obstacles.items:
+		if int(it["group"]) == gid:
+			var seg: Dictionary = sim.course.segments[it["seg"]]
+			best = minf(best, r.world_pos().distance_to(seg["route"].world_at(float(it["s"]), float(it["d"]))))
+	return best
+
+
 ## Each animal up close: it walks in (the sim stepping), then the sim holds it still while its view
 ## goes on moving, shot from the front three-quarter and the side; then it is knocked as if a kart
 ## passed just beside it and shot from the front as it reacts and runs off.
 func _close(sim, cam: Camera3D, views: Node) -> void:
 	cam.fov = 40.0
+	cam.cull_mask &= ~SteerMarks.SIGN_LAYER   # no "!" or "MOO!" in the way this close
 	for c in CLOSE:
 		var kind: String = c[0]
 		sim.obstacles.items.clear()
@@ -237,8 +267,8 @@ func _close(sim, cam: Camera3D, views: Node) -> void:
 		for o in sim.obstacles.items:
 			if int(o["group"]) == gid and (o == it or kind == "sheep"):
 				sim.obstacles._scare(o, signf(float(o["d"]) - kart_d))
-		views.call("on_hit", {"kind": kind, "pos": at, "runId": ""})
-		cam.global_position = front
+		views.call("on_hit", {"kind": kind, "pos": at, "runId": "", "item": it["id"]})
+		cam.global_position = at + fwd.rotated(Vector3.UP, 0.7) * dist * 1.8 + Vector3.UP * 1.6
 		cam.look_at(at + Vector3.UP * 0.7, Vector3.UP)
 		var t0 := 0.0
 		for i in CLOSE_HIT_AT.size():

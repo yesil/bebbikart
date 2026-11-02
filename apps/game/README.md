@@ -181,8 +181,10 @@ Cows wander onto the road and graze there, sheep cross it in little flocks, chee
 | File | What |
 |---|---|
 | `sim/obstacles.gd` | Where and when they turn up (`VillageCourse.obstacle_spots`), how they move, what a kart hits, what the autopilot sees ahead |
-| `world/obstacle_views.gd` | The animals (Poly Pizza cow and sheep, animated), cheese wheels, hay bales, the "!" over each group, the "MOO!" a hit pops up |
+| `world/obstacle_views.gd` | Draws them: the animals turning smoothly and watching the karts, cheese wheels, hay bales, the "!" over each group, the "MOO!" a hit pops up, a puff of wool when a sheep is hit |
+| `world/toy_animal.gd` | The toy cow (Swiss dairy cow with a brass bell) and Valais Blacknose sheep, built from the racer kit's parts (each moving part one merged, vertex-coloured mesh, cached) and moved in code: walk, graze and chew, gallop or bounce off, look at karts, hop at a near miss, spin or tumble with dizzy eyes when hit |
 | `tools/obstacle_check.gd` | Hands off, kid-steered and wild-thumbed karts with and without them: met and hit per lap, the time a hit and a careful pass cost, no new fails |
+| `tools/obstacle_shots.gd` | Screenshots (windowed): each kind on its road, `--close` the cow and sheep up close and reacting to a knock, `--hit` the race camera round a kart hitting each kind |
 
 The game manager switches them on or off in the options menu ("Surprises on the road", kept for the next start); `--no-obstacles` leaves them out of a game run. The balance tools (sweep, village_laps, start_crowd_check) build their sims without them, so their baselines mean the same.
 
