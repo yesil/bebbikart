@@ -26,6 +26,10 @@ const FLAME_R := 2.0
 const FLAME_L := 3.0
 const LOUVRE := 4.0
 const ASHLAR := 5.0
+const FRIEZE := 6.0
+const WOODPILE := 7.0
+## Frieze board paints: oxblood, fir green, slate blue.
+const FRIEZE_PAINTS := [Color(0.5, 0.12, 0.1), Color(0.14, 0.3, 0.2), Color(0.2, 0.27, 0.4)]
 
 const CHUNK := 96.0          # metres
 const DETAIL_CHUNK := 48.0   # metres: the small pieces are grouped finer
@@ -906,9 +910,10 @@ func _dentils(y: float, z: float, length: float, col: Color) -> void:
 ## covering `cover` tinted `cover_col`. Builds the slab (covering on top, boards under), fascia
 ## and bargeboards, a ridge cap, rafters under the side eaves, purlins on stepped brackets under
 ## the gable overhangs and the two gable walls (material gm, tint gcol, pattern gflag) with
-## `gable_windows` small windows each. Returns the height of the ridge's top.
+## `gable_windows` small windows each. With `runde` the front overhang is a Bernese Ründe (a
+## boarded vault) instead of purlins on brackets. Returns the height of the ridge's top.
 func _gable_roof(y_eave: float, pitch: float, o_side: float, o_front: float, o_back: float, cover: int, cover_col: Color,
-		gm: int, gcol: Color, gflag: float, gable_windows := 2) -> float:
+		gm: int, gcol: Color, gflag: float, gable_windows := 2, runde := false) -> float:
 	var hw := _w * 0.5
 	var hd := _d * 0.5
 	var tp := tan(pitch)
@@ -954,7 +959,7 @@ func _gable_roof(y_eave: float, pitch: float, o_side: float, o_front: float, o_b
 	# Purlins under the gable overhangs, on stepped brackets at the wall.
 	for gz: float in [1.0, -1.0]:
 		var o := o_front if gz > 0.0 else o_back
-		if o < 0.3:
+		if o < 0.3 or (runde and gz > 0.0):
 			continue
 		for px: float in [0.0, -hw * 0.5, hw * 0.5, -hw + 0.12, hw - 0.12]:
 			var yu := y_eave + (hw - absf(px)) * tp
@@ -979,7 +984,79 @@ func _gable_roof(y_eave: float, pitch: float, o_side: float, o_front: float, o_b
 				if absf(cx) + gw * 0.5 < room:
 					ops.append([cx - gw * 0.5, cx + gw * 0.5, gy, gy + gwh])
 		_gable_wall(gz, y_eave, tp, gh, ops, gm, gcol, gflag)
+	if runde:
+		_runde(y_eave, tp, zf - 0.12, rc)
 	return y_ridge + tv
+
+
+## Bernese Ründe under the front gable's overhang: a bow that follows the roof's two slopes a
+## little below them and rounds off under the ridge, boarded above it up to the roof (with a
+## painted frieze along the bow) and vaulted underneath back to the gable wall.
+func _runde(y_eave: float, tp: float, z: float, col: Color) -> void:
+	var hw := _w * 0.5
+	var hd := _d * 0.5
+	var m := 0.35                                   # below the roof's underside
+	var pitch := atan(tp)
+	var apex := y_eave + hw * tp - m
+	var r := minf(hw * 1.3, (hw - 0.6) / sin(pitch))  # the crown's radius
+	var xt := r * sin(pitch)                        # where the crown meets the straight parts
+	var yc := apex - r / cos(pitch)
+	var bow := func(x: float) -> float:
+		if absf(x) < xt:
+			return yc + sqrt(r * r - x * x)
+		return apex - tp * absf(x)
+	var under := func(x: float) -> float: return y_eave + (hw - absf(x)) * tp - 0.02
+	var paint := _lin(FRIEZE_PAINTS[rng.randi_range(0, FRIEZE_PAINTS.size() - 1)])
+	var xs: Array[float] = []
+	var seg := 20
+	for i in seg + 1:
+		xs.append(lerpf(hw, -hw, float(i) / seg))
+	var along := 0.0
+	for i in seg:
+		var p0 := Vector3(xs[i], bow.call(xs[i]), z)
+		var p1 := Vector3(xs[i + 1], bow.call(xs[i + 1]), z)
+		var len := p0.distance_to(p1)
+		var tangent := (p1 - p0).normalized()
+		var outward := Vector3(-tangent.y, tangent.x, 0)      # up, away from the vault
+		if outward.y < 0.0:
+			outward = -outward
+		# Apron from the bow up to the roof's underside.
+		_qf(BOARDS, p0, p1, Vector3(p1.x, under.call(p1.x), z), Vector3(p0.x, under.call(p0.x), z),
+			Vector2(-p0.y, p0.x), Vector2(-p1.y, p1.x), Vector2(-under.call(p1.x), p1.x), Vector2(-under.call(p0.x), p0.x), col, Vector3.BACK)
+		# Painted frieze along the bow, just in front of the apron.
+		var f := Vector3(0, 0, 0.012)
+		var band := minf(0.24, (under.call((p0.x + p1.x) * 0.5) - (p0.y + p1.y) * 0.5) * 0.8)
+		_qf(PAINT, p1 + f, p0 + f, p0 + outward * band + f, p1 + outward * band + f,
+			Vector2(along + len, 0), Vector2(along, 0), Vector2(along, -0.24), Vector2(along + len, -0.24), paint, Vector3.BACK, FRIEZE)
+		# The vault under the bow, back to the gable wall.
+		_qf(BOARDS, p0, p1, Vector3(p1.x, p1.y, hd), Vector3(p0.x, p0.y, hd), Vector2(along, 0), Vector2(along + len, 0),
+			Vector2(along + len, z - hd), Vector2(along, z - hd), col * 1.1, -outward)
+		# A moulded board on the bow's front edge.
+		_beam(WOOD, p0 + Vector3(0, 0, 0.03), p1 + Vector3(0, 0, 0.03), 0.06, 0.1, col * 0.85, Vector3.BACK)
+		along += len
+
+
+## Painted frieze board across the front wall at height y (its bottom), `length` wide.
+func _frieze(y: float, length: float) -> void:
+	var paint := _lin(FRIEZE_PAINTS[rng.randi_range(0, FRIEZE_PAINTS.size() - 1)])
+	_box(PAINT, Transform3D(Basis(), Vector3(0, y + 0.12, _d * 0.5 + 0.015)), Vector3(length, 0.24, 0.03), paint, 32, 0, 0.0, FRIEZE)
+
+
+## Firewood stacked under the eaves against side wall k (1 right, 3 left) at its back end,
+## `width` long and up to `top`, sunk into the ground.
+func _woodpile(k: int, width: float, top: float) -> void:
+	var s: Array = _sides()[k]
+	var out: Vector3 = s[1]
+	var dir := Vector3.UP.cross(out)
+	var length: float = s[2]
+	# The back end of the wall: its far end on the right wall, its start on the left one.
+	var u := length - 0.35 - width * 0.5 if k == 1 else 0.35 + width * 0.5
+	var depth := 0.42
+	var c := Vector3((s[0] as Vector3).x, (top - 0.3) * 0.5, (s[0] as Vector3).z) + dir * u + out * (0.07 + depth * 0.5)
+	_box(WOOD, Transform3D(Basis(dir, Vector3.UP, out), c), Vector3(width, top + 0.3, depth), _jit(_wood * 1.1, 0.08), 32, 0, 0.0, WOODPILE)
+	# A little roof of boards over it.
+	_box(BOARDS, Transform3D(Basis(dir, Vector3.UP, out) * Basis(Vector3.RIGHT, -0.25), c + Vector3(0, (top + 0.3) * 0.5 + 0.05, 0) + out * 0.04),
+		Vector3(width + 0.2, 0.04, depth + 0.2), _wood * 0.8)
 
 
 ## Gable triangle on the front (gz 1) or back (-1) wall from y_eave up under the roof, as
@@ -1197,9 +1274,16 @@ func _chalet(base: float, trade: String) -> void:
 		y += h
 	var cover := _roof_cover(0.55, 0.25)
 	var pitch := deg_to_rad(rng.randf_range(20.0, 25.0))
-	var top := _gable_roof(y, pitch, 0.9, rng.randf_range(1.15, 1.5), 0.6, cover[0], cover[1], WOOD, _wood, LOGS, 2 if rng.randf() < 0.8 else 1)
-	if rng.randf() < 0.5:
+	var runde := trade == "" and rng.randf() < 0.15
+	var top := _gable_roof(y, pitch, 0.9, rng.randf_range(1.15, 1.5), 0.6, cover[0], cover[1], WOOD, _wood, LOGS, 2 if rng.randf() < 0.8 else 1, runde)
+	# Under the gable: carved dentils, a painted frieze, or nothing.
+	var deco := rng.randf()
+	if deco < 0.35:
 		_dentils(y + 0.06, _d * 0.5, _w - 0.3, _jit(_wood, 0.1))
+	elif deco < 0.75:
+		_frieze(y + 0.02, _w - 0.3)
+	if trade == "" and rng.randf() < 0.5:
+		_woodpile(1 if rng.randf() < 0.5 else 3, rng.randf_range(0.85, 1.0), base + rng.randf_range(1.0, 1.6))
 	if rng.randf() < 0.75:
 		var cx := _w * rng.randf_range(0.12, 0.3) * (1.0 if rng.randf() < 0.5 else -1.0)
 		_chimney(cx, -_d * rng.randf_range(0.05, 0.25), y + (_w * 0.5 - absf(cx)) * tan(pitch) - 0.2, top + 0.7, rng.randf() < 0.4)
@@ -1244,8 +1328,8 @@ func _inn(base: float) -> void:
 			_balcony(y, 1.0, _w * 0.6, 1.0)
 		y += h
 	var pitch := deg_to_rad(24.0)
-	var top := _gable_roof(y, pitch, 1.0, 1.6, 0.8, SHINGLES, _shingles(), WOOD, _wood, LOGS, 3)
-	_dentils(y + 0.06, _d * 0.5, _w - 0.3, _jit(_wood, 0.1))
+	var top := _gable_roof(y, pitch, 1.0, 1.6, 0.8, SHINGLES, _shingles(), WOOD, _wood, LOGS, 3, true)
+	_frieze(y + 0.02, _w - 0.3)
 	_chimney(-_w * 0.18, 0.0, y + _w * 0.32 * tan(pitch) - 0.2, top + 0.8)
 	for x: float in [-_w * 0.5 + 1.2, _w * 0.5 - 1.2]:
 		_local_props.append(["banner-red", Transform3D(Basis(Vector3.UP, -PI * 0.5).scaled_local(Vector3(2.0, 2.4, 2.0)), Vector3(x, base + FLOOR_H + 0.3, _d * 0.5 - 0.6))])
@@ -1385,7 +1469,7 @@ func _church(base: float) -> void:
 		_wall(PLASTER, s[0], s[1], s[2], plinth, nave_h, _shift_list(ops[k], base - plinth), white)
 		for o in ops[k]:
 			_arch_window(s[0], s[1], o, base, 0.32, white)
-	_quoins(plinth, nave_h, stone)
+	_quoins(plinth, nave_h, _lin(Color(0.66, 0.66, 0.63)))
 	_gable_roof(nave_h, deg_to_rad(45.0), 0.5, 0.3, 0.4, TILES, _jit(Color(1, 1, 1), 0.05), PLASTER, white, 0.0, 0)
 	# Tower, built on its own footprint centred at (0, tz).
 	var saved := Vector2(_w, _d)
@@ -1431,7 +1515,7 @@ func _church(base: float) -> void:
 		for c: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
 			var lx := 0.55 if long else 0.3
 			var lz := 0.3 if long else 0.55
-			_box(STONE, Transform3D(Basis(), Vector3(c.x * (tw * 0.5 - lx * 0.5 + 0.03), y + 0.19, tz + c.y * (tw * 0.5 - lz * 0.5 + 0.03))), Vector3(lx, 0.36, lz), stone)
+			_box(PLASTER, Transform3D(Basis(), Vector3(c.x * (tw * 0.5 - lx * 0.5 + 0.03), y + 0.19, tz + c.y * (tw * 0.5 - lz * 0.5 + 0.03))), Vector3(lx, 0.36, lz), _lin(Color(0.66, 0.66, 0.63)))
 		y += 0.4
 		k2 += 1
 	# Cornice and the spire: a tall eight-sided needle.
@@ -1454,7 +1538,7 @@ func _church(base: float) -> void:
 	_box(PAINT, Transform3D(Basis(), apex + Vector3(0, 1.15, 0)), Vector3(0.55, 0.07, 0.07), _lin(GOLD))
 
 
-## Corner stones (quoins) up the four corners of the footprint, alternately long and short.
+## Dressed corner stones (quoins) up the four corners of the footprint, alternately long and short.
 func _quoins(y0: float, y1: float, col: Color) -> void:
 	var hw := _w * 0.5
 	var hd := _d * 0.5
@@ -1465,7 +1549,7 @@ func _quoins(y0: float, y1: float, col: Color) -> void:
 		for c: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
 			var lx := 0.55 if long else 0.3
 			var lz := 0.3 if long else 0.55
-			_box(STONE, Transform3D(Basis(), Vector3(c.x * (hw - lx * 0.5 + 0.03), y + 0.19, c.y * (hd - lz * 0.5 + 0.03))), Vector3(lx, 0.36, lz), col)
+			_box(PLASTER, Transform3D(Basis(), Vector3(c.x * (hw - lx * 0.5 + 0.03), y + 0.19, c.y * (hd - lz * 0.5 + 0.03))), Vector3(lx, 0.36, lz), col)
 		y += 0.4
 		k += 1
 
@@ -1710,7 +1794,8 @@ func _farmhouse(base: float) -> void:
 	_log_corners(y, y + UPPER_H - 0.22)
 	y += UPPER_H - 0.22
 	var pitch := deg_to_rad(30.0)
-	var top := _gable_roof(y, pitch, 1.4, 1.8, 1.2, SHINGLES, _shingles(), WOOD, _wood, LOGS, 3)
+	var top := _gable_roof(y, pitch, 1.4, 1.8, 1.2, SHINGLES, _shingles(), WOOD, _wood, LOGS, 3, true)
+	_frieze(y + 0.02, _w - 0.3)
 	_chimney(_w * 0.15, -_d * 0.2, y + _w * 0.35 * tan(pitch) - 0.2, top + 0.6)
 
 

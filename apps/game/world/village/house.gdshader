@@ -6,7 +6,8 @@ shader_type spatial;
 //   COLOR   rgb: tint of this piece (the house's timber tone, the shutter paint, ...), linear.
 //           a: rain streaks (1 just under a window sill, fading to 0 further down).
 //   UV2     x: pattern (0 none, 1 log courses, 2/3 flame stripes leaning right/left,
-//           4 louvres, 5 dressed stone blocks), y: height above the building's floor in metres.
+//           4 louvres, 5 dressed stone blocks, 6 painted frieze, 7 stacked firewood end on),
+//           y: height above the building's floor in metres.
 
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -87,6 +88,17 @@ void fragment() {
 		cavity = mix(0.4, 1.0, joint);
 		shade = 0.9 + 0.2 * hash21(floor(b));
 		uv += hash21(floor(b) + 3.1) * 5.0;
+	} else if (pattern == 7) {
+		// Firewood stacked end on: round log ends in staggered rows, lighter end grain with
+		// growth rings, dark gaps between the logs.
+		vec2 b = vec2(UV.x / 0.15, UV.y / 0.13);
+		b.x += mod(floor(b.y), 2.0) * 0.5;
+		vec2 c = fract(b) - 0.5;
+		float r = length(c * vec2(1.0, 1.15));
+		float rr = 0.36 + 0.09 * hash21(floor(b));
+		float end = 1.0 - smoothstep(rr - 0.05, rr, r);
+		cavity = mix(0.12, 1.0, end);
+		shade = mix(0.45, 1.45 + 0.3 * hash21(floor(b) + 1.7), end) * (1.0 - 0.1 * end * step(0.5, fract(r * 16.0)));
 	}
 	vec3 tex = texture(albedo_tex, uv).rgb;
 	float lum = dot(tex, vec3(0.299, 0.587, 0.114));
@@ -99,6 +111,21 @@ void fragment() {
 		float t = (UV.x * lean + UV.y) / 0.26;
 		float band = smoothstep(0.45, 0.5, fract(t)) * smoothstep(1.0, 0.95, fract(t));
 		col = mix(col, vec3(0.82, 0.8, 0.74) * tex * 1.6, band);
+	} else if (pattern == 6) {
+		// Painted frieze on a 24 cm board: light diamonds with ochre centres and dots between
+		// them, ochre lines along both edges, on the board's own paint.
+		float v = clamp(-UV.y / 0.24, 0.0, 1.0);
+		float x = fract(UV.x / 0.24);
+		float d = abs(x - 0.5) + abs(v - 0.5) * 1.2;
+		float aa = max(fwidth(d), 1e-3);
+		vec3 light = vec3(0.88, 0.84, 0.72) * tex;
+		vec3 ochre = vec3(0.8, 0.56, 0.16) * tex;
+		float edge = 1.0 - smoothstep(0.1, 0.1 + aa, v) * smoothstep(0.9, 0.9 - aa, v);
+		float ring = smoothstep(0.31, 0.31 - aa, d) * smoothstep(0.17, 0.17 + aa, d);
+		float core = smoothstep(0.1, 0.1 - aa, d);
+		float dots = smoothstep(0.08, 0.08 - aa, length(vec2(fract(x + 0.5) - 0.5, v - 0.5)));
+		col = mix(col, light, max(ring, dots) * (1.0 - edge));
+		col = mix(col, ochre, max(core * (1.0 - edge), edge));
 	} else if (pattern == 4) {
 		// Louvres: slanted slats, shadowed under each one.
 		float f = fract(UV.y / 0.07);
