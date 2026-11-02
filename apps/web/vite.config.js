@@ -7,6 +7,8 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    // Never move to another port silently: bun run dev frees 5173 or says what holds it.
+    strictPort: true,
     proxy: {
       "/api": "http://localhost:8080",
       "/assets": "http://localhost:8080",

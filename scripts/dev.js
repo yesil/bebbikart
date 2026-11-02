@@ -1,8 +1,10 @@
-// Starts server, phone site and the Godot game (connected to the server) together. Ctrl+C stops all
-// three, and so does any one of them stopping (quitting the game, or the server failing to start).
+// Starts server, phone site and the Godot game (connected to the server) together. Ctrl+C or kill
+// stops all three, and so does any one of them stopping (quitting the game, a server crash).
 // Extra arguments go to the game, e.g. `bun run dev -- --mode=duel` (king of the hill, split screen).
-// The game is imported first when Godot doesn't know all its classes yet (a fresh clone).
+// The game is imported first when Godot doesn't know all its classes yet (a fresh clone), and a
+// server or Vite left over from an earlier run is stopped first (scripts/ports.js).
 import { ensureImported } from "./godot-import.js";
+import { freePort } from "./ports.js";
 
 function fail(message) {
   console.error(`[dev] ERROR: ${message}`);
@@ -11,20 +13,10 @@ function fail(message) {
 
 try {
   ensureImported();
+  await freePort(Number(process.env.PORT ?? 8080), "server");
+  await freePort(5173, "phone site's Vite"); // apps/web/vite.config.js
 } catch (err) {
   fail(err.message);
-}
-
-// Name whoever holds the server's port before starting anything, instead of running the phone site
-// and the game against a server that can't start.
-const port = Number(process.env.PORT ?? 8080);
-const listener = Bun.spawnSync(["lsof", "-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fpc"]);
-const holder = listener.stdout.toString().match(/^p(\d+)\nc(.*)$/m);
-if (holder) {
-  fail(
-    `port ${port} is in use by ${holder[2]} (pid ${holder[1]}), maybe an earlier bun run dev. ` +
-      `Stop it with: kill ${holder[1]}`,
-  );
 }
 
 // The game connects to ws://localhost:8080/ws unless PORT says otherwise.
@@ -63,3 +55,4 @@ for (const { name, proc } of procs) {
 }
 
 process.on("SIGINT", () => stopAll(0));
+process.on("SIGTERM", () => stopAll(0));

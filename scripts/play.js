@@ -5,6 +5,7 @@
 // Extra arguments go to the game, e.g. `bun run play -- --quality=high`.
 import { join } from "node:path";
 import { exportGame, gameBinary, staleReason } from "./game-export.js";
+import { freePort } from "./ports.js";
 
 const ROOT = join(import.meta.dir, "..");
 
@@ -21,6 +22,8 @@ try {
     exportGame();
   }
   game = gameBinary();
+  // A server left over from an earlier bun run dev or play is stopped; anything else fails here.
+  await freePort(Number(process.env.PORT ?? 8080), "server");
 } catch (err) {
   fail(err.message);
 }
@@ -61,3 +64,4 @@ for (const { name, proc } of procs) {
 }
 
 process.on("SIGINT", () => stopAll(0));
+process.on("SIGTERM", () => stopAll(0));
