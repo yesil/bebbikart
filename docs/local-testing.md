@@ -52,7 +52,7 @@ This builds the phone site, starts the server without watching files (phones ope
 
 The release build is `apps/game/export/BebbiKart.app` (git-ignored), exported with the `macOS` preset in `apps/game/export_presets.cfg`. `bun run play` exports it first when it is missing or older than any file in `apps/game`; `bun run game:export` exports it on demand. In the release build H still shows the status overlay and Esc the options menu; the test keys do nothing.
 
-One-time setup: Godot's export templates for your Godot version (Godot editor → Editor → Manage Export Templates → Download and Install). Without them the export fails and says which template file is missing.
+One-time setup: Godot's export templates for your Godot version, `bun run game:templates` (1.3 GB). Without them `bun run play` stops before exporting and says to run it.
 
 ### Without Vite (debug game)
 

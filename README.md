@@ -18,15 +18,11 @@ leaderboard, uploads in `apps/server/data/`, which starts empty).
    from the [4.7.2 release](https://github.com/godotengine/godot/releases/tag/4.7.2-stable), put
    `Godot.app` in `/Applications` and link
    `ln -s /Applications/Godot.app/Contents/MacOS/Godot /opt/homebrew/bin/godot`.
-4. **Godot's export templates** for that exact version (1.3 GB; `bun run play` needs them). Either
-   open the project once (`godot -e --path apps/game`) and use Editor → Manage Export Templates →
-   Download and Install, or:
-   ```bash
-   curl -LO https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_export_templates.tpz
-   unzip -q Godot_v4.7.2-stable_export_templates.tpz
-   mkdir -p ~/Library/Application\ Support/Godot/export_templates/4.7.2.stable
-   mv templates/* ~/Library/Application\ Support/Godot/export_templates/4.7.2.stable/
-   ```
+4. **Godot's export templates** for that exact version (1.3 GB; `bun run play` needs them). In the
+   clone, `bun run game:templates` downloads them from the Godot release, checks their SHA-512 and
+   installs them in `~/Library/Application Support/Godot/export_templates/4.7.2.stable/`. Or open the
+   project once (`godot -e --path apps/game`) and use Editor → Manage Export Templates → Download
+   and Install.
 5. **The Anthropic API key** (racers are designed from drawings by Claude; the server refuses to
    start without it). Put it in `packages/asset-pipeline/.env`, which is git-ignored:
    ```
@@ -58,6 +54,7 @@ whole thing with a phone on the same Wi-Fi, see [`docs/local-testing.md`](docs/l
 | `bun run game:export` | Exports the game's release build to `apps/game/export/BebbiKart.app` (needs Godot's export templates) |
 | `bun run start` | Builds the phone site and serves everything from the server on :8080 |
 | `bun run dev:game` / `game:mock` | Godot game against the server / in mock mode |
+| `bun run game:templates` | Installs Godot's export templates for the installed Godot (1.3 GB, once per Godot version) |
 | `bun run game:import` | Imports the game in Godot when its class cache lacks a `class_name` (a fresh clone, or a pull that added one) |
 | `bun run fake-game` | Stand-in game for testing phones without Godot |
 | `bun run test` | Runs all Bun tests |

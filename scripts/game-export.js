@@ -4,8 +4,7 @@
 // (git-ignored).
 //   bun run game:export    export now
 //   bun run play           exports first when the build is missing or older than the game's files
-// Needs Godot's export templates for the installed Godot version, once: in the Godot editor,
-// Editor → Manage Export Templates → Download and Install.
+// Needs Godot's export templates for the installed Godot version, once: bun run game:templates.
 import {
   existsSync,
   mkdirSync,
@@ -16,6 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import { checkTemplates } from "./godot-templates.js";
 
 const ROOT = join(import.meta.dir, "..");
 const GAME_DIR = join(ROOT, "apps", "game");
@@ -68,6 +68,7 @@ export function staleReason() {
 
 /** Exports the release build. Throws with the reason when Godot fails. */
 export function exportGame() {
+  checkTemplates();
   mkdirSync(dirname(APP), { recursive: true });
   // export/ sits inside the Godot project: without this Godot scans it and packs the app's files.
   writeFileSync(join(dirname(APP), ".gdignore"), "");
@@ -90,7 +91,7 @@ export function exportGame() {
   if (proc.exitCode !== 0) {
     throw new Error(
       `godot --export-release failed with exit code ${proc.exitCode} (its errors are above). ` +
-        "If it says an export template is missing: Godot editor → Editor → Manage Export Templates → Download and Install.",
+        "If it says an export template is missing: bun run game:templates.",
     );
   }
   const pck = existsSync(join(APP, "Contents", "Resources"))
