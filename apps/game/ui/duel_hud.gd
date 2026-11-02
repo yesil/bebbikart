@@ -272,6 +272,11 @@ func update(delta: float, sim, rects: Dictionary, runs: Dictionary, nick_of: Cal
 	_crown.position = Vector2((vp_size.x - _crown.size.x) * 0.5, 14)
 
 
+## The crown's bottom edge, as update() placed it (ui/race_hud.gd puts the board under it).
+func crown_bottom() -> float:
+	return _crown.position.y + _crown.size.y
+
+
 ## Full screen: the side the server gave the run decides its colour.
 func set_side(run_id: String, side: String) -> void:
 	_sides_by_run[run_id] = side

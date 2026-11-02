@@ -1004,6 +1004,9 @@ func _update_duel(delta: float) -> void:
 	if duel_screen.split:
 		rects["right"] = duel_screen.rect_of("right")
 	duel_hud.update(delta, sim, rects, runs, func(pid: String) -> String: return String(nicks.get(pid, "?")), on_side)
+	# The leaderboard: top right on the full screen, under the crown between the halves.
+	hud.split = duel_screen.split
+	hud.crown_bottom = duel_hud.crown_bottom()
 
 
 ## Whether a half's camera shows its racer from the front: while it waits on the grid for its
