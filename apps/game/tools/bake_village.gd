@@ -837,17 +837,17 @@ func _bake_buildings() -> void:
 	var r: Route = seg["route"]
 	var half := VillagePlan.BRIDGE_HALF_LENGTH
 	var n := int(round(half * 2.0 / 2.0))
-	var cells := PackedFloat32Array()
-	for k in n:
-		var s: float = plan.bridge_s - half + (k + 0.5) * half * 2.0 / n
+	var joints := PackedFloat32Array()
+	for k in n + 1:
+		var s: float = plan.bridge_s - half + k * half * 2.0 / n
 		var c := r.pos_at(s)
-		cells.append_array([c.x, c.y, c.z, r.heading_at(s)])
-	houses.bridge = cells
-	houses.bridge_cell = half * 2.0 / n
+		var rise := r.pos_at(s + 0.5).y - r.pos_at(s - 0.5).y
+		joints.append_array([c.x, c.y, c.z, r.heading_at(s), atan2(rise, 1.0)])
+	houses.bridge = joints
 	houses.bridge_half_width = road_hw(seg, plan.bridge_s) + 1.0
 	_mark(houses)
 	# Build once here too: for the props the buildings keep, and to fail the bake on errors.
-	var built = VillageHouses.build(houses.kinds, houses.houses, houses.bridge, houses.bridge_cell, houses.bridge_half_width)
+	var built = VillageHouses.build(houses.kinds, houses.houses, houses.bridge, houses.bridge_half_width)
 	if not built.errors.is_empty():
 		_fail("buildings: %s" % "; ".join(built.errors))
 		return

@@ -164,9 +164,9 @@ func _check_houses(world: Node, plan: VillagePlan) -> void:
 			fails.append("houses: record %d is a %s at (%.1f, %.1f), the plan has a %s at (%.1f, %.1f); re-run tools/bake_village.gd" % [
 				i, h.kinds[i], h.houses[k], h.houses[k + 2], b["kind"], b["pos"].x, b["pos"].y])
 			return
-	if h.bridge.is_empty():
-		fails.append("houses: no covered bridge cells")
-	var built = VillageHouses.build(h.kinds, h.houses, h.bridge, h.bridge_cell, h.bridge_half_width)
+	if h.bridge.size() < 2 * VillageHouses.BRIDGE_FIELDS or h.bridge.size() % VillageHouses.BRIDGE_FIELDS != 0:
+		fails.append("houses: %d numbers for the covered bridge's joints" % h.bridge.size())
+	var built = VillageHouses.build(h.kinds, h.houses, h.bridge, h.bridge_half_width)
 	for e in built.errors:
 		fails.append("houses: " + e)
-	notes.append("%d buildings and %d bridge cells: %d vertices" % [h.kinds.size(), h.bridge.size() / 4, built.vertex_count()])
+	notes.append("%d buildings and %d bridge joints: %d vertices" % [h.kinds.size(), h.bridge.size() / VillageHouses.BRIDGE_FIELDS, built.vertex_count()])

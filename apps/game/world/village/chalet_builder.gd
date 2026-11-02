@@ -11,8 +11,8 @@ extends RefCounted
 ## the floor) with UVs in metres, so world/village/house.gdshader keeps one texel density on
 ## every piece. Geometry is merged per material and per CHUNK of the village: a few draw calls
 ## for the whole village, and the renderer can still skip chunks behind the camera. Small
-## pieces (geraniums, glazing bars, log ends, cut-out boards, rafters, ...) go to a separate
-## detail mesh per chunk that casts no shadow and is hidden from DETAIL_RANGE on.
+## pieces (geraniums, glazing bars, log ends, cut-out boards, rafters, ...) go to separate
+## detail meshes on a finer grid that cast no shadow and are hidden from DETAIL_RANGE on.
 ## world/village/village_houses.gd builds it when the village loads; tools/bake_village.gd runs
 ## it too, for the Kenney props the buildings keep (stalls, banners, the water wheel).
 
@@ -25,9 +25,11 @@ const LOGS := 1.0
 const FLAME_R := 2.0
 const FLAME_L := 3.0
 const LOUVRE := 4.0
+const ASHLAR := 5.0
 
 const CHUNK := 96.0          # metres
-const DETAIL_RANGE := 130.0  # metres from a chunk's centre at which its small pieces go
+const DETAIL_CHUNK := 48.0   # metres: the small pieces are grouped finer
+const DETAIL_RANGE := 100.0  # metres from a detail chunk's centre at which its pieces go
 const FLOOR_H := 2.6         # ground storey
 const UPPER_H := 2.4         # timber storeys (a whole number of log courses)
 const COURSE := 0.2          # log course height, as house_wood.tres course_m
@@ -37,7 +39,7 @@ const SHUTTER_GAP := 0.03
 
 ## Colours are sRGB; _lin() makes the linear vertex colours house.gdshader multiplies by.
 ## Sun-tanned timber, from a younger honey brown to old dark brown.
-const WOOD_TONES := [Color(0.7, 0.49, 0.31), Color(0.6, 0.4, 0.25), Color(0.51, 0.33, 0.21), Color(0.42, 0.27, 0.17), Color(0.34, 0.22, 0.15)]
+const WOOD_TONES := [Color(0.62, 0.45, 0.31), Color(0.54, 0.38, 0.25), Color(0.47, 0.32, 0.21), Color(0.39, 0.26, 0.17), Color(0.32, 0.21, 0.15)]
 ## Weathered wooden shingles, silver grey to brown.
 const SHINGLE_TONES := [Color(0.44, 0.4, 0.36), Color(0.5, 0.42, 0.34), Color(0.38, 0.35, 0.33), Color(0.47, 0.41, 0.37)]
 const SHUTTER_PAINTS := [Color(0.22, 0.45, 0.26), Color(0.14, 0.34, 0.21), Color(0.68, 0.15, 0.11), Color(0.38, 0.49, 0.57), Color(0.86, 0.83, 0.74)]
@@ -48,7 +50,23 @@ const WHITE_PAINT := Color(0.93, 0.92, 0.88)
 const DARK_PAINT := Color(0.12, 0.11, 0.1)
 const GOLD := Color(0.86, 0.66, 0.24)
 const GERANIUMS := [Color(0.86, 0.06, 0.08), Color(0.8, 0.03, 0.1), Color(0.92, 0.16, 0.18), Color(0.94, 0.32, 0.46)]
-const LEAVES := [Color(0.2, 0.38, 0.13), Color(0.26, 0.44, 0.15), Color(0.15, 0.31, 0.1)]
+const LEAVES := [Color(0.16, 0.31, 0.1), Color(0.2, 0.35, 0.12), Color(0.12, 0.26, 0.08)]
+
+
+## Unit icosahedron for _blob: 12 corners, 20 faces (counter-clockwise seen from outside).
+const _GR := 1.618034
+var ICO_V: PackedVector3Array = _ico_v()
+const ICO_F: PackedInt32Array = [0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+	3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1]
+
+
+static func _ico_v() -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for p: Vector3 in [Vector3(-1, _GR, 0), Vector3(1, _GR, 0), Vector3(-1, -_GR, 0), Vector3(1, -_GR, 0),
+			Vector3(0, -1, _GR), Vector3(0, 1, _GR), Vector3(0, -1, -_GR), Vector3(0, 1, -_GR),
+			Vector3(_GR, 0, -1), Vector3(_GR, 0, 1), Vector3(-_GR, 0, -1), Vector3(-_GR, 0, 1)]:
+		out.append(p.normalized())
+	return out
 
 
 class Batch:
@@ -65,11 +83,11 @@ var errors: PackedStringArray = []
 ## Kenney kit props the buildings keep: [module, Transform3D in world space].
 var props: Array = []
 var rng := RandomNumberGenerator.new()
-var _chunks := {}            # Vector2i -> Array of Batch, one per material, then the detail ones
-var _centres := {}           # Vector2i -> [sum of building positions, count]
+var _chunks := {}            # Vector3i (x, z, 0 main / 1 detail) -> Array of Batch, one per material
+var _centres := {}           # same keys -> [sum of building positions, count]
 ## While true, pieces go to the detail batches.
 var detail := false
-var _target: Array = []      # the chunk batches the current building goes to
+var _target: Array = []      # the chunk batches the current building goes to: main, then detail
 var _cur: Array = []         # the current building's batches, in its own frame
 var _local_props: Array = []
 var _board: Array = []       # cut-out balcony board: [front polygon, triangle indices]
@@ -140,48 +158,47 @@ func add_building(kind: String, pos: Vector3, yaw: float, size: Vector2, seed_: 
 	return true
 
 
-## The covered wooden bridge: `cells` are the deck frames (origin on the road's centre line,
-## +z along the road), each `cell_len` long; `half_width` from the centre line to its walls.
-func add_bridge(cells: Array, cell_len: float, half_width: float) -> void:
+## The covered wooden bridge along its deck: `joints` are frames on the road's centre line at
+## the ends of its cells (x across the road, level; z along it, up the hump), `half_width` from
+## the centre line to its walls. Walls, roof and ridge run continuously from joint to joint.
+func add_bridge(joints: Array, half_width: float) -> void:
 	rng.seed = 1848
 	_wood = _lin(WOOD_TONES[3])
-	var pitch := atan2(1.95, half_width + 0.7)
-	for k in cells.size():
-		var xf: Transform3D = cells[k]
-		_begin(xf.origin)
-		_bridge_cell(k, cells.size(), cell_len, half_width, pitch)
-		_end(xf)
+	var mid: Transform3D = joints[joints.size() / 2]
+	_begin(mid.origin)
+	var inv := mid.affine_inverse()
+	var local: Array = []
+	for j: Transform3D in joints:
+		local.append(inv * j)
+	_bridge(local, half_width)
+	_end(mid)
 
 
-## Per chunk (key Vector2i): {centre: Vector3, main: ArrayMesh, detail: ArrayMesh} (either
-## mesh null when empty), vertices relative to the centre, a surface per material. Empty
-## (with errors) if a material is missing.
-func meshes() -> Dictionary:
+## One {centre: Vector3, mesh: ArrayMesh, detail: bool} per chunk, vertices relative to the
+## centre, a surface per material used there. Empty (with errors) if a material is missing.
+func meshes() -> Array:
 	var mats: Array[Material] = []
 	for name: String in MATS:
 		var path := MAT_DIR + "house_%s.tres" % name
 		var m: Material = load(path) if ResourceLoader.exists(path) else null
 		if m == null:
 			errors.append("missing material %s" % path)
-			return {}
+			return []
 		mats.append(m)
-	var out := {}
-	for key: Vector2i in _chunks:
+	var out := []
+	for key: Vector3i in _chunks:
 		var c: Array = _centres[key]
 		var centre: Vector3 = c[0] / float(c[1])
 		var to_local := Transform3D(Basis(), -centre)
-		var parts := {"centre": centre, "main": null, "detail": null}
-		for half in 2:
-			var mesh := ArrayMesh.new()
-			for m in MATS.size():
-				var b: Batch = _chunks[key][m + half * MATS.size()]
-				if b.v.is_empty():
-					continue
-				mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _arrays(b, to_local, m != FLOWERS and m != GLASS))
-				mesh.surface_set_material(mesh.get_surface_count() - 1, mats[m])
-			if mesh.get_surface_count() > 0:
-				parts["detail" if half == 1 else "main"] = mesh
-		out[key] = parts
+		var mesh := ArrayMesh.new()
+		for m in MATS.size():
+			var b: Batch = _chunks[key][m]
+			if b.v.is_empty():
+				continue
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _arrays(b, to_local, m != FLOWERS and m != GLASS))
+			mesh.surface_set_material(mesh.get_surface_count() - 1, mats[m])
+		if mesh.get_surface_count() > 0:
+			out.append({"centre": centre, "mesh": mesh, "detail": key.z == 1})
 	return out
 
 
@@ -215,16 +232,19 @@ func vertex_count() -> int:
 # ---------------------------------------------------------------- batching
 
 func _begin(pos: Vector3) -> void:
-	var key := Vector2i(floori(pos.x / CHUNK), floori(pos.z / CHUNK))
-	if not _chunks.has(key):
-		var list := []
-		for m in MATS.size() * 2:
-			list.append(Batch.new())
-		_chunks[key] = list
-		_centres[key] = [Vector3.ZERO, 0]
-	_centres[key][0] += pos
-	_centres[key][1] += 1
-	_target = _chunks[key]
+	_target = []
+	for layer in 2:
+		var size := DETAIL_CHUNK if layer == 1 else CHUNK
+		var key := Vector3i(floori(pos.x / size), floori(pos.z / size), layer)
+		if not _chunks.has(key):
+			var list := []
+			for m in MATS.size():
+				list.append(Batch.new())
+			_chunks[key] = list
+			_centres[key] = [Vector3.ZERO, 0]
+		_centres[key][0] += pos
+		_centres[key][1] += 1
+		_target.append_array(_chunks[key])
 	_cur = []
 	for m in MATS.size() * 2:
 		var b := Batch.new()
@@ -378,26 +398,21 @@ func _beam(m: int, a: Vector3, b: Vector3, w: float, h: float, col: Color, up :=
 	_box(m, Transform3D(Basis(x, y, z), (a + b) * 0.5), Vector3(w, h, len), col, skip, 2)
 
 
-## Small blob (an octahedron with round normals) for leaves and blossoms.
+## Small blob (an icosahedron with round normals) for leaves and blossoms.
 func _blob(m: int, c: Vector3, r: Vector3, col: Color) -> void:
 	var bt: Batch = _cur[m + (MATS.size() if detail else 0)]
 	var i := bt.base + bt.v.size()
-	var dirs := [Vector3.RIGHT, Vector3.LEFT, Vector3.UP, Vector3.DOWN, Vector3.BACK, Vector3.FORWARD]
-	for d: Vector3 in dirs:
+	for d: Vector3 in ICO_V:
 		bt.v.append(c + d * r)
-		bt.n.append(d)
+		bt.n.append((d / r).normalized() if r.x > 0.0 else d)
 		bt.uv.append(Vector2.ZERO)
 		bt.uv2.append(Vector2(0.0, c.y))
 		bt.c.append(col)
-	# Faces by octant: (x, y, z) counter-clockwise when x*y*z > 0, else (x, z, y); emitted clockwise.
-	for sx in [0, 1]:
-		for sy in [2, 3]:
-			for sz in [4, 5]:
-				var pos: bool = ((sx == 0) == (sy == 2)) == (sz == 4)
-				if pos:
-					bt.idx.append_array([i + sx, i + sz, i + sy])
-				else:
-					bt.idx.append_array([i + sx, i + sy, i + sz])
+	for k in range(0, ICO_F.size(), 3):
+		# ICO_F faces run counter-clockwise seen from outside; emitted clockwise.
+		bt.idx.append(i + ICO_F[k])
+		bt.idx.append(i + ICO_F[k + 2])
+		bt.idx.append(i + ICO_F[k + 1])
 
 
 ## Triangle that faces `facing`, whichever way round its corners come.
@@ -593,7 +608,7 @@ func _window(left: Vector3, out: Vector3, o: Array, y0: float, depth: float, sil
 	detail = false
 	# Sill, standing out of the wall; it covers the bottom of the recess.
 	var sc := _lin(Color(0.8, 0.78, 0.74)) if sill_m == STONE else _jit(_wood, 0.05)
-	_box(sill_m, t * Transform3D(Basis(), Vector3(w * 0.5, -0.03, (0.07 - depth) * 0.5)), Vector3(w + 0.12, 0.06, depth + 0.07), sc)
+	_box(sill_m, t * Transform3D(Basis(), Vector3(w * 0.5, -0.03, (0.07 - depth) * 0.5)), Vector3(w + 0.12, 0.06, depth + 0.07), sc, 32)
 	if shutters and _style["shutters"]:
 		_shutters(t, w, h)
 	if flowers and rng.randf() < float(_style["flowers"]):
@@ -625,30 +640,93 @@ func _shutters(t: Transform3D, w: float, h: float) -> void:
 			front = FLAME_R if side < 0 else FLAME_L
 		elif kind == "louvre":
 			front = LOUVRE
-		_box(PAINT, t * Transform3D(b, c), Vector3(lw, h + 0.04, th), col, 0, 1, 0.0, front)
+		# Flat open, its back lies on the wall.
+		_box(PAINT, t * Transform3D(b, c), Vector3(lw, h + 0.04, th), col, 32 if swing == 0.0 else 0, 1, 0.0, front)
 
 
-## A row of geraniums `length` long along xf's x on a box top: leafy clumps, red blossoms over
-## them and a few trailing stems hanging over the front (+z).
+## A row of geraniums `length` long along xf's x on a box top: one lumpy cushion of leaves
+## spilling over the front (+z), clusters of round flower heads standing out of it and chains of
+## small leaves trailing down. world/village/house_flowers.gdshader paints the leaves and the
+## florets (COLOR.a 0 leaves, 1 heads).
 func _geraniums(xf: Transform3D, length: float, depth: float) -> void:
 	var red: Color = _style.get("geranium", _lin(GERANIUMS[0]))
 	var was := detail
 	detail = true
-	var n := maxi(2, int(length / 0.15))
-	for i in n:
-		var x := -length * 0.5 + length * (i + 0.5) / n + rng.randf_range(-0.02, 0.02)
-		var leaf := _lin(LEAVES[rng.randi_range(0, LEAVES.size() - 1)])
-		_blob(FLOWERS, xf * Vector3(x, 0.07, rng.randf_range(-0.03, 0.03)), Vector3(0.085, 0.07, depth * 0.55), leaf)
-		var bloom := red if rng.randf() < 0.85 else _lin(GERANIUMS[rng.randi_range(2, 3)])
-		_blob(FLOWERS, xf * Vector3(x + rng.randf_range(-0.03, 0.03), rng.randf_range(0.15, 0.2), rng.randf_range(-0.02, 0.06)), Vector3(0.06, 0.05, 0.06), bloom)
-		if rng.randf() < 0.55:
-			_blob(FLOWERS, xf * Vector3(x + 0.05, rng.randf_range(0.12, 0.17), rng.randf_range(-0.05, 0.02)), Vector3(0.05, 0.045, 0.05), bloom)
+	var leaf: Color = _lin(LEAVES[rng.randi_range(0, LEAVES.size() - 1)])
+	leaf.a = 0.0
+	_cushion(xf, length, depth * 0.62, 0.11, leaf)
+	var x := -length * 0.5 + rng.randf_range(0.04, 0.1)
+	while x < length * 0.5 - 0.04:
+		var bloom := red if rng.randf() < 0.88 else _lin(GERANIUMS[rng.randi_range(2, 3)])
+		bloom.a = 1.0
+		var r := rng.randf_range(0.055, 0.075)
+		var c := Vector3(x, rng.randf_range(0.14, 0.19), rng.randf_range(-0.03, 0.06))
+		_blob(FLOWERS, xf * c, Vector3(r, r * 0.85, r), bloom)
+		if rng.randf() < 0.4:
+			var r2 := r * 0.75
+			_blob(FLOWERS, xf * (c + Vector3(rng.randf_range(-0.07, 0.07), -0.03, rng.randf_range(0.02, 0.06))), Vector3(r2, r2 * 0.85, r2), bloom)
+		x += rng.randf_range(0.15, 0.22)
+	x = -length * 0.5 + 0.1
+	while x < length * 0.5 - 0.05:
 		if rng.randf() < 0.45:
-			var hang := rng.randf_range(0.12, 0.3)
-			_blob(FLOWERS, xf * Vector3(x, -hang * 0.5, depth * 0.55 + 0.03), Vector3(0.05, hang * 0.6, 0.04), leaf)
-			if rng.randf() < 0.6:
-				_blob(FLOWERS, xf * Vector3(x, -hang, depth * 0.55 + 0.05), Vector3(0.045, 0.04, 0.045), bloom)
+			var steps := rng.randi_range(2, 3)
+			for k in steps:
+				var p := Vector3(x + rng.randf_range(-0.02, 0.02), -0.04 - k * 0.075, depth * 0.62 * 0.75 + 0.02 + k * 0.012)
+				var c := leaf
+				if k == steps - 1 and rng.randf() < 0.35:
+					c = red
+					c.a = 1.0
+				_blob(FLOWERS, xf * p, Vector3(0.042, 0.045, 0.036), c)
+		x += rng.randf_range(0.22, 0.38)
 	detail = was
+
+
+## A lumpy leaf cushion `length` long along xf's x: half an ellipse in cross-section (`depth`
+## deep, `height` tall) from the back over the top and down over the front edge, every ring's
+## radius jittered so the outline is bushy, closed at both ends.
+func _cushion(xf: Transform3D, length: float, depth: float, height: float, col: Color) -> void:
+	var bt: Batch = _cur[FLOWERS + (MATS.size() if detail else 0)]
+	var angles := [2.6, 1.95, 1.3, 0.65, 0.0, -0.75]
+	var rings := maxi(3, int(length / 0.07) + 1)
+	var i0 := bt.base + bt.v.size()
+	var basis := xf.basis
+	for k in rings:
+		var x := -length * 0.5 + length * k / (rings - 1)
+		var taper := sqrt(maxf(0.0, 1.0 - pow(absf(x) / (length * 0.5 + 0.03), 6.0)))
+		for a: float in angles:
+			var r := rng.randf_range(0.66, 1.25) * maxf(taper, 0.35)
+			var d := Vector3(0, sin(a), cos(a))
+			var p := Vector3(x + rng.randf_range(-0.015, 0.015), 0.03 + d.y * height * r, d.z * depth * r)
+			bt.v.append(xf * p)
+			# Leaves face every way: a tossed normal shades the cushion like foliage.
+			var nrm := Vector3(rng.randf_range(-0.7, 0.7), d.y / height, d.z / depth).normalized() + Vector3(0, 0.25, 0)
+			bt.n.append((basis * nrm).normalized())
+			bt.uv.append(Vector2.ZERO)
+			bt.uv2.append(Vector2(0.0, (xf * p).y))
+			bt.c.append(col)
+	var na := angles.size()
+	for k in rings - 1:
+		for j in na - 1:
+			var a := i0 + k * na + j
+			var b := a + na
+			# a, a+1, b+1, b run counter-clockwise seen from outside; emitted clockwise.
+			bt.idx.append_array([a, b + 1, a + 1, a, b, b + 1])
+	# End caps: fans from the cushion's foot.
+	for e in [[0, -1.0], [rings - 1, 1.0]]:
+		var ic := bt.base + bt.v.size()
+		var x := -length * 0.5 if e[1] < 0.0 else length * 0.5
+		var c := Vector3(x, 0.02, 0)
+		bt.v.append(xf * c)
+		bt.n.append(basis * Vector3(e[1], 0, 0))
+		bt.uv.append(Vector2.ZERO)
+		bt.uv2.append(Vector2(0.0, (xf * c).y))
+		bt.c.append(col)
+		var r0 := i0 + int(e[0]) * na
+		for j in na - 1:
+			if e[1] < 0.0:
+				bt.idx.append_array([ic, r0 + j, r0 + j + 1])
+			else:
+				bt.idx.append_array([ic, r0 + j + 1, r0 + j])
 
 
 ## A wooden door in opening `o` (from the floor): plank leaf, frame, a stone step in front.
@@ -707,7 +785,8 @@ func _storey(m: int, y0: float, y1: float, openings: Array, col: Color, flag := 
 			elif o[4] == "s":
 				_shop_window(s[0], s[1], o, y0, depth)
 			else:
-				_window(s[0], s[1], o, y0, depth, sill_m, o.size() < 6 or o[5], flowers and (o.size() < 7 or o[6]))
+				# Geraniums face the streets: none on the back wall.
+				_window(s[0], s[1], o, y0, depth, sill_m, o.size() < 6 or o[5], flowers and k != 2 and (o.size() < 7 or o[6]))
 		u_off += float(s[2])
 
 
@@ -975,7 +1054,7 @@ func _chimney(x: float, z: float, from_y: float, top: float, plaster := false) -
 
 ## Wooden balcony across the front at floor height y, out `depth` from the wall, `length` wide:
 ## deck, joists on diagonal braces, cut-out board balustrade with a handrail and geraniums.
-func _balcony(y: float, depth: float, length: float, flowers := 0.9) -> void:
+func _balcony(y: float, depth: float, length: float, flowers := 0.95) -> void:
 	var hd := _d * 0.5
 	var col := _jit(_wood, 0.05)
 	var light := Color(col.r * 1.15, col.g * 1.12, col.b * 1.1)
@@ -1003,7 +1082,8 @@ func _balcony(y: float, depth: float, length: float, flowers := 0.9) -> void:
 		var basis := Basis(dir, Vector3.UP, out)
 		detail = true
 		for i in n:
-			_board_piece(Transform3D(basis, a + dir * (len * (i + 0.5) / n) + Vector3(0, 0.12, 0)), light)
+			# The front run's back faces only show from the balcony itself.
+			_board_piece(Transform3D(basis, a + dir * (len * (i + 0.5) / n) + Vector3(0, 0.12, 0)), light, out != Vector3.BACK)
 		detail = false
 		if out == Vector3.BACK and rng.randf() < flowers:
 			var fb := Transform3D(basis, (a + b) * 0.5 + Vector3(0, 0.78, 0) + out * 0.17)
@@ -1012,11 +1092,11 @@ func _balcony(y: float, depth: float, length: float, flowers := 0.9) -> void:
 
 
 ## One cut-out balustrade board (front and back faces of the outline) at xf, 2.5 cm thick.
-func _board_piece(xf: Transform3D, col: Color) -> void:
+func _board_piece(xf: Transform3D, col: Color, back := true) -> void:
 	var poly: PackedVector2Array = _board[0]
 	var tris: PackedInt32Array = _board[1]
 	var bt: Batch = _cur[WOOD + (MATS.size() if detail else 0)]
-	for face: float in [1.0, -1.0]:
+	for face: float in ([1.0, -1.0] if back else [1.0]):
 		var i := bt.base + bt.v.size()
 		var nrm := xf.basis * Vector3(0, 0, face)
 		for p: Vector2 in poly:
@@ -1177,7 +1257,7 @@ func _arcade(base: float) -> void:
 	_wood = _lin(WOOD_TONES[2])
 	_style = _window_style(0.85, 0.5)
 	var plaster := _lin(ARCADE_PLASTERS[rng.randi_range(0, ARCADE_PLASTERS.size() - 1)])
-	var stone := _lin(Color(0.93, 0.88, 0.78))
+	var stone := _jit(_lin(Color(0.72, 0.68, 0.55)), 0.05)       # Bern sandstone, grey-green to ochre
 	var hd := _d * 0.5
 	var hw := _w * 0.5
 	var g_top := base + FLOOR_H + 0.8
@@ -1197,18 +1277,18 @@ func _arcade(base: float) -> void:
 			x1 = pier
 		if i == n:
 			x0 = _w - pier
-		_wall(STONE, Vector3(-hw + x0, 0, hd), Vector3.BACK, x1 - x0, -0.8, spring, [], stone)
-		_wall(STONE, Vector3(-hw + x1, 0, hd - thick), Vector3.FORWARD, x1 - x0, base, spring, [], stone)
+		_wall(PLASTER, Vector3(-hw + x0, 0, hd), Vector3.BACK, x1 - x0, -0.8, spring, [], stone, ASHLAR, x0)
+		_wall(PLASTER, Vector3(-hw + x1, 0, hd - thick), Vector3.FORWARD, x1 - x0, base, spring, [], stone, ASHLAR, x0)
 		for e in [[x1, Vector3.RIGHT, i < n], [x0, Vector3.LEFT, i > 0]]:
 			if not e[2]:
 				continue
 			var px: float = -hw + float(e[0])
-			_qf(STONE, Vector3(px, base, hd), Vector3(px, spring, hd), Vector3(px, spring, hd - thick), Vector3(px, base, hd - thick),
-				Vector2(0, -base), Vector2(0, -spring), Vector2(thick, -spring), Vector2(thick, -base), stone, e[1])
+			_qf(PLASTER, Vector3(px, base, hd), Vector3(px, spring, hd), Vector3(px, spring, hd - thick), Vector3(px, base, hd - thick),
+				Vector2(0, -base), Vector2(0, -spring), Vector2(thick, -spring), Vector2(thick, -base), stone, e[1], ASHLAR)
 	for i in n:
 		var x0 := i * bay + (pier * 0.5 if i > 0 else pier)
 		var x1 := (i + 1) * bay - (pier * 0.5 if i < n - 1 else pier)
-		_arch_bay(t, x0, x1, spring, g_top, thick, STONE, stone)
+		_arch_bay(t, x0, x1, spring, g_top, thick, PLASTER, stone, ASHLAR)
 	# The walkway: back wall with doors and shop windows, vaulted... flat ceiling, stone floor.
 	var back_ops := []
 	for i in n:
@@ -1231,28 +1311,28 @@ func _arcade(base: float) -> void:
 		Vector2(0, 0), Vector2(_w, 0), Vector2(_w, walk), Vector2(0, walk), stone * 0.8, Vector3.UP)
 	# Sides and back of the ground floor: a stone base, plaster above; the walkway's ends are
 	# open below the arches' spring line, like the next house's arcade would carry on.
-	_wall(STONE, Vector3(-hw, 0, -hd), Vector3.LEFT, _d - walk, -0.8, base + 0.5, [], stone)
-	_wall(STONE, Vector3(hw, 0, bz), Vector3.RIGHT, _d - walk, -0.8, base + 0.5, [], stone)
-	_wall(STONE, Vector3(hw, 0, -hd), Vector3.FORWARD, _w, -0.8, base + 0.5, [], stone)
+	_wall(PLASTER, Vector3(-hw, 0, -hd), Vector3.LEFT, _d - walk, -0.8, base + 0.5, [], stone, ASHLAR)
+	_wall(PLASTER, Vector3(hw, 0, bz), Vector3.RIGHT, _d - walk, -0.8, base + 0.5, [], stone, ASHLAR)
+	_wall(PLASTER, Vector3(hw, 0, -hd), Vector3.FORWARD, _w, -0.8, base + 0.5, [], stone, ASHLAR)
 	_wall(PLASTER, Vector3(-hw, 0, -hd), Vector3.LEFT, _d - walk, base + 0.5, g_top, [], plaster)
 	_wall(PLASTER, Vector3(hw, 0, bz), Vector3.RIGHT, _d - walk, base + 0.5, g_top, [], plaster)
 	_wall(PLASTER, Vector3(hw, 0, -hd), Vector3.FORWARD, _w, base + 0.5, g_top, [], plaster)
-	_wall(STONE, Vector3(-hw, 0, bz), Vector3.LEFT, walk, spring, g_top, [], stone)
-	_wall(STONE, Vector3(hw, 0, hd), Vector3.RIGHT, walk, spring, g_top, [], stone)
+	_wall(PLASTER, Vector3(-hw, 0, bz), Vector3.LEFT, walk, spring, g_top, [], stone, ASHLAR)
+	_wall(PLASTER, Vector3(hw, 0, hd), Vector3.RIGHT, walk, spring, g_top, [], stone, ASHLAR)
 	# A sandstone string course, then two plaster storeys and a cornice.
-	_box(STONE, Transform3D(Basis(), Vector3(0, g_top + 0.08, 0)), Vector3(_w + 0.12, 0.16, _d + 0.12), stone, 8)
+	_box(PLASTER, Transform3D(Basis(), Vector3(0, g_top + 0.08, 0)), Vector3(_w + 0.12, 0.16, _d + 0.12), stone * 0.95, 8)
 	var y := g_top + 0.16
 	for f in 2:
 		_storey(PLASTER, y, y + 2.5, _openings(0.95, 1.35, 0.8, 1.9, [], [-1, 2, -1, 2]), plaster, 0.0, 0.24, STONE, f == 0)
 		y += 2.5
-	_box(STONE, Transform3D(Basis(), Vector3(0, y - 0.06, 0)), Vector3(_w + 0.1, 0.12, _d + 0.1), stone, 8 | 4)
+	_box(PLASTER, Transform3D(Basis(), Vector3(0, y - 0.06, 0)), Vector3(_w + 0.1, 0.12, _d + 0.1), stone * 0.95, 8 | 4)
 	_gable_roof(y, deg_to_rad(28.0), 0.6, 0.6, 0.4, TILES, _jit(Color(1, 1, 1), 0.1), PLASTER, plaster, 0.0, 1)
 
 
 ## One arcade bay in frame t (x along the front from its left end, z out): an arch over x0..x1
 ## springing at `spring`, the wall over it up to y_top, the arch's soffit through `thick`
 ## metres of wall, the same wall face again on the walkway side, and a keystone.
-func _arch_bay(t: Transform3D, x0: float, x1: float, spring: float, y_top: float, thick: float, m: int, col: Color) -> void:
+func _arch_bay(t: Transform3D, x0: float, x1: float, spring: float, y_top: float, thick: float, m: int, col: Color, flag := 0.0) -> void:
 	var r := (x1 - x0) * 0.5
 	var cx := (x0 + x1) * 0.5
 	var crown := spring + r
@@ -1267,14 +1347,14 @@ func _arch_bay(t: Transform3D, x0: float, x1: float, spring: float, y_top: float
 		var q0 := Vector3(p0.x, crown, 0)
 		var q1 := Vector3(p1.x, crown, 0)
 		var u := [Vector2(p0.x, -p0.y), Vector2(p1.x, -p1.y), Vector2(q1.x, -crown), Vector2(q0.x, -crown)]
-		_qf(m, t * p0, t * p1, t * q1, t * q0, u[0], u[1], u[2], u[3], col, out)
-		_qf(m, t * (p0 + d), t * (p1 + d), t * (q1 + d), t * (q0 + d), u[0], u[1], u[2], u[3], col, -out)
+		_qf(m, t * p0, t * p1, t * q1, t * q0, u[0], u[1], u[2], u[3], col, out, flag)
+		_qf(m, t * (p0 + d), t * (p1 + d), t * (q1 + d), t * (q0 + d), u[0], u[1], u[2], u[3], col, -out, flag)
 		var mid := (a0 + a1) * 0.5
 		_qf(m, t * p0, t * p1, t * (p1 + d), t * (p0 + d), Vector2(r * a0, 0), Vector2(r * a1, 0), Vector2(r * a1, thick), Vector2(r * a0, thick),
-			col, t.basis * Vector3(-cos(mid), -sin(mid), 0))
+			col, t.basis * Vector3(-cos(mid), -sin(mid), 0), flag)
 	for z: float in [0.0, -thick]:
 		_qf(m, t * Vector3(x0, crown, z), t * Vector3(x1, crown, z), t * Vector3(x1, y_top, z), t * Vector3(x0, y_top, z),
-			Vector2(x0, -crown), Vector2(x1, -crown), Vector2(x1, -y_top), Vector2(x0, -y_top), col, out if z == 0.0 else -out)
+			Vector2(x0, -crown), Vector2(x1, -crown), Vector2(x1, -y_top), Vector2(x0, -y_top), col, out if z == 0.0 else -out, flag)
 	_box(m, t * Transform3D(Basis(), Vector3(cx, crown - 0.12, 0.03)), Vector3(0.3, 0.42, 0.06), col * 1.06, 32)
 
 
@@ -1636,47 +1716,94 @@ func _farmhouse(base: float) -> void:
 
 # ---------------------------------------------------------------- covered bridge
 
-## One cell of the covered bridge in its deck frame (+z along the road): board walls with a
-## window band on every other cell, inside faces too, posts and a tie beam at the joint, the
-## shingle roof over it and, on the first and last cells, the gable over the portal.
-func _bridge_cell(k: int, n: int, len: float, hw: float, pitch: float) -> void:
+## The covered bridge in the frame of its middle joint: board walls inside and out with a window
+## band on every other cell, posts and tie beams at the joints, a shingle roof with boards under
+## it and a fascia, gables over both portals. `j` are the joint frames.
+func _bridge(j: Array, hw: float) -> void:
 	var eave := 2.5
-	var col := _jit(_wood, 0.04)
-	var z0 := -len * 0.5
-	var z1 := len * 0.5
-	var ops := [[0.25, len - 0.25, 1.4, 2.1, "w"]] if k % 2 == 1 else []
-	for side: float in [-1.0, 1.0]:
-		var out := Vector3(side, 0, 0)
-		var outer := Vector3(side * hw, 0, z1 if side > 0.0 else z0)
-		var inner := Vector3(side * (hw - 0.08), 0, z0 if side > 0.0 else z1)
-		_wall(BOARDS, outer, out, len, -0.35, eave, ops, col, 0.0, 0.0, true)
-		_wall(BOARDS, inner, -out, len, -0.05, eave, ops, col * 0.8, 0.0, 0.0, true)
-		for o in ops:
-			_reveal(BOARDS, outer, out, o, -0.35, 0.08, col, 0.0, true)
-		_box(WOOD, Transform3D(Basis(), Vector3(side * (hw - 0.04), eave * 0.5 - 0.2, z0)), Vector3(0.18, eave + 0.3, 0.18), col * 0.9, 0, 1)
-	_box(WOOD, Transform3D(Basis(), Vector3(0, eave - 0.1, z0)), Vector3(hw * 2.0, 0.2, 0.16), col * 0.9, 0)
 	var o_side := 0.7
+	var pitch := atan2(1.95, hw + o_side)
 	var tp := tan(pitch)
-	var ridge := eave + hw * tp
 	var th := 0.2 / cos(pitch)
-	var zz0 := z0 - (0.9 if k == 0 else 0.0)
-	var zz1 := z1 + (0.9 if k == n - 1 else 0.0)
-	for side: float in [-1.0, 1.0]:
-		var e := Vector3(side * (hw + o_side), eave - o_side * tp, 0)
-		var nrm := Vector3(side * sin(pitch), cos(pitch), 0)
-		var slope := (hw + o_side) / cos(pitch)
-		_qf(SHINGLES, Vector3(e.x, e.y + th, zz0), Vector3(e.x, e.y + th, zz1), Vector3(0, ridge + th, zz1), Vector3(0, ridge + th, zz0),
-			Vector2(zz0 + k * len, slope), Vector2(zz1 + k * len, slope), Vector2(zz1 + k * len, 0), Vector2(zz0 + k * len, 0), _lin(SHINGLE_TONES[1]), nrm)
-		_qf(BOARDS, Vector3(e.x, e.y, zz0), Vector3(e.x, e.y, zz1), Vector3(0, ridge, zz1), Vector3(0, ridge, zz0),
-			Vector2(slope, zz0), Vector2(slope, zz1), Vector2(0, zz1), Vector2(0, zz0), col, -nrm)
-		_box(WOOD, Transform3D(Basis(), Vector3(side * (hw + o_side + 0.025), e.y + th * 0.5 - 0.03, (zz0 + zz1) * 0.5)), Vector3(0.05, th + 0.1, zz1 - zz0), col, 0, 2)
-	_box(SHINGLES, Transform3D(Basis(), Vector3(0, ridge + th + 0.03, (zz0 + zz1) * 0.5)), Vector3(0.3, 0.08, zz1 - zz0), _lin(SHINGLE_TONES[1]) * 0.8, 0, 2)
-	if k == 0 or k == n - 1:
-		var gz := z0 if k == 0 else z1
-		var facing := Vector3(0, 0, -1.0 if k == 0 else 1.0)
-		var a := Vector3(-hw, eave, gz)
-		var b := Vector3(hw, eave, gz)
-		var c := Vector3(0, ridge, gz)
-		_tf(BOARDS, a, b, c, Vector2(-hw, -eave), Vector2(hw, -eave), Vector2(0, -ridge), col, facing)
-		_tf(BOARDS, a, b, c, Vector2(-hw, -eave), Vector2(hw, -eave), Vector2(0, -ridge), col * 0.8, -facing)
-		_box(WOOD, Transform3D(Basis(), Vector3(0, eave - 0.15, gz)), Vector3(hw * 2.0 + 0.3, 0.3, 0.2), col * 0.9, 0)
+	var ridge := eave + hw * tp
+	var col := _jit(_wood, 0.04)
+	var roof := _lin(SHINGLE_TONES[1])
+	var n := j.size() - 1
+	# A point beside the centre line of joint k: `x` across, `y` up from the deck.
+	var at := func(k: int, x: float, y: float) -> Vector3:
+		var f: Transform3D = j[k]
+		return f.origin + f.basis.x * x + Vector3(0, y, 0)
+	var along := 0.0
+	for k in n:
+		var len: float = (j[k + 1] as Transform3D).origin.distance_to((j[k] as Transform3D).origin)
+		var open := k % 2 == 1
+		var bands := [[-0.35, 1.4], [2.1, eave]] if open else [[-0.35, eave]]
+		for side: float in [-1.0, 1.0]:
+			var out: Vector3 = (j[k] as Transform3D).basis.x * side
+			for wall in [[hw, out, col], [hw - 0.08, -out, col * 0.8]]:
+				var x: float = side * float(wall[0])
+				for band in bands:
+					var y0: float = band[0]
+					var y1: float = band[1]
+					if wall[1] != out:
+						y0 = maxf(y0, -0.05)
+					_qf(BOARDS, at.call(k, x, y0), at.call(k + 1, x, y0), at.call(k + 1, x, y1), at.call(k, x, y1),
+						Vector2(-y0, along), Vector2(-y0, along + len), Vector2(-y1, along + len), Vector2(-y1, along), wall[2], wall[1])
+			if open:
+				for y: float in [1.4, 2.1]:
+					_qf(BOARDS, at.call(k, side * hw, y), at.call(k + 1, side * hw, y), at.call(k + 1, side * (hw - 0.08), y), at.call(k, side * (hw - 0.08), y),
+						Vector2(0, 0), Vector2(len, 0), Vector2(len, 0.08), Vector2(0, 0.08), col, Vector3.UP if y < 2.0 else Vector3.DOWN)
+		along += len
+	# Posts and tie beams at the joints.
+	for k in n + 1:
+		var f: Transform3D = j[k]
+		for side: float in [-1.0, 1.0]:
+			_box(WOOD, Transform3D(f.basis, at.call(k, side * (hw - 0.04), eave * 0.5 - 0.2)), Vector3(0.18, eave + 0.3, 0.18), col * 0.9, 0, 1)
+		_box(WOOD, Transform3D(f.basis, at.call(k, 0.0, eave - 0.1)), Vector3(hw * 2.0, 0.2, 0.16), col * 0.9)
+	# Roof: the first and last joints pushed out 0.9 m for the eaves over the portals.
+	var ends: Array = j.duplicate()
+	for e in [[0, -0.9], [n, 0.9]]:
+		var f: Transform3D = j[e[0]]
+		ends[e[0]] = Transform3D(f.basis, f.origin + f.basis.z * float(e[1]))
+	var rat := func(k: int, x: float, y: float) -> Vector3:
+		var f: Transform3D = ends[k]
+		return f.origin + f.basis.x * x + Vector3(0, y, 0)
+	along = -0.9
+	for k in n:
+		var len: float = (ends[k + 1] as Transform3D).origin.distance_to((ends[k] as Transform3D).origin)
+		for side: float in [-1.0, 1.0]:
+			var nrm: Vector3 = (ends[k] as Transform3D).basis * Vector3(side * sin(pitch), cos(pitch), 0)
+			var ex := side * (hw + o_side)
+			var ey := eave - o_side * tp
+			var slope := (hw + o_side) / cos(pitch)
+			_qf(SHINGLES, rat.call(k, ex, ey + th), rat.call(k + 1, ex, ey + th), rat.call(k + 1, 0.0, ridge + th), rat.call(k, 0.0, ridge + th),
+				Vector2(along, slope), Vector2(along + len, slope), Vector2(along + len, 0), Vector2(along, 0), roof, nrm)
+			_qf(BOARDS, rat.call(k, ex, ey), rat.call(k + 1, ex, ey), rat.call(k + 1, 0.0, ridge), rat.call(k, 0.0, ridge),
+				Vector2(slope, along), Vector2(slope, along + len), Vector2(0, along + len), Vector2(0, along), col, -nrm)
+			# Fascia along the eave: its face and its bottom edge.
+			var fx := ex + side * 0.05
+			_qf(WOOD, rat.call(k, fx, ey - 0.1), rat.call(k + 1, fx, ey - 0.1), rat.call(k + 1, fx, ey + th + 0.02), rat.call(k, fx, ey + th + 0.02),
+				Vector2(along, 0), Vector2(along + len, 0), Vector2(along + len, th), Vector2(along, th), col, (ends[k] as Transform3D).basis.x * side)
+			_qf(WOOD, rat.call(k, ex, ey - 0.1), rat.call(k + 1, ex, ey - 0.1), rat.call(k + 1, fx, ey - 0.1), rat.call(k, fx, ey - 0.1),
+				Vector2(along, 0), Vector2(along + len, 0), Vector2(along + len, 0.05), Vector2(along, 0.05), col, Vector3.DOWN)
+		# Ridge cap: two narrow boards along the ridge.
+		for side: float in [-1.0, 1.0]:
+			_qf(SHINGLES, rat.call(k, side * 0.16, ridge + th - 0.16 * tp + 0.04), rat.call(k + 1, side * 0.16, ridge + th - 0.16 * tp + 0.04),
+				rat.call(k + 1, 0.0, ridge + th + 0.06), rat.call(k, 0.0, ridge + th + 0.06), Vector2(along, 0.2), Vector2(along + len, 0.2),
+				Vector2(along + len, 0), Vector2(along, 0), roof * 0.8, Vector3(side * 0.4, 1, 0))
+		along += len
+	# Gables over the portals, both faces, and the bargeboards on the roof's end edges.
+	for e in [[0, -1.0], [n, 1.0]]:
+		var k: int = e[0]
+		var facing: Vector3 = (j[k] as Transform3D).basis.z * float(e[1])
+		var a: Vector3 = at.call(k, -hw, eave)
+		var b: Vector3 = at.call(k, hw, eave)
+		var c: Vector3 = at.call(k, 0.0, ridge)
+		_tf(BOARDS, a, b, c, Vector2(-eave, -hw), Vector2(-eave, hw), Vector2(-ridge, 0), col, facing)
+		_tf(BOARDS, a, b, c, Vector2(-eave, -hw), Vector2(-eave, hw), Vector2(-ridge, 0), col * 0.8, -facing)
+		var f: Transform3D = ends[k]
+		for side: float in [-1.0, 1.0]:
+			var p0: Vector3 = rat.call(k, side * (hw + o_side + 0.05), eave - o_side * tp - 0.06)
+			var p1: Vector3 = rat.call(k, 0.0, ridge - 0.06)
+			var mid := (p0 + p1) * 0.5 + Vector3(0, th * 0.5, 0) + f.basis.z * float(e[1]) * 0.03
+			_box(WOOD, Transform3D(f.basis * Basis(Vector3.BACK, -side * pitch), mid), Vector3(p0.distance_to(p1) + 0.06, th + 0.16, 0.06), col)
