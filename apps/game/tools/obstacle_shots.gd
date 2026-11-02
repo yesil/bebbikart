@@ -8,6 +8,9 @@ extends SceneTree
 ## --hit: instead, lets the mock race run and drops a grazing cow (then sheep, cheese, hay) in the
 ## lane of the first racer to reach a surprise spot, holds its thumb there so it can't dodge, and
 ## shoots the race camera every 0.15 s round the hit (hit_<kind>_<n>.png).
+## --close: instead, a cow and a flock of sheep up close: front three-quarter and side while
+## grazing or crossing (close_<kind>_front.png, close_<kind>_side.png), then knocked by a kart
+## that isn't there, shot from the front as they react and run off (close_<kind>_hit_<n>.png).
 
 const VillageCourse = preload("res://sim/village_course.gd")
 const Obstacles = preload("res://sim/obstacles.gd")
@@ -22,9 +25,16 @@ const SHOTS := [
 	["cheese", 0, "cheese", 70.0, 1.0, [1.2, 2.5, 4.0]],
 	["hay", 0, "hay", 80.0, -1.0, [0.3, 1.5]],
 ]
+## --close: [kind, spot index, s, side, seconds walked in before the shots, camera distance (m)]
+const CLOSE := [
+	["cow", 1, 20.0, 1.0, 6.0, 4.6],
+	["sheep", 3, 30.0, -1.0, 2.6, 3.4],
+]
+const CLOSE_HIT_AT := [0.1, 0.25, 0.45, 0.7, 1.0, 1.4]   # seconds after the knock
 
 var out := ""
 var hit_mode := false
+var close_mode := false
 
 
 func _initialize() -> void:
@@ -34,6 +44,8 @@ func _initialize() -> void:
 			out = kv[1]
 		if kv[0] == "hit":
 			hit_mode = true
+		if kv[0] == "close":
+			close_mode = true
 	if out == "" or not OS.get_cmdline_user_args().has("--no-obstacles"):
 		push_error("obstacle_shots: --out=DIR, --track=village and --no-obstacles are required")
 		quit(1)
@@ -74,6 +86,12 @@ func _run() -> void:
 	if err != "":
 		push_error("obstacle_shots: " + err)
 		quit(1)
+		return
+	if close_mode:
+		await _close(sim, cam, views)
+		main.free()
+		await create_timer(0.3).timeout
+		quit(0)
 		return
 	for shot in SHOTS:
 		sim.obstacles.items.clear()
@@ -181,3 +199,72 @@ func _hits(main: Node, sim) -> void:
 			sim.steer(r.run_id, null)
 		if hit_at < 0.0:
 			push_error("obstacle_shots: no racer hit the %s" % kind)
+
+
+## Each animal up close: it walks in (the sim stepping), then the sim holds it still while its view
+## goes on moving, shot from the front three-quarter and the side; then it is knocked as if a kart
+## passed just beside it and shot from the front as it reacts and runs off.
+func _close(sim, cam: Camera3D, views: Node) -> void:
+	cam.fov = 40.0
+	for c in CLOSE:
+		var kind: String = c[0]
+		sim.obstacles.items.clear()
+		sim.obstacles.groups.clear()
+		var gid: int = sim.obstacles.place_group(sim, c[1], kind, c[2], c[3])
+		await _run_sim(sim, float(c[4]))
+		var it: Dictionary = {}
+		for o in sim.obstacles.items:
+			if int(o["group"]) == gid:
+				it = o
+				break
+		var seg: Dictionary = sim.course.segments[it["seg"]]
+		var r: Route = seg["route"]
+		var s := float(it["s"])
+		var rel := float(it["rel"])
+		var fwd: Vector3 = r.tangent_at(s) * cos(rel) + r.normal_at(s) * sin(rel)
+		var at: Vector3 = r.world_at(s, float(it["d"]))
+		at.y = sim.course.surface_y(seg, s)
+		var dist: float = c[5]
+		var front: Vector3 = at + fwd.rotated(Vector3.UP, 0.7) * dist + Vector3.UP * 1.1
+		cam.global_position = front
+		cam.look_at(at + Vector3.UP * 0.7, Vector3.UP)
+		await _save("close_%s_front" % kind)
+		cam.global_position = at + fwd.rotated(Vector3.UP, PI * 0.5) * dist * 1.15 + Vector3.UP * 0.8
+		cam.look_at(at + Vector3.UP * 0.6, Vector3.UP)
+		await _save("close_%s_side" % kind)
+		# The knock: a kart passing just to one side (as Obstacles.collide does it).
+		var kart_d := float(it["d"]) + 0.6
+		for o in sim.obstacles.items:
+			if int(o["group"]) == gid and (o == it or kind == "sheep"):
+				sim.obstacles._scare(o, signf(float(o["d"]) - kart_d))
+		views.call("on_hit", {"kind": kind, "pos": at, "runId": ""})
+		cam.global_position = front
+		cam.look_at(at + Vector3.UP * 0.7, Vector3.UP)
+		var t0 := 0.0
+		for i in CLOSE_HIT_AT.size():
+			await _run_sim(sim, float(CLOSE_HIT_AT[i]) - t0)
+			t0 = float(CLOSE_HIT_AT[i])
+			await _save("close_%s_hit_%d" % [kind, i])
+
+
+## Steps the surprises for `secs` of sim time, in step with the frames (their views animate on the
+## frames' time).
+func _run_sim(sim, secs: float) -> void:
+	var acc := 0.0
+	var done := 0.0
+	while done < secs:
+		await process_frame
+		acc += get_root().get_process_delta_time()
+		while acc >= Tuning.DT and done < secs:
+			sim.obstacles.step(sim)
+			acc -= Tuning.DT
+			done += Tuning.DT
+
+
+func _save(name: String) -> void:
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	var path := out.path_join(name + ".png")
+	get_root().get_texture().get_image().save_png(path)
+	print("shot ", path)
