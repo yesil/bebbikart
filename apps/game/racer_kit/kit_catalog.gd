@@ -20,13 +20,14 @@ const IMPLEMENTED := {
 	"mouths": ["smile", "grin", "open", "fangs", "beak", "none", "tongue", "buck_teeth", "mustache", "zigzag", "worried"],
 	"hairStyles": ["spiky", "curly", "long", "ponytail", "mohawk", "tuft", "buns", "pigtails", "bob", "very_long", "braid"],
 	"hatTypes": ["cap", "crown", "helmet", "wizard", "beanie", "tophat", "bow", "party"],
-	"rideBases": ["kart", "car", "bike", "sailboat", "animal4", "bird", "board", "rocket", "boat", "blob"],
+	"rideBases": ["kart", "car", "bike", "sailboat", "animal4", "bird", "board", "rocket", "boat", "blob", "chassis"],
 	"wheelStyles": ["toy", "spoked", "monster", "donut"],
 	"legStyles": ["hooves", "paws", "claws", "stumpy"],
 	"wingStyles": ["feather", "bat", "fairy", "plane"],
 	"tailStyles": ["fluffy", "dino", "flame", "feathers"],
 	"extraShapes": ["sphere", "capsule", "box", "cone", "cylinder", "torus", "star", "heart",
-		"lightning", "flame", "moon", "flower", "leaf", "cloud", "diamond", "drop", "bowtie", "glasses", "cape"],
+		"lightning", "flame", "moon", "flower", "leaf", "cloud", "diamond", "drop", "bowtie", "glasses", "cape",
+		"wedge", "dome", "half_cylinder", "bucket"],
 	"outfits": ["tshirt", "jacket", "dress", "skirt", "ruffle_skirt", "shorts", "overalls"],
 	"shoeStyles": ["sneakers", "boots", "none"],
 	"patterns": ["stripes", "spots", "stars", "hearts", "zigzag", "checks", "crayon", "swirl"],
@@ -36,7 +37,7 @@ const IMPLEMENTED := {
 	"hornSounds": ["honk", "beep", "toot", "squeak", "bell", "roar", "meow", "woof", "neigh", "moo", "boing"],
 	"motionStyles": ["bouncy", "smooth", "wobbly", "jittery", "floaty", "proud", "sneaky"],
 	"sockets": ["head_top", "head_side", "head_front", "body_front", "body_back", "hand",
-		"ride_front", "ride_back", "ride_side", "ride_top", "ride_bottom"],
+		"ride_front", "ride_back", "ride_side", "ride_top", "ride_bottom", "ride_center"],
 }
 
 static var _data: Dictionary = {}

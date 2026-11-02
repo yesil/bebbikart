@@ -251,7 +251,7 @@
     },
     {
       "name": "boat",
-      "desc": "boat or bathtub on wheels"
+      "desc": "boat, canoe or ship with a pointed hull"
     },
     {
       "name": "sailboat",
@@ -259,7 +259,11 @@
     },
     {
       "name": "blob",
-      "desc": "anything else: a slime, a cloud, a shoe (plain shape, no face: add eyes as extras only if drawn)"
+      "desc": "one soft round lump: a slime, jelly or cloud (plain shape, no face: add eyes as extras only if drawn)"
+    },
+    {
+      "name": "chassis",
+      "desc": "a bare low chassis: only the seat and the wheels, no body. For a vehicle that is an everyday object, food, furniture or anything no other base looks like (sofa, bed, bathtub, teapot, toaster, cheese, fruit, cake, shoe, skate…): build its body from extras on ride_center"
     }
   ],
   "wheelStyles": [
@@ -353,7 +357,11 @@
     "drop",
     "bowtie",
     "glasses",
-    "cape"
+    "cape",
+    "wedge",
+    "dome",
+    "half_cylinder",
+    "bucket"
   ],
   "extraShapeNotes": {
     "lightning": "zig-zag lightning bolt",
@@ -366,7 +374,11 @@
     "drop": "water drop or tear",
     "bowtie": "bow tie or ribbon bow",
     "glasses": "round glasses, put on head_front",
-    "cape": "flowing cape, put on body_back"
+    "cape": "flowing cape, put on body_back",
+    "wedge": "triangular block: cheese wedge, ramp, roof, cake slice",
+    "dome": "half ball, flat side down: lid, shell, bowl, melon half",
+    "half_cylinder": "half a cylinder lying on its flat side: melon slice, loaf, arch",
+    "bucket": "cylinder narrower at the bottom: bucket, cup, pot, lampshade"
   },
   "outfits": [
     {
@@ -652,6 +664,12 @@
       "desc": "under the ride: skids, flames",
       "on": "ride",
       "maxOffset": 0.3
+    },
+    {
+      "name": "ride_center",
+      "desc": "middle of the ride, just under the seat: build a chassis body here",
+      "on": "ride",
+      "maxOffset": 1.5
     }
   ],
   "limits": {
@@ -677,7 +695,7 @@
       2
     ],
     "extraScale": [
-      0.1,
+      0.05,
       2
     ],
     "extraRotationDeg": [
@@ -702,7 +720,7 @@
     ],
     "taglineMax": 60,
     "characterExtrasMax": 10,
-    "rideExtrasMax": 12,
+    "rideExtrasMax": 20,
     "paletteMin": 3,
     "paletteMax": 10,
     "personalityMin": 2,

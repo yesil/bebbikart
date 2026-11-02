@@ -58,16 +58,23 @@ static func build(raw: Dictionary, drawing: Texture2D = null) -> ToyRacer:
 	ride.scale = Vector3(rs[0], rs[1], rs[2])
 	ride.add_child(d.body)
 	model.add_child(ride)
-	if r.has("finish"):
-		KitMaterial.look(d.body, {}, Color.WHITE, r.finish)
-	if r.has("pattern"):
-		KitMaterial.look(d.body, r.pattern, cols[r.pattern.color], "", cols[r.color])
 	_ride_parts(ride, r, d, cols, drawing)
 
 	var refs := _character(spec.character, d, ride.scale, cols, r.base)
 	var ch: Node3D = refs.character
 	model.add_child(ch)
 	_extras(ride, spec.ride.extras, d.sockets, cols, RIDE_UNIT, true)
+	# The ride's finish and pattern cover its body and its extras (a chassis body is all extras);
+	# the pattern only goes on parts in the ride's main colour.
+	var painted: Array[Node] = [d.body]
+	for sock in ride.get_children():
+		if String(sock.name).begins_with("Socket_ride_"):
+			painted.append(sock)
+	for n in painted:
+		if r.has("finish"):
+			KitMaterial.look(n, {}, Color.WHITE, r.finish)
+		if r.has("pattern"):
+			KitMaterial.look(n, r.pattern, cols[r.pattern.color], "", cols[r.color])
 
 	var box := _aabb(model, Transform3D.IDENTITY)
 	model.position.y = -box.position.y + float(d.hover)

@@ -44,7 +44,7 @@ photos ─► 1 Normalise ─► 2 Look ─► 3 Design ─► 4 Critique ─►
 - **Look:** `tagline` (a funny one-line bio for the reveal), `motion` (idle style: bouncy, wobbly, proud, sneaky… and energy), `sound` (engine loop, pitch, horn), patterns (stripes, spots, crayon strokes…) and finishes (matte, metallic, sparkle, glow) on body, head and ride, and a racing number.
 - **Palette:** 3–8 colours taken from the drawing. Parts reference palette slots, so the whole racer stays in the kid's colours.
 - **Character:** body shape, head shape, skin/fur colour, **face** (eye style, eye colour, mouth style, brows, cheeks), hair, hat, arms.
-- **Ride:** a base (`kart`, `bike`, `animal4`, `bird`, `board`, `rocket`, `boat`, `blob`) with wheels / legs / wings / tail options, colours and proportions.
+- **Ride:** a base (`kart`, `car`, `bike`, `animal4`, `bird`, `board`, `rocket`, `boat`, `sailboat`, `blob`, or a bare `chassis` whose body is built from extras for everyday objects like a sofa or a teapot) with wheels / legs / wings / tail options, colours and proportions.
 - **Extras:** up to 10 on the character and 12 on the ride. Each is a shape from the kit (primitives plus flat stickers like `lightning`, `flame`, `moon`, `flower`, and `glasses`, `cape`) attached to a named socket with offset, scale, rotation and palette colour. This is where the unique bits go: three horns, a lightning bolt, a propeller, spots.
 - **Drawing sticker:** optional. The kid's actual drawing, as a rounded sticker on the side of the ride, so the link to the paper stays visible.
 

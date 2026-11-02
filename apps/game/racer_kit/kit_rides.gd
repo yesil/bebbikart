@@ -1,6 +1,6 @@
 class_name KitRides
 extends RefCounted
-## The 8 ride bases. build() returns the ride body (meshes only, scaled later by
+## The ride bases. build() returns the ride body (meshes only, scaled later by
 ## ride.scale) plus anchor points in unscaled ride space:
 ##   seat, handle (or null), hand_spread, stand, wheel_r, ground {2,3,4: wheel centres},
 ##   hips (leg tops) + leg_len, wing (right side), tail, sockets {name: pos}, sticker {pos,size},
@@ -20,6 +20,7 @@ static func build(base: String, main: Color, accent: Color) -> Dictionary:
 		"boat": return _boat(main, accent)
 		"sailboat": return _sailboat(main, accent)
 		"blob": return _blob(main, accent)
+		"chassis": return _chassis(main, accent)
 	return _kart(main, accent)
 
 
@@ -66,6 +67,9 @@ static func _base(seat: Vector3, extra: Dictionary) -> Dictionary:
 		"hover": 0.0, "defaults": {},
 	}
 	d.merge(extra, true)
+	# The middle of the ride just under the seat, on every base (a chassis is built up from here).
+	if not d.sockets.has("ride_center"):
+		d.sockets["ride_center"] = Vector3(0, seat.y - 0.16, 0)
 	return d
 
 
@@ -325,4 +329,29 @@ static func _blob(main: Color, accent: Color) -> Dictionary:
 	band.scale = Vector3(1.05, 0.6, 1.1)
 	core.add_child(band)
 	b.add_child(core)
+	return d
+
+
+## Bare chassis: a low dark floor, a seat pad and the wheels, no body. The designer builds the
+## vehicle's whole body from extras on ride_center (a sofa, a bathtub, a teapot, a cheese wedge).
+static func _chassis(main: Color, accent: Color) -> Dictionary:
+	var d := _base(Vector3(0, 0.36, 0.1), {
+		"hand_spread": 0.3,
+		"ground": _wheel_sets(0.18, 0.5, -0.48, 0.46),
+		"wing": Vector3(0.45, 0.4, 0.1), "tail": Vector3(0, 0.36, 0.72),
+		"sticker": {"pos": Vector3(0.5, 0.3, 0.0), "size": 0.34},
+		"defaults": {"wheels": {"count": 4, "style": "toy"}},
+		"sockets": {"ride_front": Vector3(0, 0.3, -0.75), "ride_back": Vector3(0, 0.3, 0.7),
+			"ride_top": Vector3(0, 0.4, -0.45), "ride_left": Vector3(-0.5, 0.3, 0),
+			"ride_right": Vector3(0.5, 0.3, 0), "ride_bottom": Vector3(0, 0.12, 0),
+			"ride_center": Vector3(0, 0.2, 0)},
+	})
+	var b: Node3D = d.body
+	b.add_child(P.mi(KitMesh.rounded_box(Vector3(0.7, 0.06, 1.1)), P.DARK, Vector3(0, 0.2, 0)))
+	for z in [-0.48, 0.46]:
+		var axle := P.mi(KitMesh.capsule(0.03, 1.0), P.DARK, Vector3(0, 0.18, z))
+		axle.rotation.z = PI / 2
+		b.add_child(axle)
+	# The driver never floats: a small pad under the seat, in the main colour like the built body.
+	b.add_child(P.mi(KitMesh.rounded_box(Vector3(0.36, 0.12, 0.34)), main, Vector3(0, 0.29, 0.1)))
 	return d

@@ -218,12 +218,31 @@ static func extra_mesh(shape: String) -> Mesh:
 			return KitMesh.puffy(KitMesh.shape_outline(shape), 0.3, "extra_" + shape)
 		"lightning", "moon", "bowtie", "flame":
 			return KitMesh.slab(KitMesh.shape_outline(shape), 0.22, "extra_" + shape)
+		# Building blocks stand on their flat base (y = 0), 1 unit tall; their profile is drawn in
+		# the side view (outline x = forward) and runs 1 unit across.
+		"wedge":
+			return _side_prism(PackedVector2Array([Vector2(0.5, 0.0), Vector2(-0.5, 1.0), Vector2(-0.5, 0.0)]), "extra_wedge")
+		"half_cylinder":
+			var arch := PackedVector2Array()
+			for i in 17:
+				var a := PI * float(i) / 16.0
+				arch.append(Vector2(cos(a) * 0.5, sin(a)))
+			return _side_prism(arch, "extra_half_cylinder")
+		"dome": return KitMesh.dome(0.5, 1.0, 0.5)
+		"bucket": return KitMesh.cylinder(0.5, 0.36, 1.0, 20)
 		"cape":
 			# Hangs down from the socket, flows backwards (+Z) and wraps around the body.
 			var bend := func(v: Vector3) -> Vector3:
 				return Vector3(v.x, v.y, v.z + 0.35 * pow(-v.y, 1.4) - 0.3 * v.x * v.x)
 			return KitMesh.slab(KitMesh.shape_outline("cape"), 0.05, "extra_cape", bend)
 	return KitMesh.sphere(0.5)
+
+
+## A side-view outline (x = forward, y = up, counter-clockwise) extruded 1 unit across the racer.
+static func _side_prism(outline: PackedVector2Array, key: String) -> Mesh:
+	# A quarter turn about Y: outline x runs forward (-Z), the extrusion runs across (X).
+	var turn := func(v: Vector3) -> Vector3: return Vector3(v.z, v.y, -v.x)
+	return KitMesh.slab(outline, 1.0, key, turn, true)
 
 
 ## Round glasses about 1 unit wide, facing forward (-Z).
@@ -259,7 +278,7 @@ static func extra(e: Dictionary, color: Color, unit: float, mirror := false) -> 
 	m.scale = Vector3(sc[0], sc[1], sc[2]) * unit
 	# Cones, capsules and cylinders stand on their base, so horns, antennae, poles and whiskers grow
 	# out of the socket (their tip is scale.y × unit away) instead of through it.
-	if e.shape in ["cone", "capsule", "cylinder"]:
+	if e.shape in ["cone", "capsule", "cylinder", "bucket"]:
 		m.position.y = 0.5 * sc[1] * unit
 	root.add_child(m)
 	return root

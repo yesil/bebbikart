@@ -85,14 +85,18 @@ export const RACER_KIT = Object.freeze({
     },
     { name: "board", desc: "skateboard, surfboard, magic carpet" },
     { name: "rocket", desc: "rocket, plane, spaceship" },
-    { name: "boat", desc: "boat or bathtub on wheels" },
+    { name: "boat", desc: "boat, canoe or ship with a pointed hull" },
     {
       name: "sailboat",
       desc: "sailing boat: a tall mast behind the driver with a big sail in the accent colour; ride_top is the masthead",
     },
     {
       name: "blob",
-      desc: "anything else: a slime, a cloud, a shoe (plain shape, no face: add eyes as extras only if drawn)",
+      desc: "one soft round lump: a slime, jelly or cloud (plain shape, no face: add eyes as extras only if drawn)",
+    },
+    {
+      name: "chassis",
+      desc: "a bare low chassis: only the seat and the wheels, no body. For a vehicle that is an everyday object, food, furniture or anything no other base looks like (sofa, bed, bathtub, teapot, toaster, cheese, fruit, cake, shoe, skate…): build its body from extras on ride_center",
     },
   ],
   wheelStyles: [
@@ -139,6 +143,10 @@ export const RACER_KIT = Object.freeze({
     "bowtie",
     "glasses",
     "cape",
+    "wedge",
+    "dome",
+    "half_cylinder",
+    "bucket",
   ],
   // Flat shapes (star … bowtie) are puffy stickers facing +z; scale z for thickness.
   extraShapeNotes: {
@@ -153,6 +161,10 @@ export const RACER_KIT = Object.freeze({
     bowtie: "bow tie or ribbon bow",
     glasses: "round glasses, put on head_front",
     cape: "flowing cape, put on body_back",
+    wedge: "triangular block: cheese wedge, ramp, roof, cake slice",
+    dome: "half ball, flat side down: lid, shell, bowl, melon half",
+    half_cylinder: "half a cylinder lying on its flat side: melon slice, loaf, arch",
+    bucket: "cylinder narrower at the bottom: bucket, cup, pot, lampshade",
   },
   outfits: [
     { name: "tshirt", desc: "t-shirt or top" },
@@ -236,6 +248,12 @@ export const RACER_KIT = Object.freeze({
     { name: "ride_side", desc: "sides of the ride: fins, stripes", on: "ride", maxOffset: 0.35 },
     { name: "ride_top", desc: "on top of the ride: flags, propellers", on: "ride", maxOffset: 0.4 },
     { name: "ride_bottom", desc: "under the ride: skids, flames", on: "ride", maxOffset: 0.3 },
+    {
+      name: "ride_center",
+      desc: "middle of the ride, just under the seat: build a chassis body here",
+      on: "ride",
+      maxOffset: 1.5,
+    },
   ],
 });
 
@@ -266,7 +284,7 @@ export const SPEC_LIMITS = Object.freeze({
   rideScale: [0.6, 1.4],
   wheelSize: [0.5, 2.0],
   wingSize: [0.5, 2.0],
-  extraScale: [0.1, 2.0],
+  extraScale: [0.05, 2.0],
   extraRotationDeg: [-180, 180],
   patternScale: [0.5, 2.0],
   motionEnergy: [0.5, 1.5],
@@ -274,7 +292,7 @@ export const SPEC_LIMITS = Object.freeze({
   rideNumber: [0, 99],
   taglineMax: 60,
   characterExtrasMax: 10,
-  rideExtrasMax: 12,
+  rideExtrasMax: 20,
   paletteMin: 3,
   paletteMax: 10,
   personalityMin: 2,

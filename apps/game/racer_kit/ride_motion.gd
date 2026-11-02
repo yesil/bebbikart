@@ -20,7 +20,7 @@ extends RefCounted
 
 const Gestures = preload("res://racer_kit/racer_gestures.gd")
 
-const WHEELED := ["kart", "car"]      # body on a suspension above the wheels (Sway pivot)
+const WHEELED := ["kart", "car", "chassis"]  # body on a suspension above the wheels (Sway pivot)
 const CARVERS := ["bike", "board"]    # lean into bends as a whole
 const REAR_S := 1.5                   # finish: rear up, big flaps, happy bounce
 const BUCK_S := 0.5                   # landing buck (animals)
@@ -165,7 +165,9 @@ func setup(racer: ToyRacer) -> bool:
 	_tails = r._anim["tail_wag"]
 	_flames = r._anim["flicker"]
 	for sock in _ride.get_children():
-		if sock is Marker3D and String(sock.name).begins_with("Socket_ride_") and sock.get_child_count() > 0:
+		# ride_center holds a chassis's built body: it rides rigid, only the parts on the edges swing.
+		if sock is Marker3D and String(sock.name).begins_with("Socket_ride_") and sock.get_child_count() > 0 \
+				and sock.name != "Socket_ride_center":
 			_add_extra(sock)
 	if base in ["boat", "sailboat"]:
 		var flag: Node3D = null

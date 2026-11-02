@@ -456,7 +456,9 @@ interface RacerSpec {
     extras: Extra[]; // ≤ 10
   };
   ride: {
-    base: "kart" | "car" | "sailboat" | "bike" | "animal4" | "bird" | "board" | "rocket" | "boat" | "blob";
+    base: "kart" | "car" | "sailboat" | "bike" | "animal4" | "bird" | "board" | "rocket" | "boat" | "blob" | "chassis";
+    // chassis = only a floor, a seat pad and the wheels: the extras on ride_center build the whole body
+    // (a sofa, a bathtub, a teapot…). It rides on a suspension like a kart; ride_center parts stay rigid.
     color: PaletteRef;
     accent: PaletteRef;
     scale: Vec3;
@@ -467,17 +469,18 @@ interface RacerSpec {
     legs?: { style: string; color: PaletteRef };
     wings?: { style: string; color: PaletteRef; size: number };
     tail?: { style: string; color: PaletteRef };
-    extras: Extra[]; // ≤ 12
+    extras: Extra[]; // ≤ 20; the ride's finish covers them and its pattern paints those in the main colour
     drawingSticker: boolean; // put the kid's drawing on the side
   };
 }
 interface Extra {
-  shape: string; // kit extraShapes: sphere capsule box cone cylinder torus star heart lightning flame moon flower leaf cloud diamond drop bowtie glasses cape
-  socket: string; // from kit catalog, e.g. "head_top", "body_front", "ride_back"
-  offset: Vec3;
-  scale: Vec3;
-  rotationDeg: Vec3; // clamped to small ranges per socket
-  // cone, capsule and cylinder stand on their base at the socket and grow along their local +y
+  shape: string; // kit extraShapes: sphere capsule box cone cylinder torus star heart lightning flame moon flower leaf cloud diamond drop bowtie glasses cape wedge dome half_cylinder bucket
+  socket: string; // from kit catalog, e.g. "head_top", "body_front", "ride_back", "ride_center" (middle of the ride under the seat, offsets ±1.5)
+  offset: Vec3; // within the socket's maxOffset
+  scale: Vec3; // 0.05–2; 1 = 0.5 m on the character, 1 m on the ride
+  rotationDeg: Vec3; // -180–180
+  // cone, capsule, cylinder and bucket stand on their base at the socket and grow along their local +y;
+  // wedge, dome and half_cylinder sit on their flat base too (wedge: tall end at the back, edge forward)
   color: PaletteRef;
   mirror?: boolean; // also place a copy on the other side (ears, horns)
 }

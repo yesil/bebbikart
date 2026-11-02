@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { clampRacerSpec, nearestName, RacerSpecSchema } from "../src/index.js";
+import { clampRacerSpec, nearestName, RacerSpecSchema, SPEC_LIMITS } from "../src/index.js";
 import { DEFAULT_SPEC, SAMPLE_SPECS } from "../testing/fixtures.js";
 
 test("sample specs are valid", () => {
@@ -15,7 +15,7 @@ test("clamp repairs names, numbers, extras and palette refs", () => {
   raw.character.head.size = 9;
   raw.ride.base = "rockett";
   raw.ride.color = 9;
-  raw.ride.extras = Array.from({ length: 14 }, () => ({
+  raw.ride.extras = Array.from({ length: SPEC_LIMITS.rideExtrasMax + 2 }, () => ({
     shape: "star",
     socket: "ride_top",
     offset: [0, 5, 0],
@@ -31,7 +31,7 @@ test("clamp repairs names, numbers, extras and palette refs", () => {
   expect(r.spec.character.head.size).toBe(1.5);
   expect(r.spec.ride.base).toBe("rocket");
   expect(r.spec.ride.color).toBe(3);
-  expect(r.spec.ride.extras).toHaveLength(12);
+  expect(r.spec.ride.extras).toHaveLength(SPEC_LIMITS.rideExtrasMax);
   expect(r.spec.ride.extras[0].offset[1]).toBe(0.4);
   expect(r.spec.ride.extras[0].scale[0]).toBe(2);
   expect(r.fixes.length).toBeGreaterThan(0);
