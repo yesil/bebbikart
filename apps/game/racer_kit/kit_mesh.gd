@@ -272,20 +272,23 @@ static func ellipse_outline(w: float, h: float, segments: int = 16) -> PackedVec
 
 # --- Slab: any (also concave) outline extruded along Z with flat caps. ---
 # Lightning bolts, crescents, bow ties, capes. bend (optional) moves each vertex after building.
+# flat: faceted shading with sharp edges (building blocks) instead of smoothed normals.
 
-static func slab(outline: PackedVector2Array, thickness: float, key: String = "", bend: Callable = Callable()) -> Mesh:
+static func slab(outline: PackedVector2Array, thickness: float, key: String = "", bend: Callable = Callable(), flat := false) -> Mesh:
 	if key != "":
-		return cached("slab:" + key, func() -> Mesh: return _make_slab(outline, thickness, bend))
-	return _make_slab(outline, thickness, bend)
+		return cached("slab:" + key, func() -> Mesh: return _make_slab(outline, thickness, bend, flat))
+	return _make_slab(outline, thickness, bend, flat)
 
 
-static func _make_slab(outline: PackedVector2Array, thickness: float, bend: Callable) -> ArrayMesh:
+static func _make_slab(outline: PackedVector2Array, thickness: float, bend: Callable, flat := false) -> ArrayMesh:
 	var tris := Geometry2D.triangulate_polygon(outline)
 	if tris.is_empty():
 		push_error("KitMesh.slab: outline can't be triangulated (%d points)" % outline.size())
 		return ArrayMesh.new()
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if flat:
+		st.set_smooth_group(-1)
 	var h := thickness * 0.5
 	var put := func(v: Vector3) -> void:
 		st.add_vertex(bend.call(v) if bend.is_valid() else v)
@@ -313,12 +316,13 @@ static func _make_slab(outline: PackedVector2Array, thickness: float, bend: Call
 		var b := Vector3(p1.x, p1.y, h)
 		var c := Vector3(p1.x, p1.y, -h)
 		var d := Vector3(p0.x, p0.y, -h)
+		# Clockwise seen from outside, like the caps (the walls used to face inwards).
 		if ccw > 0.0:
-			put.call(a); put.call(c); put.call(b)
-			put.call(a); put.call(d); put.call(c)
-		else:
 			put.call(a); put.call(b); put.call(c)
 			put.call(a); put.call(c); put.call(d)
+		else:
+			put.call(a); put.call(c); put.call(b)
+			put.call(a); put.call(d); put.call(c)
 	st.generate_normals()
 	return st.commit()
 
