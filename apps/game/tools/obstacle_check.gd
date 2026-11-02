@@ -58,8 +58,10 @@ func _init() -> void:
 				_lap_s(r) - _lap_s(res[mode + "_off"]), _per_lap(r, "met"), _per_lap(r, "hits"),
 				100.0 * float(r["hits"]) / maxf(1.0, float(r["met"])), _per_lap(r, "lost_ms") / 1000.0,
 				JSON.stringify(r["fails"]), JSON.stringify(r["by_kind"])])
-	var per_hit := (_lap_s(res["wild"]) - _lap_s(res["wild_off"])) / maxf(0.01, _per_lap(res["wild"], "hits"))
-	var per_care := (_lap_s(res["hands"]) - _lap_s(res["hands_off"])) / maxf(0.01, _per_lap(res["hands"], "met"))
+	# From the `obstacle` events (what the coach sees): the lap times of random thumbs are too
+	# noisy to price one hit.
+	var per_hit := float(res["wild"]["lost_ms"]) / 1000.0 / maxf(1.0, float(res["wild"]["hits"]))
+	var per_care := float(res["hands"]["lost_ms"]) / 1000.0 / maxf(1.0, float(res["hands"]["met"]))
 	print("a hit costs about %.2f s, the autopilot's careful pass %.2f s" % [per_hit, per_care])
 	var problems: PackedStringArray = []
 	for mode in ["hands", "kid"]:
