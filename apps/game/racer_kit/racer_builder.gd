@@ -52,7 +52,7 @@ static func build(raw: Dictionary, drawing: Texture2D = null) -> ToyRacer:
 	rig.add_child(model)
 
 	var r: Dictionary = spec.ride
-	var d := KitRides.build(r.base, cols[r.color], cols[r.accent])
+	var d := KitRides.build(r.base, cols[r.color], cols[r.accent], r.has("wheels"))
 	var ride := P.node("Ride")
 	var rs: Array = r.scale
 	ride.scale = Vector3(rs[0], rs[1], rs[2])

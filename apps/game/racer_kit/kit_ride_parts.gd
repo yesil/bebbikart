@@ -18,12 +18,12 @@ static func wheel(style: String, tire: Color, hub: Color, r: float) -> Node3D:
 	var k := r / BASE_WHEEL_R
 	match style:
 		"monster":
-			var t := P.mi(KitMesh.cylinder(r, r, 0.22 * k, 18), P.DARK)
+			var t := P.mi(KitMesh.cylinder(r, r, 0.22 * k, 18), tire)
 			t.rotation.z = PI / 2
 			spin.add_child(t)
 			for i in 8:
 				var a := TAU * i / 8.0
-				var lug := P.mi(KitMesh.rounded_box(Vector3(0.24, 0.05, 0.05) * k), P.DARK.lightened(0.15), Vector3(0, sin(a), cos(a)) * r)
+				var lug := P.mi(KitMesh.rounded_box(Vector3(0.24, 0.05, 0.05) * k), tire.lightened(0.15), Vector3(0, sin(a), cos(a)) * r)
 				lug.rotation.x = -a
 				spin.add_child(lug)
 			for s in [-1, 1]:
@@ -31,7 +31,7 @@ static func wheel(style: String, tire: Color, hub: Color, r: float) -> Node3D:
 				cap.scale = Vector3(0.4, 1, 1)
 				spin.add_child(cap)
 		"donut":
-			var ring := P.mi(KitMesh.torus(r * 0.42, r), hub)
+			var ring := P.mi(KitMesh.torus(r * 0.42, r), tire)
 			ring.rotation.z = PI / 2
 			ring.scale = Vector3(1, 1.6, 1)
 			spin.add_child(ring)
@@ -39,7 +39,7 @@ static func wheel(style: String, tire: Color, hub: Color, r: float) -> Node3D:
 			axle.scale = Vector3(1.5, 1, 1)
 			spin.add_child(axle)
 		"spoked":
-			var tire2 := P.mi(KitMesh.torus(r * 0.8, r), P.DARK)
+			var tire2 := P.mi(KitMesh.torus(r * 0.8, r), tire)
 			tire2.rotation.z = PI / 2
 			tire2.scale = Vector3(1, 1.3, 1)
 			spin.add_child(tire2)
@@ -54,7 +54,7 @@ static func wheel(style: String, tire: Color, hub: Color, r: float) -> Node3D:
 			hubc.scale = Vector3(1.4, 1, 1)
 			spin.add_child(hubc)
 		_:
-			var t2 := P.mi(KitMesh.cylinder(r, r, 0.15 * k, 20), P.DARK)
+			var t2 := P.mi(KitMesh.cylinder(r, r, 0.15 * k, 20), tire)
 			t2.rotation.z = PI / 2
 			spin.add_child(t2)
 			for s in [-1, 1]:
