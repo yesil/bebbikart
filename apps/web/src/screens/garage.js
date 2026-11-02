@@ -3,7 +3,7 @@ import { html } from "htm/preact";
 import { useRef, useState } from "preact/hooks";
 import { api } from "../api.js";
 import { COPY, errorText } from "../copy.js";
-import { Avatar, isLoop, Paddock, secs } from "./common.js";
+import { Avatar, isLoop, Paddock, RacerPic, secs, usePicture } from "./common.js";
 import { SetupCard } from "./setup-card.js";
 import { TrackMap } from "./track-map.js";
 
@@ -243,6 +243,20 @@ export function WeatherStrip({ weather }) {
   return html`<div class="weather">${parts.length ? parts.join("  ") : COPY.weather.calm}</div>`;
 }
 
+/** One leaderboard row: rank, the racer's picture, name and racer title, best time. */
+function BoardRow({ e, mine, onOpen }) {
+  const [problem, onError] = usePicture(e.avatarUrl);
+  return html`<li class=${`tap ${mine ? "mine" : ""}`} role="button" tabindex="0" onClick=${onOpen}>
+    <span class="rank">${e.rank}</span>
+    <${RacerPic} url=${e.avatarUrl} problem=${problem} onError=${onError} size=${56} />
+    <span class="who">
+      <b>${e.nickname}</b>
+      ${problem ? html`<small class="bad">${problem}</small>` : e.racerTitle ? html`<small>${e.racerTitle}</small>` : null}
+    </span>
+    <span class="time">${secs(e.bestTimeMs)}</span>
+  </li>`;
+}
+
 export function Leaderboard({ ctx }) {
   const { s } = ctx;
   const [open, setOpen] = useState(null); // the entry whose setup card is open
@@ -253,13 +267,8 @@ export function Leaderboard({ ctx }) {
       ${s.leaderboard.length === 0 ? html`<p class="muted">${COPY.garage.noBest}</p>` : html`<p class="hint">${COPY.setup.tapHint}</p>`}
       <ol class="board">
         ${s.leaderboard.map(
-          (e) => html`<li key=${e.playerId} class=${`tap ${e.playerId === s.me?.id ? "mine" : ""}`}
-            role="button" tabindex="0" onClick=${() => setOpen(e)}>
-            <span class="rank">${e.rank}</span>
-            ${e.avatarUrl ? html`<img src=${e.avatarUrl} alt="" />` : html`<span class="ph">🏎️</span>`}
-            <span class="who"><b>${e.nickname}</b><small>${e.racerTitle ?? ""}</small></span>
-            <span class="time">${secs(e.bestTimeMs)}</span>
-          </li>`,
+          (e) => html`<${BoardRow} key=${e.playerId} e=${e} mine=${e.playerId === s.me?.id}
+            onOpen=${() => setOpen(e)} />`,
         )}
       </ol>
     </section>

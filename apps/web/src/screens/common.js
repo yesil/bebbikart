@@ -1,5 +1,6 @@
 import { LOOP_TRACKS } from "@bebbikart/shared";
 import { html } from "htm/preact";
+import { useState } from "preact/hooks";
 import { COPY } from "../copy.js";
 
 /** The racer's face for the app: avatar render, else hero, else the driver drawing. */
@@ -13,6 +14,29 @@ export function Avatar({ me, mood, size = 96 }) {
   return url
     ? html`<img class="avatar" src=${url} width=${size} height=${size} alt="" />`
     : html`<div class="avatar placeholder" style=${{ width: size, height: size }}>🏎️</div>`;
+}
+
+/**
+ * A racer's picture (LeaderboardEntry.avatarUrl, the avatar the big screen rendered) and why it
+ * is missing: [problem, onError]. problem is "" while the picture is fine, else the line to show.
+ * No fallbacks: no picture, or one that doesn't load, is said out loud, never swapped for another.
+ */
+export function usePicture(url) {
+  const [bad, setBad] = useState("");
+  const problem = !url ? COPY.board.noPicture : bad === url ? COPY.board.pictureFailed : "";
+  const onError = () => {
+    console.error(`racer picture didn't load: ${url}`);
+    setBad(url);
+  };
+  return [problem, onError];
+}
+
+/** The round picture of a racer, or a red "!" saying why there is none (see usePicture). */
+export function RacerPic({ url, problem, onError, size }) {
+  const style = { width: `${size}px`, height: `${size}px` };
+  return problem
+    ? html`<span class="racer-pic missing" style=${style} role="img" aria-label=${problem} title=${problem}>!</span>`
+    : html`<img class="racer-pic" style=${style} src=${url} alt="" onError=${onError} />`;
 }
 
 export const secs = (ms) => (ms === undefined || ms === null ? "–" : `${(ms / 1000).toFixed(2)} s`);

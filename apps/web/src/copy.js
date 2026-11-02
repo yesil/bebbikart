@@ -246,6 +246,10 @@ const en = {
     noTimeNobody: "No time this lap: the crown is still free",
   },
   tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Leaderboard" },
+  board: {
+    noPicture: "No picture: the big screen hasn't sent it",
+    pictureFailed: "The picture didn't load",
+  },
   paddock: {
     title: "Also here",
     making: "being made",
@@ -535,6 +539,10 @@ const de = {
     noTimeNobody: "Keine Zeit in dieser Runde: die Krone ist noch frei",
   },
   tabs: { garage: "🏎️ Garage", leaderboard: "🏆 Rangliste" },
+  board: {
+    noPicture: "Kein Bild: der grosse Bildschirm hat es nicht geschickt",
+    pictureFailed: "Das Bild hat nicht geladen",
+  },
   paddock: {
     title: "Auch hier",
     making: "wird gebaut",

@@ -3,11 +3,12 @@
 import { ABILITIES, FORK_IDS } from "@bebbikart/shared";
 import { html } from "htm/preact";
 import { COPY } from "../copy.js";
-import { secs } from "./common.js";
+import { RacerPic, secs, usePicture } from "./common.js";
 
 /**
  * Props:
- *   who        { nickname, avatarUrl?, timeMs?, timeLabel }   whose setup
+ *   who        { nickname, avatarUrl?, timeMs?, timeLabel }   whose setup (no avatarUrl: the card
+ *              says the picture is missing)
  *   setup      Setup { stars, routes, weather } (routes: the ways that lap took, steered or the
  *              stars', §2g)
  *   mine       { stars, routes }: my build, or after a run its stars and the ways it took (a
@@ -19,6 +20,7 @@ import { secs } from "./common.js";
  */
 export function SetupCard({ who, setup, mine, maxStars, ability, fork, onClose }) {
   const t = COPY.setup;
+  const [problem, onError] = usePicture(who.avatarUrl);
   const weather = setup.weather.length
     ? setup.weather.map((w) => t.setIn[w]).join(" · ")
     : t.setIn.calm;
@@ -28,7 +30,7 @@ export function SetupCard({ who, setup, mine, maxStars, ability, fork, onClose }
       <section class="card sheet" role="dialog" aria-label=${t.title(who.nickname)}
         onClick=${(e) => e.stopPropagation()}>
         <div class="sheet-head">
-          ${who.avatarUrl ? html`<img src=${who.avatarUrl} alt="" />` : html`<span class="ph">🏎️</span>`}
+          <${RacerPic} url=${who.avatarUrl} problem=${problem} onError=${onError} size=${64} />
           <div class="grow">
             <h2>${who.nickname}</h2>
             ${who.timeMs !== undefined ? html`<div class="muted">${who.timeLabel} <b>${secs(who.timeMs)}</b></div>` : null}
