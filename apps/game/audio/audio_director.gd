@@ -203,6 +203,7 @@ func on_event(type: String, pl: Dictionary) -> void:
 			match String(pl["kind"]):
 				"cow":
 					_play("moo", _rng.randf_range(0.9, 1.05))
+					_play("cowbell", 1.3)    # its bell clangs as it spins
 				"sheep":
 					_play("boing", 1.35)
 				"cheese":

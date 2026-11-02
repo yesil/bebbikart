@@ -1,27 +1,21 @@
 extends Node3D
-## Draws the village surprises (sim/obstacles.gd) on the road: cows (walking in, grazing, trotting
-## off, galloping away when hit), sheep crossing in a little flock, cheese wheels rolling across,
-## hay bales dropping off a cart and being picked up again. A bouncing "!" hangs over each group,
-## and a hit pops a word over the kart that rides along with it ("MOO!"). setup() returns "" or
-## why it can't show them;
-## main.gd reports that on screen.
+## Draws the village surprises (sim/obstacles.gd) on the road: toy cows (walking in, grazing,
+## trotting off, galloping away when hit) and sheep crossing in a little flock (world/toy_animal.gd
+## builds and moves them), cheese wheels rolling across, hay bales dropping off a cart and being
+## picked up again. The animals turn smoothly, watch karts coming at them, hop when one shaves past
+## and spin or tumble when one hits them (a hit sheep bursts a puff of wool). A bouncing "!" hangs
+## over each group, and a hit pops a word over the kart that rides along with it ("MOO!").
+## setup() returns "" or why it can't show them; main.gd reports that on screen.
 
 const Course = preload("res://sim/course.gd")
 const Obstacles = preload("res://sim/obstacles.gd")
 const SteerMarks = preload("res://world/steer_marks.gd")
 const I18n = preload("res://ui/i18n.gd")
+const ToyAnimal = preload("res://world/toy_animal.gd")
 
-const MODELS := {
-	"cow": "res://assets/village/poly_pizza/Cow_2.glb",
-	"sheep": "res://assets/village/poly_pizza/Sheep_2.glb",
-}
-const SCALE := {"cow": 0.34, "sheep": 0.58}
-## Animations by state (matched on the end of the clip name, the glTF names carry armature prefixes).
-const ANIM := {
-	"cow": {"walk": "Walk", "stay": "Eating", "flee": "Gallop", "hit": "Idle_HitReact_Left"},
-	"sheep": {"walk": "Walk", "stay": "Idle_Eating", "flee": "Run", "hit": "Jump"},
-}
-const WALK_ANIM_SPEED := {"cow": 1.0, "sheep": 1.1}  # clip speed at the kind's walking pace
+const TURN_RATE := {"cow": 2.4, "sheep": 4.0}   # rad/s an animal turns at most
+const LOOK_M := {"cow": 24.0, "sheep": 18.0}     # it watches a kart this close
+const WOOL_PUFFS := 3                             # puff bursts that can fly at once
 const CHEESE_R := 0.62
 const CHEESE_W := 0.42
 const HAY_R := 0.6
@@ -35,14 +29,17 @@ const FONT_NAMES := ["Arial Rounded MT Bold", "Avenir Next", "Helvetica Neue", "
 
 var sim
 var course
-var _scenes := {}                # kind -> PackedScene
-var _nodes := {}                 # item id -> {root, body, anim (AnimationPlayer or null), clip, roll}
+var _nodes := {}                 # item id -> {root, body, animal (toy_animal.gd or null), yaw, roll, ...}
 var _signs := {}                 # group id -> Label3D
 var _pops: Array = []            # [Label3D, age, runId]
 var _cheese_mat: StandardMaterial3D
 var _rind_mat: StandardMaterial3D
 var _hay_mat: StandardMaterial3D
 var _font: SystemFont
+var _rng := RandomNumberGenerator.new()
+var _karts := PackedVector3Array()   # where the racing karts are this frame
+var _wool: Array[CPUParticles3D] = []
+var _wool_next := 0
 
 
 func setup(p_sim) -> String:
@@ -50,25 +47,9 @@ func setup(p_sim) -> String:
 	course = sim.course
 	if sim.obstacles == null:
 		return "the sim has no surprises to draw"
-	for kind in MODELS:
-		var ps := load(MODELS[kind]) as PackedScene
-		if ps == null:
-			return "%s is missing" % MODELS[kind]
-		_scenes[kind] = ps
-		# Every clip the views play loops (walking, grazing, galloping).
-		var probe := ps.instantiate()
-		var ap := probe.find_child("AnimationPlayer", true, false) as AnimationPlayer
-		if ap == null:
-			probe.free()
-			return "%s has no AnimationPlayer" % MODELS[kind]
-		for state in ANIM[kind]:
-			var clip := _clip(ap, ANIM[kind][state])
-			if clip == "":
-				probe.free()
-				return "%s has no \"%s\" animation" % [MODELS[kind], ANIM[kind][state]]
-			if state != "hit":
-				ap.get_animation(clip).loop_mode = Animation.LOOP_LINEAR
-		probe.free()
+	_rng.randomize()
+	for i in WOOL_PUFFS:
+		_wool.append(_wool_burst())
 	_cheese_mat = StandardMaterial3D.new()
 	_cheese_mat.albedo_color = Color(0.98, 0.8, 0.32)
 	_cheese_mat.roughness = 0.55
@@ -97,15 +78,51 @@ func setup(p_sim) -> String:
 	return ""
 
 
-static func _clip(ap: AnimationPlayer, want: String) -> String:
-	for n in ap.get_animation_list():
-		if n == want or String(n).ends_with("|" + want):
-			return n
-	return ""
+## A burst of cream wool puffs for a sheep that is hit (one shot, reused).
+func _wool_burst() -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	p.emitting = false
+	p.one_shot = true
+	p.explosiveness = 0.95
+	p.amount = 22
+	p.lifetime = 0.8
+	p.local_coords = false
+	var m := KitMesh.sphere(0.075)
+	p.mesh = m
+	p.material_override = KitMaterial.toon()
+	p.set_instance_shader_parameter("albedo", ToyAnimal.WOOL[0])
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 0.35
+	p.direction = Vector3.UP
+	p.spread = 80.0
+	p.initial_velocity_min = 1.6
+	p.initial_velocity_max = 3.4
+	p.gravity = Vector3(0, -4.0, 0)
+	p.damping_min = 1.5
+	p.damping_max = 2.5
+	p.scale_amount_min = 0.7
+	p.scale_amount_max = 1.4
+	var c := Curve.new()
+	c.add_point(Vector2(0.0, 1.0))
+	c.add_point(Vector2(0.6, 0.8))
+	c.add_point(Vector2(1.0, 0.0))
+	p.scale_amount_curve = c
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(p)
+	return p
 
 
-## A kart hit an item (sim.obstacle): its word pops up over the kart.
+## A kart hit an item (sim.obstacle): its word pops up over the kart, the animal it hit spins or
+## tumbles (a sheep in a puff of wool).
 func on_hit(pl: Dictionary) -> void:
+	var n: Dictionary = _nodes.get(int(pl.get("item", -1)), {})
+	if not n.is_empty() and n["animal"] != null:
+		n["animal"].knock()
+		if n["kind"] == "sheep":
+			var w := _wool[_wool_next]
+			_wool_next = (_wool_next + 1) % _wool.size()
+			w.global_position = (n["root"] as Node3D).position + Vector3.UP * 0.6
+			w.restart()
 	var l := Label3D.new()
 	l.font = _font
 	l.text = I18n.t("obstacle.pop." + String(pl["kind"]))
@@ -127,6 +144,9 @@ func _process(delta: float) -> void:
 		return
 	var seen := {}
 	var group_pos := {}             # group id -> [sum of positions, count]
+	_karts.resize(sim.racers.size())
+	for i in sim.racers.size():
+		_karts[i] = sim.racers[i].world_pos()
 	for it: Dictionary in sim.obstacles.items:
 		var id := int(it["id"])
 		seen[id] = true
@@ -155,15 +175,12 @@ func _make(it: Dictionary) -> Dictionary:
 	var body := Node3D.new()
 	root.add_child(body)
 	var kind: String = it["kind"]
-	var anim: AnimationPlayer = null
-	if _scenes.has(kind):
-		var inst: Node3D = (_scenes[kind] as PackedScene).instantiate()
-		inst.scale = Vector3.ONE * float(SCALE[kind])
-		inst.rotation.y = PI  # the Quaternius animals face -z: turn them to walk head first
-		body.add_child(inst)
-		anim = inst.find_child("AnimationPlayer", true, false) as AnimationPlayer
-		if anim != null:
-			anim.seek(randf() * 1.5)
+	var animal: Node3D = null
+	if kind == "cow" or kind == "sheep":
+		animal = ToyAnimal.new()
+		animal.setup(kind, _rng)
+		animal.rotation.y = PI  # the toys face -z: turn them to walk head first
+		body.add_child(animal)
 	elif kind == "cheese":
 		var mi := MeshInstance3D.new()
 		var cyl := CylinderMesh.new()
@@ -198,7 +215,8 @@ func _make(it: Dictionary) -> Dictionary:
 		mi.rotation.z = PI * 0.5
 		body.add_child(mi)
 		body.position.y = HAY_R
-	return {"root": root, "body": body, "anim": anim, "clip": "", "roll": 0.0, "hop": 0.0, "kind": kind}
+	return {"root": root, "body": body, "animal": animal, "roll": 0.0, "hop": 0.0, "kind": kind,
+		"yaw": INF, "was_hit": false, "armed": true}
 
 
 func _place(it: Dictionary, n: Dictionary, delta: float) -> void:
@@ -211,20 +229,24 @@ func _place(it: Dictionary, n: Dictionary, delta: float) -> void:
 	root.visible = float(it["wait"]) <= 0.0
 	var p: Vector3 = r.world_at(s, float(it["d"]))
 	p.y = course.surface_y(seg, s)
-	# Facing: along the road turned by rel (towards +d at rel = PI/2).
+	# Facing: along the road turned by rel (towards +d at rel = PI/2). The sim turns an animal at
+	# once; here it turns round smoothly.
 	var rel := float(it["rel"])
 	var dir: Vector3 = r.tangent_at(s) * cos(rel) + r.normal_at(s) * sin(rel)
-	root.rotation = Vector3(0.0, atan2(dir.x, dir.z), 0.0)
+	var yaw := atan2(dir.x, dir.z)
+	var yaw_rate := 0.0
+	if n["animal"] != null and n["yaw"] != INF and root.visible:
+		var diff := wrapf(yaw - float(n["yaw"]), -PI, PI)
+		var max_turn: float = TURN_RATE[kind] * delta
+		var turn := clampf(diff * (1.0 - exp(-delta * 7.0)), -max_turn, max_turn)
+		yaw = float(n["yaw"]) + turn
+		yaw_rate = turn / maxf(delta, 1e-4)
+	n["yaw"] = yaw
+	root.rotation = Vector3(0.0, yaw, 0.0)
 	var state: String = it["state"]
-	var moving := absf(float(it["vd"])) > 0.05
 	match kind:
 		"cow", "sheep":
-			var want := "stay"
-			if state == "scared":
-				want = "flee"
-			elif moving:
-				want = "walk"
-			_play(n, kind, want)
+			_animal(it, n, p, delta, yaw_rate)
 		"cheese":
 			# Rolls on its rim; knocked away by a kart it tumbles off in a hop.
 			n["roll"] = float(n["roll"]) + absf(float(it["vd"])) * delta / CHEESE_R
@@ -247,16 +269,31 @@ func _place(it: Dictionary, n: Dictionary, delta: float) -> void:
 	root.position = p
 
 
-func _play(n: Dictionary, kind: String, state: String) -> void:
-	var ap: AnimationPlayer = n["anim"]
-	if ap == null:
-		return
-	var clip := _clip(ap, ANIM[kind][state])
-	if n["clip"] == clip:
-		return
-	n["clip"] = clip
-	ap.play(clip, 0.25)
-	ap.speed_scale = float(WALK_ANIM_SPEED[kind]) if state == "walk" else 1.0
+## Moves a cow or sheep: its gait from its pace, and an eye on the nearest kart. A kart that shaves
+## past makes it hop; one that scares the whole flock (a sheep's flock-mate was hit) too.
+func _animal(it: Dictionary, n: Dictionary, p: Vector3, delta: float, yaw_rate: float) -> void:
+	var animal: Node3D = n["animal"]
+	var kind: String = n["kind"]
+	var look = null
+	var near := INF
+	for k in _karts:
+		var dist := k.distance_to(p)
+		if dist < near:
+			near = dist
+			look = k
+	if near > float(LOOK_M[kind]):
+		look = null
+	var near_m: float = ToyAnimal.SPEC[kind]["near_m"]
+	if it["hit"] and not n["was_hit"]:
+		n["was_hit"] = true
+		animal.startle()      # the one a kart hit is knocked over by on_hit instead
+	elif not it["hit"]:
+		if near < near_m and n["armed"]:
+			n["armed"] = false
+			animal.startle()
+		elif near > near_m + 3.0:
+			n["armed"] = true
+	animal.animate(delta, absf(float(it["vd"])), String(it["state"]), yaw_rate, look, near)
 
 
 ## A bouncing "!" over each group still in the way.
