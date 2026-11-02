@@ -39,6 +39,7 @@ var _font: SystemFont
 var _rng := RandomNumberGenerator.new()
 var _karts := PackedVector3Array()   # where the racing karts are this frame
 var _wool: Array[CPUParticles3D] = []
+var _wool_left: Array[float] = []    # seconds each burst still flies (hidden, not updated, at 0)
 var _wool_next := 0
 
 
@@ -50,6 +51,7 @@ func setup(p_sim) -> String:
 	_rng.randomize()
 	for i in WOOL_PUFFS:
 		_wool.append(_wool_burst())
+		_wool_left.append(0.0)
 	_cheese_mat = StandardMaterial3D.new()
 	_cheese_mat.albedo_color = Color(0.98, 0.8, 0.32)
 	_cheese_mat.roughness = 0.55
@@ -87,8 +89,7 @@ func _wool_burst() -> CPUParticles3D:
 	p.amount = 22
 	p.lifetime = 0.8
 	p.local_coords = false
-	var m := KitMesh.sphere(0.075)
-	p.mesh = m
+	p.mesh = KitMesh.blob({"ax": 0.075, "ay": 0.075, "az": 0.075}, 6, 8)
 	p.material_override = KitMaterial.toon()
 	p.set_instance_shader_parameter("albedo", ToyAnimal.WOOL[0])
 	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
@@ -108,6 +109,7 @@ func _wool_burst() -> CPUParticles3D:
 	c.add_point(Vector2(1.0, 0.0))
 	p.scale_amount_curve = c
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.visible = false
 	add_child(p)
 	return p
 
@@ -120,7 +122,9 @@ func on_hit(pl: Dictionary) -> void:
 		n["animal"].knock()
 		if n["kind"] == "sheep":
 			var w := _wool[_wool_next]
+			_wool_left[_wool_next] = w.lifetime + 0.1
 			_wool_next = (_wool_next + 1) % _wool.size()
+			w.visible = true
 			w.global_position = (n["root"] as Node3D).position + Vector3.UP * 0.6
 			w.restart()
 	var l := Label3D.new()
@@ -167,6 +171,11 @@ func _process(delta: float) -> void:
 			_nodes.erase(id)
 	_update_signs(group_pos)
 	_update_pops(delta)
+	for i in _wool.size():
+		if _wool_left[i] > 0.0:
+			_wool_left[i] -= delta
+			if _wool_left[i] <= 0.0:
+				_wool[i].visible = false
 
 
 func _make(it: Dictionary) -> Dictionary:

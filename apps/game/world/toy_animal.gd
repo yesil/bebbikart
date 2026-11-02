@@ -13,7 +13,9 @@ extends Node3D
 ##
 ## Each part that moves is ONE mesh: its pieces are merged with per-vertex colours (the toon shader
 ## multiplies them in, their alpha says where the patches may show) and cached for every animal, so
-## a cow is 14 draw calls, a sheep 8, and making one only makes nodes.
+## a cow is 14 meshes (about 9k triangles), a sheep 9 (11k; its woolly body casts the shadow of a
+## plain ellipsoid), Godot draws the same mesh of several animals together, and making one only
+## makes nodes.
 
 const P = preload("res://racer_kit/kit_parts.gd")
 
@@ -188,7 +190,12 @@ func _build_cow(rng: RandomNumberGenerator) -> void:
 
 
 func _build_sheep() -> void:
-	_hips.add_child(_mi(_sheep_body(), Color.WHITE, Vector3.ZERO, true))
+	# The woolly body's shadow comes from a plain ellipsoid of its size (the puffs are many triangles
+	# for every shadow pass, and nobody sees a shadow's bumps).
+	_hips.add_child(_mi(_sheep_body(), Color.WHITE, Vector3.ZERO, false))
+	var shadow := _mi(_lo({"ax": 0.34, "ay": 0.33, "az": 0.6}), Color.WHITE, Vector3(0, 0.0, 0.05), true)
+	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	_hips.add_child(shadow)
 	_neck.add_child(_mi(_sheep_head(), Color.WHITE, Vector3.ZERO, true))
 	for side: float in [-1.0, 1.0]:
 		var eye := P.node("Eye", SHEEP_FACE_AT + P.surface(SHEEP_FACE, 0.5 * side, 0.22))
@@ -319,7 +326,7 @@ func _move_head(delta: float, state: String, look: Variant, near_m: float, walk_
 			pitch = 0.02
 			yaw = sin(_t * 0.5) * 0.35
 		else:
-			pitch = -0.95 + sin(_t * 3.0) * 0.04
+			pitch = -1.1 + sin(_t * 3.0) * 0.04
 			yaw = sin(_t * 0.8) * 0.15
 	var k := 1.0 - exp(-delta * (7.0 if look != null else 3.5))
 	_head_yaw = lerpf(_head_yaw, yaw, k)
@@ -468,8 +475,18 @@ static func _merge(pieces: Array) -> ArrayMesh:
 	return m
 
 
-static func _ball(r: float, lat := 10, lon := 16) -> Mesh:
+static func _ball(r: float, lat := 8, lon := 12) -> Mesh:
 	return KitMesh.blob({"ax": r, "ay": r, "az": r}, lat, lon)
+
+
+## A small blob, coarser than the kit's default (it is small on screen).
+static func _lo(p: Dictionary) -> Mesh:
+	return KitMesh.blob(p, 8, 12)
+
+
+## A rounded rod from a to b (a coarse capsule).
+static func _rod(a: Vector3, b: Vector3, r: float, sides := 8) -> Mesh:
+	return KitMesh.tube(PackedVector3Array([a, b]), r, sides)
 
 
 ## A toy eye (white, pupil, shine; the cow's with three lashes on the outer side), +Z out.
@@ -477,15 +494,16 @@ static func _eye_mesh(r: float, side: float, lashes: bool) -> Mesh:
 	return KitMesh.cached("animal:eye:%.3f:%d:%s" % [r, int(side), lashes], func() -> Mesh:
 		var pr := r * 0.6
 		var pcs := [
-			_pc(KitMesh.sphere(r), Vector3.ZERO, P.WHITE, false, Vector3.ZERO, Vector3(1, 1.15, 0.5)),
-			_pc(KitMesh.sphere(pr), Vector3(0, -r * 0.08, r * 0.3), EYE_DARK, false, Vector3.ZERO, Vector3(1, 1.1, 0.5)),
-			_pc(KitMesh.sphere(pr * 0.34), Vector3(pr * 0.35, pr * 0.42 - r * 0.08, r * 0.3 + pr * 0.42), P.WHITE),
+			_pc(_ball(r, 10, 14), Vector3.ZERO, P.WHITE, false, Vector3.ZERO, Vector3(1, 1.15, 0.5)),
+			_pc(_ball(pr), Vector3(0, -r * 0.08, r * 0.3), EYE_DARK, false, Vector3.ZERO, Vector3(1, 1.1, 0.5)),
+			_pc(_ball(pr * 0.34, 5, 8), Vector3(pr * 0.35, pr * 0.42 - r * 0.08, r * 0.3 + pr * 0.42), P.WHITE),
 		]
 		if lashes:
 			for i in 3:
 				var ang := (0.45 + 0.33 * i) * side
-				pcs.append(_pc(KitMesh.capsule(r * 0.1, r * 0.6), Vector3(sin(ang) * r * 1.05, cos(ang) * r * 1.2, 0.0),
-					P.DARK, false, Vector3(0, 0, -ang)))
+				var dir := Vector3(sin(ang), cos(ang), 0.0)
+				var root := Vector3(dir.x * r * 0.95, dir.y * r * 1.1, 0.0)
+				pcs.append(_pc(_rod(root, root + dir * r * 0.45, r * 0.1, 5), Vector3.ZERO, P.DARK))
 		return _merge(pcs))
 
 
@@ -507,7 +525,7 @@ static func _cow_torso() -> Mesh:
 		var pcs := [_pc(KitMesh.blob({"ax": 0.43, "ay": 0.37, "az": 0.72, "n": 2.3, "flat_bottom": 0.1}, 16, 26),
 			Vector3.ZERO, COW_WHITE, true)]
 		# A pink udder with four teats under the back.
-		pcs.append(_pc(KitMesh.blob({"ax": 0.12, "ay": 0.08, "az": 0.13}), Vector3(0, -0.31, 0.32), MUZZLE))
+		pcs.append(_pc(_lo({"ax": 0.12, "ay": 0.08, "az": 0.13}), Vector3(0, -0.31, 0.32), MUZZLE))
 		for x: float in [-0.05, 0.05]:
 			for z: float in [0.27, 0.37]:
 				pcs.append(_pc(_ball(0.026, 6, 8), Vector3(x, -0.39, z), MUZZLE, false, Vector3.ZERO, Vector3(1, 1.7, 1)))
@@ -519,12 +537,12 @@ static func _cow_head() -> Mesh:
 	return KitMesh.cached("animal:cow_head", func() -> Mesh:
 		var h := COW_HEAD_AT
 		var pcs := [
-			_pc(KitMesh.blob({"ax": 0.25, "ay": 0.27, "az": 0.3}), Vector3(0, -0.06, 0.06), COW_WHITE, true),
-			_pc(KitMesh.blob(COW_HEAD, 16, 24), h, COW_WHITE, true),
-			_pc(KitMesh.blob({"ax": 0.28, "ay": 0.17, "az": 0.2, "n": 2.4}, 12, 20), Vector3(0, 0.0, -0.52), MUZZLE),
+			_pc(KitMesh.blob({"ax": 0.25, "ay": 0.27, "az": 0.3}, 10, 16), Vector3(0, -0.06, 0.06), COW_WHITE, true),
+			_pc(KitMesh.blob(COW_HEAD, 14, 22), h, COW_WHITE, true),
+			_pc(KitMesh.blob({"ax": 0.28, "ay": 0.17, "az": 0.2, "n": 2.4}, 10, 18), Vector3(0, 0.0, -0.52), MUZZLE),
 		]
 		for x: float in [-0.1, 0.1]:
-			pcs.append(_pc(_ball(0.042, 8, 12), Vector3(x, 0.04, -0.703), NOSTRIL, false, Vector3(-0.15, 0, 0), Vector3(1, 1.35, 0.45)))
+			pcs.append(_pc(_ball(0.042, 6, 10), Vector3(x, 0.04, -0.703), NOSTRIL, false, Vector3(-0.15, 0, 0), Vector3(1, 1.35, 0.45)))
 		pcs.append(_pc(KitMesh.tube(PackedVector3Array([Vector3(-0.09, -0.07, -0.703), Vector3(0, -0.1, -0.705),
 			Vector3(0.09, -0.07, -0.703)]), 0.013, 6), Vector3.ZERO, NOSTRIL))
 		for side: float in [-1.0, 1.0]:
@@ -533,35 +551,35 @@ static func _cow_head() -> Mesh:
 				horn.append(Vector3(p.x * side, p.y, p.z))
 			pcs.append(_pc(P._taper_tube(horn, 0.065), Vector3.ZERO, HORN))
 		for p: Vector3 in [Vector3(0, 0.46, -0.24), Vector3(-0.065, 0.44, -0.19), Vector3(0.065, 0.44, -0.19), Vector3(0, 0.45, -0.15)]:
-			pcs.append(_pc(_ball(0.065, 8, 12), p, TUFT))
+			pcs.append(_pc(_ball(0.065, 6, 10), p, TUFT))
 		var band := Basis(Vector3.RIGHT, COLLAR_TILT) * Basis.from_scale(Vector3(1, 1, 1.2))
-		pcs.append([KitMesh.cylinder(0.27, 0.285, 0.13, 24), Transform3D(band, COLLAR_AT), STRAP, false])
-		for i in 14:
-			var a := TAU * i / 14.0
+		pcs.append([KitMesh.cylinder(0.27, 0.285, 0.13, 20), Transform3D(band, COLLAR_AT), STRAP, false])
+		for i in 12:
+			var a := TAU * i / 12.0
 			for y: float in [-0.042, 0.042]:
 				var q := COLLAR_AT + band * Vector3(cos(a) * 0.282, y, sin(a) * 0.282)
-				pcs.append(_pc(_ball(0.012, 4, 6), q, P.WHITE))
+				pcs.append(_pc(_ball(0.013, 3, 5), q, P.WHITE))
 		return _merge(pcs))
 
 
 static func _cow_jaw() -> Mesh:
 	return KitMesh.cached("animal:cow_jaw", func() -> Mesh:
-		return _merge([_pc(KitMesh.blob({"ax": 0.2, "ay": 0.075, "az": 0.15}), Vector3(0, -0.02, -0.1), MUZZLE)]))
+		return _merge([_pc(_lo({"ax": 0.2, "ay": 0.075, "az": 0.15}), Vector3(0, -0.02, -0.1), MUZZLE)]))
 
 
 static func _cow_ear(side: float) -> Mesh:
 	return KitMesh.cached("animal:cow_ear:%d" % int(side), func() -> Mesh:
 		return _merge([
-			_pc(KitMesh.blob({"ax": 0.13, "ay": 0.08, "az": 0.04}), Vector3(0.11 * side, 0, 0), COW_WHITE, true),
-			_pc(KitMesh.blob({"ax": 0.085, "ay": 0.05, "az": 0.02}), Vector3(0.115 * side, -0.005, -0.03), MUZZLE),
+			_pc(_lo({"ax": 0.13, "ay": 0.08, "az": 0.04}), Vector3(0.11 * side, 0, 0), COW_WHITE, true),
+			_pc(_lo({"ax": 0.085, "ay": 0.05, "az": 0.02}), Vector3(0.115 * side, -0.005, -0.03), MUZZLE),
 		]))
 
 
 static func _cow_leg() -> Mesh:
 	return KitMesh.cached("animal:cow_leg", func() -> Mesh:
 		return _merge([
-			_pc(KitMesh.capsule(0.12, 0.66), Vector3(0, -0.3, 0), COW_WHITE),
-			_pc(KitMesh.cylinder(0.118, 0.132, 0.13, 16), Vector3(0, -0.635, 0), HOOF),
+			_pc(_rod(Vector3(0, 0.0, 0), Vector3(0, -0.56, 0), 0.12, 12), Vector3.ZERO, COW_WHITE),
+			_pc(KitMesh.cylinder(0.118, 0.132, 0.13, 12), Vector3(0, -0.635, 0), HOOF),
 		]))
 
 
@@ -570,22 +588,26 @@ static func _cow_tail(part: int) -> Mesh:
 	return KitMesh.cached("animal:cow_tail:%d" % part, func() -> Mesh:
 		if part == 0:
 			return _merge([_pc(KitMesh.tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.06, 0.07),
-				Vector3(0, -0.2, 0.11), Vector3(0, -0.34, 0.12)]), 0.032, 8), Vector3.ZERO, COW_WHITE, true)])
+				Vector3(0, -0.2, 0.11), Vector3(0, -0.34, 0.12)]), 0.032, 6), Vector3.ZERO, COW_WHITE, true)])
 		return _merge([
-			_pc(KitMesh.tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.12, 0.01), Vector3(0, -0.2, 0.0)]), 0.028, 8), Vector3.ZERO, COW_WHITE),
-			_pc(KitMesh.blob({"ax": 0.065, "ay": 0.115, "az": 0.065}), Vector3(0, -0.28, 0), HOOF),
+			_pc(KitMesh.tube(PackedVector3Array([Vector3.ZERO, Vector3(0, -0.12, 0.01), Vector3(0, -0.2, 0.0)]), 0.028, 6), Vector3.ZERO, COW_WHITE),
+			_pc(_lo({"ax": 0.065, "ay": 0.115, "az": 0.065}), Vector3(0, -0.28, 0), HOOF),
 		]))
 
 
 ## A big brass cow bell hanging from its pivot: loop, crown, flared body, rim and clapper.
 static func _cow_bell() -> Mesh:
 	return KitMesh.cached("animal:cow_bell", func() -> Mesh:
+		var loop := PackedVector3Array()
+		for i in 11:
+			var a := TAU * i / 10.0
+			loop.append(Vector3(0, -0.035 + cos(a) * 0.03, sin(a) * 0.03))
 		return _merge([
-			_pc(KitMesh.torus(0.02, 0.045), Vector3(0, -0.02, 0), HOOF, false, Vector3(0, 0, PI * 0.5)),
-			_pc(KitMesh.sphere(0.08, true), Vector3(0, -0.075, 0), BRASS),
-			_pc(KitMesh.cylinder(0.08, 0.135, 0.2, 20), Vector3(0, -0.175, 0), BRASS),
-			_pc(KitMesh.torus(0.12, 0.15), Vector3(0, -0.275, 0), BRASS.darkened(0.12)),
-			_pc(_ball(0.045, 8, 12), Vector3(0, -0.29, 0), HOOF),
+			_pc(KitMesh.tube(loop, 0.011, 5), Vector3.ZERO, HOOF),
+			_pc(_lo({"ax": 0.08, "ay": 0.08, "az": 0.08, "flat_bottom": 0.96}), Vector3(0, -0.075, 0), BRASS),
+			_pc(KitMesh.cylinder(0.08, 0.135, 0.2, 16), Vector3(0, -0.175, 0), BRASS),
+			_pc(KitMesh.cylinder(0.148, 0.152, 0.035, 16), Vector3(0, -0.275, 0), BRASS.darkened(0.12)),
+			_pc(_ball(0.045, 6, 8), Vector3(0, -0.29, 0), HOOF),
 		]))
 
 
@@ -593,10 +615,10 @@ static func _cow_bell() -> Mesh:
 static func _sheep_body() -> Mesh:
 	return KitMesh.cached("animal:sheep_body", func() -> Mesh:
 		var core := {"ax": 0.2, "ay": 0.2, "az": 0.46}
-		var pcs := [_pc(KitMesh.blob({"ax": 0.21, "ay": 0.21, "az": 0.47}, 10, 16), Vector3.ZERO, WOOL[0])]
+		var pcs := [_pc(KitMesh.blob({"ax": 0.21, "ay": 0.21, "az": 0.47}, 8, 12), Vector3.ZERO, WOOL[0])]
 		var rng := RandomNumberGenerator.new()
 		rng.seed = 1291
-		var n := 46
+		var n := 42
 		for i in n:
 			# Spread evenly over the core (a Fibonacci sphere).
 			var y := 1.0 - 2.0 * (i + 0.5) / n
@@ -606,8 +628,8 @@ static func _sheep_body() -> Mesh:
 			if d.y < -0.6:
 				continue
 			var r := rng.randf_range(0.12, 0.155)
-			pcs.append(_pc(_ball(r, 8, 12), KitMesh.blob_point(core, d), WOOL[i % WOOL.size()]))
-		pcs.append(_pc(_ball(0.1, 8, 12), Vector3(0, 0.08, 0.6), WOOL[2]))
+			pcs.append(_pc(_ball(r, 7, 10), KitMesh.blob_point(core, d), WOOL[i % WOOL.size()]))
+		pcs.append(_pc(_ball(0.1, 7, 10), Vector3(0, 0.08, 0.6), WOOL[2]))
 		return _merge(pcs))
 
 
@@ -616,22 +638,22 @@ static func _sheep_head() -> Mesh:
 	return KitMesh.cached("animal:sheep_head", func() -> Mesh:
 		var h := SHEEP_FACE_AT
 		var pcs := [
-			_pc(KitMesh.blob(SHEEP_FACE, 14, 20), h, FACE),
-			_pc(KitMesh.blob({"ax": 0.125, "ay": 0.1, "az": 0.09}), h + Vector3(0, -0.1, -0.13), SNOUT),
+			_pc(KitMesh.blob(SHEEP_FACE, 12, 18), h, FACE),
+			_pc(_lo({"ax": 0.125, "ay": 0.1, "az": 0.09}), h + Vector3(0, -0.1, -0.13), SNOUT),
 			_pc(KitMesh.tube(PackedVector3Array([Vector3(-0.05, -0.13, -0.215), Vector3(0, -0.147, -0.222),
 				Vector3(0.05, -0.13, -0.215)]), 0.009, 5), h, Color("#8a7f86")),
 		]
 		var fringe := [Vector3(0, 0.19, 0.01), Vector3(-0.09, 0.16, 0.04), Vector3(0.09, 0.16, 0.04),
 				Vector3(0, 0.14, 0.11), Vector3(-0.055, 0.2, -0.06), Vector3(0.055, 0.2, -0.06)]
 		for i in fringe.size():
-			pcs.append(_pc(_ball(0.09, 8, 12), h + (fringe[i] as Vector3), WOOL[i % WOOL.size()]))
+			pcs.append(_pc(_ball(0.09, 7, 10), h + (fringe[i] as Vector3), WOOL[i % WOOL.size()]))
 		for side: float in [-1.0, 1.0]:
-			pcs.append(_pc(KitMesh.blob({"ax": 0.11, "ay": 0.045, "az": 0.055}), h + Vector3(0.24 * side, -0.01, 0.04), FACE,
+			pcs.append(_pc(_lo({"ax": 0.11, "ay": 0.045, "az": 0.055}), h + Vector3(0.24 * side, -0.01, 0.04), FACE,
 				false, Vector3(0, 0, -0.3 * side)))
 			# A horn curling back, down and forward round the ear.
 			var horn := PackedVector3Array()
-			for i in 14:
-				var t := i / 13.0
+			for i in 10:
+				var t := i / 9.0
 				var a := t * PI * 1.7
 				var rr := 0.1 * (1.0 - 0.4 * t)
 				horn.append(h + Vector3(side * (0.13 + 0.1 * t), 0.08 + cos(a) * rr, 0.05 + sin(a) * rr))
@@ -643,9 +665,9 @@ static func _sheep_head() -> Mesh:
 static func _sheep_leg() -> Mesh:
 	return KitMesh.cached("animal:sheep_leg", func() -> Mesh:
 		return _merge([
-			_pc(_ball(0.1, 8, 12), Vector3(0, 0.02, 0), WOOL[1]),
-			_pc(KitMesh.capsule(0.05, 0.24), Vector3(0, -0.12, 0), SHIN),
-			_pc(_ball(0.045, 8, 12), Vector3(0, -0.15, -0.028), FACE, false, Vector3.ZERO, Vector3(1, 1.2, 0.6)),
-			_pc(KitMesh.capsule(0.052, 0.16), Vector3(0, -0.27, 0), FACE),
-			_pc(KitMesh.cylinder(0.056, 0.064, 0.07, 12), Vector3(0, -0.325, 0), FACE),
+			_pc(_ball(0.1, 7, 10), Vector3(0, 0.02, 0), WOOL[1]),
+			_pc(_rod(Vector3(0, -0.02, 0), Vector3(0, -0.2, 0), 0.05), Vector3.ZERO, SHIN),
+			_pc(_ball(0.045, 6, 8), Vector3(0, -0.15, -0.028), FACE, false, Vector3.ZERO, Vector3(1, 1.2, 0.6)),
+			_pc(_rod(Vector3(0, -0.21, 0), Vector3(0, -0.3, 0), 0.052), Vector3.ZERO, FACE),
+			_pc(KitMesh.cylinder(0.056, 0.064, 0.07, 10), Vector3(0, -0.325, 0), FACE),
 		]))
