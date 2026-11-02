@@ -47,8 +47,9 @@ To bring the racers and leaderboard from another Mac, stop the server there and 
 the database stores the design jobs' uploads by absolute path.
 
 For development, `bun run dev` runs the server :8080, the phone site on Vite :5173 and the game on
-Godot's debug runtime. To try the whole thing with a phone on the same Wi-Fi, see
-[`docs/local-testing.md`](docs/local-testing.md).
+Godot's debug runtime. It imports the game first when Godot doesn't know all its classes yet, as
+right after cloning (under a minute), and so do `dev:game`, `game:mock` and `maps:*`. To try the
+whole thing with a phone on the same Wi-Fi, see [`docs/local-testing.md`](docs/local-testing.md).
 
 | Command | What it does |
 |---|---|
@@ -57,6 +58,7 @@ Godot's debug runtime. To try the whole thing with a phone on the same Wi-Fi, se
 | `bun run game:export` | Exports the game's release build to `apps/game/export/BebbiKart.app` (needs Godot's export templates) |
 | `bun run start` | Builds the phone site and serves everything from the server on :8080 |
 | `bun run dev:game` / `game:mock` | Godot game against the server / in mock mode |
+| `bun run game:import` | Imports the game in Godot when its class cache lacks a `class_name` (a fresh clone, or a pull that added one) |
 | `bun run fake-game` | Stand-in game for testing phones without Godot |
 | `bun run test` | Runs all Bun tests |
 | `bun run lint` / `bun run format` | Biome check / fix |
