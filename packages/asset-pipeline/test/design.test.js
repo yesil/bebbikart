@@ -47,10 +47,14 @@ describe("prompt", () => {
       "importance",
       "schwarze Räder",
       "LOYALTY",
+      "chassis",
+      "CHASSIS BUILDING",
+      "ride_center",
+      "KEEPS ITS SHAPE",
     ]) {
       expect(design).toContain(word);
     }
-    for (const word of ["patch", "remove", "LOYALTY"]) {
+    for (const word of ["patch", "remove", "LOYALTY", "chassis", "outline"]) {
       expect(reviewSystemPrompt()).toContain(word);
     }
   });
