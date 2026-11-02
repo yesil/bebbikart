@@ -10,8 +10,10 @@ extends SceneTree
 ##               from res://world/materials/).
 ##   water       Duck pond and brook surfaces.
 ##   structures  Ski-jump kicker and landing wedge, causeway piers and rails.
-##   buildings   Every building of the plan, assembled from the Kenney Fantasy Town Kit by
-##               world/village/village_kit.gd, plus the covered bridge.
+##   buildings   Every building of the plan and the covered bridge: a Houses node
+##               (world/village/village_houses.gd) keeping a few numbers per building, from
+##               which world/village/chalet_builder.gd builds their geometry at load; plus
+##               the Kenney props they keep (stalls, banners, the water wheel).
 ##   props       Fountain, lime tree, fences, flower boxes, lanterns, benches, signposts,
 ##               orchard, alpine trees, hay bales.
 ## Re-run after editing the course or the plan; tools/village_world_check.gd checks the result.
@@ -24,6 +26,7 @@ const Course = preload("res://sim/course.gd")
 const Route = preload("res://sim/route.gd")
 const MeshBatch = preload("res://world/mesh_batch.gd")
 const InstancedModel = preload("res://world/village/instanced_model.gd")
+const VillageHouses = preload("res://world/village/village_houses.gd")
 
 const SCENE_PATH := "res://world/village/village_world.tscn"
 const BAKED := &"baked"
@@ -783,9 +786,8 @@ func _square(parent: Node) -> void:
 ## scene keeps the model path and transforms; the MultiMesh is built at load).
 func _instanced(parent: Node, kit: VillageKit, placed: Dictionary) -> void:
 	var swiss := VillageKit.swiss_material()
-	var roof := VillageKit.swiss_material(true)
-	if swiss == null or roof == null:
-		_fail("could not make the Swiss kit materials")
+	if swiss == null:
+		_fail("could not make the Swiss kit material")
 		return
 	for module in placed:
 		if kit.mesh(module) == null:
@@ -803,7 +805,7 @@ func _instanced(parent: Node, kit: VillageKit, placed: Dictionary) -> void:
 			n.wander = paths
 			n.wander_points = VillageKit.WANDER_POINTS
 		if not module.begins_with("nature:") and not module.begins_with("res://"):
-			n.override = roof if module in VillageKit.ROOF_MODULES else swiss
+			n.override = swiss
 		_mark(n)
 		parent.add_child(n)
 	if not kit.errors.is_empty():
@@ -811,50 +813,53 @@ func _instanced(parent: Node, kit: VillageKit, placed: Dictionary) -> void:
 
 
 func _bake_buildings() -> void:
-	var kit := VillageKit.new()
 	var node := Node3D.new()
 	_replace("Buildings", node)
-	var placed := {}
-	var gables := PackedVector3Array()
+	var houses := VillageHouses.new()
+	houses.name = "Houses"
+	var kinds := PackedStringArray()
+	var data := PackedFloat32Array()
 	for b in plan.buildings:
 		var p: Vector2 = b["pos"]
-		# Sit on the lowest ground under the footprint so no corner floats; the plinth hides the rest.
-		var floor_y := INF
+		# Sit on the lowest ground under the footprint so no corner floats; the plinth reaches
+		# down into the ground and up past the highest ground under it.
+		var lo := INF
+		var hi := -INF
 		for q in VillagePlan.sample_points(VillagePlan.footprint(b)):
-			floor_y = minf(floor_y, shape.height_at(q.x, q.y))
-		var parts = kit.building(b["kind"], b["size"], absi(hash(p)) % 100000)
-		if parts == null:
-			_fail("village kit: %s" % "; ".join(kit.errors))
-			return
-		var xf := Transform3D(Basis(Vector3.UP, b["yaw"]), Vector3(p.x, floor_y - 0.15, p.y))
-		for m in parts["modules"]:
-			if not placed.has(m[0]):
-				placed[m[0]] = []
-			placed[m[0]].append(xf * (m[1] as Transform3D))
-		for v in parts["gables"]:
-			gables.append(xf * v)
+			var g := shape.height_at(q.x, q.y)
+			lo = minf(lo, g)
+			hi = maxf(hi, g)
+		kinds.append(b["kind"])
+		data.append_array([p.x, lo - 0.15, p.y, b["yaw"], b["size"].x, b["size"].y, absi(hash(p)) % 100000, hi - lo + 0.15])
+	houses.kinds = kinds
+	houses.houses = data
 	var seg: Dictionary = course.segments["pond_bridge"]
-	var bridge: Dictionary = kit.covered_bridge(seg["route"], plan.bridge_s, VillagePlan.BRIDGE_HALF_LENGTH, road_hw(seg, plan.bridge_s))
-	for m in bridge["modules"]:
+	var r: Route = seg["route"]
+	var half := VillagePlan.BRIDGE_HALF_LENGTH
+	var n := int(round(half * 2.0 / 2.0))
+	var cells := PackedFloat32Array()
+	for k in n:
+		var s: float = plan.bridge_s - half + (k + 0.5) * half * 2.0 / n
+		var c := r.pos_at(s)
+		cells.append_array([c.x, c.y, c.z, r.heading_at(s)])
+	houses.bridge = cells
+	houses.bridge_cell = half * 2.0 / n
+	houses.bridge_half_width = road_hw(seg, plan.bridge_s) + 1.0
+	_mark(houses)
+	# Build once here too: for the props the buildings keep, and to fail the bake on errors.
+	var built = VillageHouses.build(houses.kinds, houses.houses, houses.bridge, houses.bridge_cell, houses.bridge_half_width)
+	if not built.errors.is_empty():
+		_fail("buildings: %s" % "; ".join(built.errors))
+		return
+	node.add_child(houses)
+	var kit := VillageKit.new()
+	var placed := {}
+	for m in built.props:
 		if not placed.has(m[0]):
 			placed[m[0]] = []
 		placed[m[0]].append(m[1])
 	_instanced(node, kit, placed)
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for i in range(0, gables.size(), 3):
-		var nrm := (gables[i + 1] - gables[i]).cross(gables[i + 2] - gables[i]).normalized()
-		for k in 3:
-			st.set_normal(nrm)
-			st.set_uv(Vector2(gables[i + k].x + gables[i + k].z, gables[i + k].y) * 0.5)
-			st.add_vertex(gables[i + k])
-	var gmat := _std_material("gable_wood", "Planks037A", Color(0.62, 0.42, 0.26), 0.9, Vector3(0.5, 0.5, 0.5))
-	if gmat is BaseMaterial3D and (gmat as BaseMaterial3D).cull_mode != BaseMaterial3D.CULL_DISABLED:
-		(gmat as BaseMaterial3D).cull_mode = BaseMaterial3D.CULL_DISABLED
-		ResourceSaver.save(gmat, gmat.resource_path)
-	st.set_material(gmat)
-	_mesh_node(node, "Gables", st.commit())
-	print("bake: %d buildings, %d module types" % [plan.buildings.size(), placed.size()])
+	print("bake: %d buildings (%d vertices), %d prop types" % [plan.buildings.size(), built.vertex_count(), placed.size()])
 
 
 func _bake_props() -> void:

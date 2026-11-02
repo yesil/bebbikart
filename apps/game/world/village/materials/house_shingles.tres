@@ -1,0 +1,23 @@
+[gd_resource type="ShaderMaterial" load_steps=5 format=3]
+
+[ext_resource type="Shader" path="res://world/village/house.gdshader" id="1"]
+[ext_resource type="Texture2D" path="res://assets/textures/WoodSiding011/WoodSiding011_1K-JPG_Color.jpg" id="2"]
+[ext_resource type="Texture2D" path="res://assets/textures/WoodSiding011/WoodSiding011_1K-JPG_NormalGL.jpg" id="3"]
+[ext_resource type="Texture2D" path="res://assets/textures/WoodSiding011/WoodSiding011_1K-JPG_Displacement.jpg" id="4"]
+
+[resource]
+shader = ExtResource("1")
+shader_parameter/albedo_tex = ExtResource("2")
+shader_parameter/normal_tex = ExtResource("3")
+shader_parameter/ao_tex = ExtResource("4")
+shader_parameter/tile_m = Vector2(1.4, 1.4)
+shader_parameter/desaturate = 0.7
+shader_parameter/tone_mean = 0.095
+shader_parameter/contrast = 0.9
+shader_parameter/normal_depth = 1.2
+shader_parameter/roughness_range = Vector2(0.85, 0.85)
+shader_parameter/ao_strength = 0.7
+shader_parameter/grime = 0.0
+shader_parameter/streaks = 0.0
+shader_parameter/patchiness = 0.14
+shader_parameter/wet_gloss = 0.7

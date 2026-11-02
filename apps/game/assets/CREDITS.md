@@ -5,7 +5,7 @@ Every third-party asset in this folder is CC0 1.0 (public domain). Sizes were re
 | Path | Source | Author | Licence |
 |---|---|---|---|
 | `nature/quaternius/` (trees, pines, twisted trees, bushes, ferns, flowers, grass, clover, plants, rocks, pebbles, mushroom + their textures) | [Stylized Nature MegaKit (Standard)](https://quaternius.itch.io/stylized-nature-megakit) | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (see `nature/quaternius/LICENSE_Quaternius.txt`) |
-| `village/kenney_fantasy_town/` (walls, roofs, balconies, chimneys, fountain, fences, lanterns, benches, stalls, banners, water wheel, cart; GLB + colour map) | [Fantasy Town Kit 2.0](https://kenney.nl/assets/fantasy-town-kit) (mirror: [OpenGameArt](https://opengameart.org/content/fantasy-town-kit)) | Kenney | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (see `village/kenney_fantasy_town/License_Kenney.txt`) |
+| `village/kenney_fantasy_town/` (fountain, fences, lanterns, benches, stalls, banners, water wheel, cart; GLB + colour map) | [Fantasy Town Kit 2.0](https://kenney.nl/assets/fantasy-town-kit) (mirror: [OpenGameArt](https://opengameart.org/content/fantasy-town-kit)) | Kenney | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (see `village/kenney_fantasy_town/License_Kenney.txt`) |
 | `village/quaternius_cow/Cow.glb` | [Cow](https://poly.pizza/m/5XSc2Fka3F) | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (see `village/quaternius_cow/LICENSE.txt`) |
 | `village/swiss_flag/Flag_of_Switzerland.svg` | [Flag of Switzerland (Pantone)](https://commons.wikimedia.org/wiki/File:Flag_of_Switzerland_(Pantone).svg) | Wikimedia Commons | Public domain (see `village/swiss_flag/LICENSE.txt`) |
 | `village/poly_pizza/` (Swiss cow, sheep, cheese block and cut, chocolate bar and wrapper) | [Poly Pizza](https://poly.pizza) (links in `village/poly_pizza/LICENSE.txt`) | Quaternius, Kenney | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
@@ -19,9 +19,16 @@ Every third-party asset in this folder is CC0 1.0 (public domain). Sizes were re
 | `textures/Planks037A/` | [Planks037A](https://ambientcg.com/view?id=Planks037A) | ambientCG | CC0 1.0 |
 | `textures/Planks021/` | [Planks021](https://ambientcg.com/view?id=Planks021) | ambientCG | CC0 1.0 |
 | `textures/Bricks076C/` | [Bricks076C](https://ambientcg.com/view?id=Bricks076C) | ambientCG | CC0 1.0 |
+| `textures/Bricks075A/` (village plinths, chimneys, sills) | [Bricks075A](https://ambientcg.com/view?id=Bricks075A) | ambientCG | CC0 1.0 |
+| `textures/Plaster005/` (village lime plaster) | [Plaster005](https://ambientcg.com/view?id=Plaster005) | ambientCG | CC0 1.0 |
+| `textures/Wood062/` (village log walls and timber) | [Wood062](https://ambientcg.com/view?id=Wood062) | ambientCG | CC0 1.0 |
+| `textures/PaintedWood009C/` (village shutters and painted trim) | [PaintedWood009C](https://ambientcg.com/view?id=PaintedWood009C) | ambientCG | CC0 1.0 |
+| `textures/WoodSiding011/` (village wooden shingle roofs) | [WoodSiding011](https://ambientcg.com/view?id=WoodSiding011) | ambientCG | CC0 1.0 |
+| `textures/RoofingTiles003/` (village slate roofs) | [RoofingTiles003](https://ambientcg.com/view?id=RoofingTiles003) | ambientCG | CC0 1.0 |
+| `textures/RoofingTiles014A/` (village clay tile roofs) | [RoofingTiles014A](https://ambientcg.com/view?id=RoofingTiles014A) | ambientCG | CC0 1.0 |
 | `sky/kloofendal_48d_partly_cloudy_puresky_2k.hdr` | [Kloofendal 48d Partly Cloudy (Pure Sky)](https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) | Greg Zaal, Jarod Guest (Poly Haven) | CC0 1.0 |
 
-The village (`../world/village/`) recolours the Kenney colour map to a Swiss palette at bake time (`world/village/village_kit.gd`, saved as `world/village/materials/kenney_swiss_colormap.res`); the original files are unchanged. Its snow layer reuses the gravel textures, brightened.
+The village (`../world/village/`) recolours the Kenney colour map to a Swiss palette at bake time (`world/village/village_kit.gd`, saved as `world/village/materials/kenney_swiss_colormap.res`); the original files are unchanged. Its snow layer reuses the gravel textures, brightened. Its buildings are built in code (`world/village/chalet_builder.gd`) and textured with the village sets above, re-encoded smaller: colour maps 1K, normal maps 1K (512 for plaster, wood and paint), roughness, ambient occlusion and displacement 512 greyscale; the shingle and slate roofs use their displacement map as cavity shading.
 
 The terrain textures are channel-packed for Terrain3D by `tools/pack_textures.gd`: `*_albedo_height.webp` holds albedo in RGB and height in A, and `*_normal_rough.webp` holds the OpenGL normal in RGB and roughness in A.
 

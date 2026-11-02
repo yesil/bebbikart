@@ -152,7 +152,10 @@ A Swiss village loop, raced lap after lap: start in the square by the Gasthaus, 
 | `sim/village_course.gd` | The loop (solves two straights so it closes exactly) |
 | `world/village/village_plan.gd` | Pond, brook, square, church, mill, school and every house, anchored to the course |
 | `world/village/village_terrain.gd` | Terrain heights and layers: village slope, mountain ring with snow |
-| `world/village/village_kit.gd` | Buildings and props from the Kenney Fantasy Town Kit (Swiss palette) and Quaternius plants |
+| `world/village/chalet_builder.gd` | The buildings as real geometry: stone plinths, plaster and log storeys, recessed windows with shutters and geraniums, balconies, roofs with rafters and purlins, the church, arcades and covered bridge |
+| `world/village/village_houses.gd` | Builds them when the village loads from a few numbers per building (the `Buildings/Houses` node of the baked scene) |
+| `world/village/house.gdshader` | Building materials (`world/village/materials/house_*.tres`): ambientCG textures in metres, log courses, flame-striped shutters, grime, rain streaks, sun-faded timber |
+| `world/village/village_kit.gd` | Props from the Kenney Fantasy Town Kit (Swiss palette) and Quaternius plants |
 | `tools/village_map.gd` | `docs/village_map.svg` plus geometry checks (exit 1 on failure) |
 | `tools/village_laps.gd` | Headless lap test: routes x weather, random builds, a 20-racer crowd |
 | `tools/bake_village.gd` | Bakes `world/village/village_world.tscn` (stages terrain, roads, water, structures, buildings, props) |
@@ -172,7 +175,7 @@ godot --headless --path . --script res://tools/village_world_check.gd
 
 `world/village/village_decor.tscn` (optional) is loaded on top for hand-placed extras; the bake never touches it.
 
-Look: the Kenney kit's colour map is recoloured to a Swiss palette at every bake (`village_kit.gd` `_recolour`; the roof modules get a copy with wooden eaves). Trees and flowers are the countryside's prepared plant meshes (`world/vegetation/meshes/`, from `tools/bake_world.gd`), so they sway with the wind. The village roads use their own calmer asphalt (`world/village/materials/road_asphalt.tres`, `VILLAGE_ROAD` in the bake): the shared texture's stones and red flecks stood out in the village sun. Animals are skinned models posed on their rest pose for the MultiMesh (`instanced_model.gd`).
+Look: the buildings are built in code at load (`chalet_builder.gd`, about 0.7 s on an M4 Max), merged per material in 96 m chunks; small pieces (geraniums, glazing bars, log ends, cut-out boards, rafters) sit in a second mesh per chunk without shadows, hidden 130 m from its centre. The Kenney kit (props only now) has its colour map recoloured to a Swiss palette at every bake (`village_kit.gd` `_recolour`). Close street views of each building kind: `tools/village_shots.gd` `house_*` viewpoints. Trees and flowers are the countryside's prepared plant meshes (`world/vegetation/meshes/`, from `tools/bake_world.gd`), so they sway with the wind. The village roads use their own calmer asphalt (`world/village/materials/road_asphalt.tres`, `VILLAGE_ROAD` in the bake): the shared texture's stones and red flecks stood out in the village sun. Animals are skinned models posed on their rest pose for the MultiMesh (`instanced_model.gd`).
 
 ## Balance snapshot
 

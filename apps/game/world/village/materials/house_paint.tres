@@ -1,0 +1,23 @@
+[gd_resource type="ShaderMaterial" load_steps=5 format=3]
+
+[ext_resource type="Shader" path="res://world/village/house.gdshader" id="1"]
+[ext_resource type="Texture2D" path="res://assets/textures/PaintedWood009C/PaintedWood009C_1K-JPG_Color.jpg" id="2"]
+[ext_resource type="Texture2D" path="res://assets/textures/PaintedWood009C/PaintedWood009C_1K-JPG_NormalGL.jpg" id="3"]
+[ext_resource type="Texture2D" path="res://assets/textures/PaintedWood009C/PaintedWood009C_1K-JPG_Roughness.jpg" id="4"]
+
+[resource]
+shader = ExtResource("1")
+shader_parameter/albedo_tex = ExtResource("2")
+shader_parameter/normal_tex = ExtResource("3")
+shader_parameter/rough_tex = ExtResource("4")
+shader_parameter/tile_m = Vector2(1.6, 1.6)
+shader_parameter/desaturate = 1.0
+shader_parameter/tone_mean = 0.43
+shader_parameter/contrast = 0.5
+shader_parameter/normal_depth = 0.8
+shader_parameter/roughness_range = Vector2(0.45, 0.8)
+shader_parameter/grime = 0.2
+shader_parameter/grime_height = 0.6
+shader_parameter/streaks = 0.3
+shader_parameter/sun_fade = 0.12
+shader_parameter/patchiness = 0.05

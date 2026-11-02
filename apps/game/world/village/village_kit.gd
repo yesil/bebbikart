@@ -1,31 +1,21 @@
 extends RefCounted
-## Builds the village's buildings and props from the Kenney Fantasy Town Kit (CC0, see
-## res://assets/village/kenney_fantasy_town/License_Kenney.txt) and the Quaternius nature kit.
-## Each building is a list of kit modules with transforms; tools/bake_village.gd merges every
-## module type into one MultiMesh, so the whole village costs a few dozen draw calls.
-##
-## Kenney modules are 1 m cells: walls stand on the cell's +x edge, roofs cover the cell. A
-## building is laid out on a grid of cells (stretched to its footprint), front facing +z
-## (towards its road), origin at the footprint centre on the ground. All modules share one
-## material: the kit's colour map recoloured to a Swiss palette (dark shingle roofs, honey and
-## dark timber, white plaster, grey stone), rebuilt at every bake by swiss_material(); the roof
-## modules get a copy whose plaster is timber, for wooden eaves.
-##
-## Building kinds follow the village plan: chalet, inn, arcade, bakery, church, mill, barn, school.
+## The village's props from the Kenney Fantasy Town Kit (CC0, see
+## res://assets/village/kenney_fantasy_town/License_Kenney.txt) and the Quaternius nature kit:
+## fountain, benches, lanterns, fences, flower clumps, orchard and alpine trees, hay bales, flag
+## poles, signposts, the animals, and the stalls, banners and water wheel the buildings keep.
+## tools/bake_village.gd merges every module type into one MultiMesh, so they cost a few dozen
+## draw calls. The Kenney modules share one material: the kit's colour map recoloured to a Swiss
+## palette, rebuilt at every bake by swiss_material(). The buildings themselves are real
+## geometry from world/village/chalet_builder.gd.
 
 const KIT := "res://assets/village/kenney_fantasy_town/"
 const PLANT_MESHES := "res://world/vegetation/meshes/"
 const VMAT_DIR := "res://world/village/materials/"
 const SWISS_MAT := VMAT_DIR + "kenney_swiss.tres"
 const SWISS_TEX := VMAT_DIR + "kenney_swiss_colormap.res"
-const SWISS_ROOF_MAT := VMAT_DIR + "kenney_swiss_roof.tres"
-const SWISS_ROOF_TEX := VMAT_DIR + "kenney_swiss_roof_colormap.res"
-## Modules drawn with the roof material (swiss_material(true)).
-const ROOF_MODULES := ["roof", "roof-point"]
 
-const FLOOR_H := 2.6        # metres per storey
-const CELL := 2.25          # target cell width in metres
-const ROOF_RISE := 0.63     # Kenney "roof" rises this much per cell
+const FLOOR_H := 2.6        # metres per storey (the shop and factory names hang above it)
+const CELL := 2.25          # the old Kenney cell width: the shop stalls stand one half cell in
 
 ## Colour map recolouring: [x0, y0, x1, y1] pixel block of colormap.png -> target HSV.
 static func _recolour() -> Array:
@@ -41,11 +31,6 @@ static func _recolour() -> Array:
 	[448, 384, 512, 512, Color.from_hsv(0.1, 0.05, 0.74)],    # grey stone -> warm grey stone
 	[0, 384, 64, 512, Color.from_hsv(0.995, 0.75, 0.58)],     # candy red -> deep Swiss red (church roof, banners)
 	]
-
-
-## The roof copy: the eaves' undersides sample the plaster block, so there it is warm timber.
-static func _roof_recolour() -> Array:
-	return _recolour() + [[64, 256, 128, 384, Color.from_hsv(0.07, 0.55, 0.5)]]
 
 var errors: PackedStringArray = []
 var _meshes := {}           # module name -> Mesh
@@ -94,19 +79,19 @@ static func _first_mesh(n: Node) -> MeshInstance3D:
 	return null
 
 
-## The shared Swiss-palette material for every Kenney module, or (roof) the roof modules' copy.
-## The colour map is rebuilt from the recolour table at every bake; the material is created
-## once (its other settings stay editable) and pointed at the new map.
-static func swiss_material(roof := false) -> Material:
-	var mat_path := SWISS_ROOF_MAT if roof else SWISS_MAT
-	var tex_path := SWISS_ROOF_TEX if roof else SWISS_TEX
+## The shared Swiss-palette material for every Kenney module. The colour map is rebuilt from
+## the recolour table at every bake; the material is created once (its other settings stay
+## editable) and pointed at the new map.
+static func swiss_material() -> Material:
+	var mat_path := SWISS_MAT
+	var tex_path := SWISS_TEX
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(VMAT_DIR))
 	var src := Image.load_from_file(ProjectSettings.globalize_path(KIT + "Textures/colormap.png"))
 	if src == null or src.is_empty():
 		push_error("village_kit: cannot read the Kenney colour map")
 		return null
 	src.convert(Image.FORMAT_RGBA8)
-	for r in (_roof_recolour() if roof else _recolour()):
+	for r in _recolour():
 		var target: Color = r[4]
 		var mean := 0.0
 		var n := 0
@@ -138,353 +123,12 @@ static func swiss_material(roof := false) -> Material:
 	return m
 
 
-# ---------------------------------------------------------------- building grid helpers
-
-## One storey of walls round a box of nx x nz cells (sx, sz metres each) at height y.
-## `pick` chooses the module for each wall: pick.call(side, i, n) with side "front", "back",
-## "left", "right" and i the cell index along that side (n cells).
-static func _walls(out: Array, nx: int, nz: int, sx: float, sz: float, y: float, h: float, pick: Callable) -> void:
-	var w := nx * sx
-	var d := nz * sz
-	for i in nx:
-		var x := -w * 0.5 + (i + 0.5) * sx
-		# Front (+z): local +x -> +z.
-		out.append([pick.call("front", i, nx), Transform3D(Basis(Vector3.UP, -PI * 0.5).scaled_local(Vector3(sz, h, sx)), Vector3(x, y, d * 0.5 - sz * 0.5))])
-		out.append([pick.call("back", nx - 1 - i, nx), Transform3D(Basis(Vector3.UP, PI * 0.5).scaled_local(Vector3(sz, h, sx)), Vector3(x, y, -d * 0.5 + sz * 0.5))])
-	for k in nz:
-		var z := -d * 0.5 + (k + 0.5) * sz
-		out.append([pick.call("right", k, nz), Transform3D(Basis().scaled_local(Vector3(sx, h, sz)), Vector3(w * 0.5 - sx * 0.5, y, z))])
-		out.append([pick.call("left", nz - 1 - k, nz), Transform3D(Basis(Vector3.UP, PI).scaled_local(Vector3(sx, h, sz)), Vector3(-w * 0.5 + sx * 0.5, y, z))])
-
-
-## Gable roof over nx (even) x nz cells, ridge along z, from height y, with `eave_front` and
-## `eave_back` extra cells of overhang. `module` is "roof" (low) or "roof-high" (steep).
-## Returns the ridge height.
-static func _roof(out: Array, nx: int, nz: int, sx: float, sz: float, y: float, pitch: float,
-		eave_front: float, eave_back: float, module := "roof") -> float:
-	var w := nx * sx
-	var d := nz * sz
-	var half := nx / 2
-	var rise := (ROOF_RISE if module == "roof" else 1.14) * pitch
-	var depth := d + (eave_front + eave_back) * sz
-	var zc := (eave_front - eave_back) * sz * 0.5
-	for i in nx:
-		var left := i < half
-		var step := i if left else nx - 1 - i
-		var x := -w * 0.5 + (i + 0.5) * sx
-		var b := Basis() if left else Basis(Vector3.UP, PI)
-		b = b.scaled_local(Vector3(sx * 1.04, sx * pitch, depth))
-		out.append([module, Transform3D(b, Vector3(x, y + step * rise * sx, zc))])
-	return y + half * rise * sx
-
-
-## Triangle gable fills (front and back) under a `_roof`, as one wood-panel mesh.
-static func gable_mesh(nx: int, nz: int, sx: float, sz: float, y: float, ridge: float, inset := 0.15) -> PackedVector3Array:
-	var w := nx * sx
-	var d := nz * sz
-	var tris := PackedVector3Array()
-	for side: float in [1.0, -1.0]:
-		var z := side * (d * 0.5 - inset)
-		var a := Vector3(-w * 0.5, y, z)
-		var b := Vector3(w * 0.5, y, z)
-		var c := Vector3(0, ridge, z)
-		if side > 0.0:
-			tris.append_array([a, c, b])
-		else:
-			tris.append_array([a, b, c])
-	return tris
-
-
 static func _cells(size: float, target := CELL, even := false) -> int:
 	var n := maxi(1, int(round(size / target)))
 	if even and n % 2 == 1:
 		n += 1 if size / target > n else -1
 		n = maxi(2, n)
 	return n
-
-
-# ---------------------------------------------------------------- buildings
-
-## Modules and extra geometry for one building: {modules: [[name, Transform3D]], gables:
-## PackedVector3Array (wood triangles)}, or null for an unknown kind.
-func building(kind: String, size: Vector2, seed_: int) -> Variant:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed_
-	match kind:
-		"chalet", "bakery":
-			return _chalet(size, rng, kind == "bakery")
-		"inn":
-			return _inn(size, rng)
-		"arcade":
-			return _arcade(size, rng)
-		"church":
-			return _church(size, rng)
-		"mill":
-			return _mill(size, rng)
-		"barn":
-			return _barn(size, rng)
-		"school":
-			return _school(size, rng)
-		"factory":
-			return _factory(size, rng)
-		"shop":
-			return _shop(size, rng)
-		"farmhouse":
-			return _farmhouse(size, rng)
-	errors.append("unknown building kind '%s'" % kind)
-	return null
-
-
-## Bernese chalet: white plaster ground floor, timber upper floor with shutters and a balcony
-## across the gable front, low roof with deep eaves.
-func _chalet(size: Vector2, rng: RandomNumberGenerator, bakery: bool) -> Dictionary:
-	var nx := _cells(size.x, CELL, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	var door := rng.randi_range(0, nx - 1)
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
-		if side == "front":
-			return "wall-door" if i == door else ("wall-window-glass" if bakery else "wall-window-shutters")
-		return "wall-window-small" if i % 2 == 1 else "wall")
-	var upper := FLOOR_H
-	_walls(out, nx, nz, sx, sz, upper, FLOOR_H, func(side, i, n):
-		if side == "front" or side == "back":
-			return "wall-wood-window-shutters"
-		return "wall-wood-window-small" if i % 2 == 0 else "wall-wood")
-	var floors := 2
-	if rng.randf() < 0.35:
-		_walls(out, nx, nz, sx, sz, upper + FLOOR_H, FLOOR_H, func(side, i, n):
-			return "wall-wood-window-shutters" if side == "front" else "wall-wood")
-		floors = 3
-	var top := floors * FLOOR_H
-	# Balcony on the gable front at the first upper floor.
-	var bz := nz * sz * 0.5 + 0.55
-	for i in nx:
-		var x := -nx * sx * 0.5 + (i + 0.5) * sx
-		out.append(["balcony-wall-fence", Transform3D(Basis(Vector3.UP, -PI * 0.5).scaled_local(Vector3(1.1, 1.0, sx)), Vector3(x, upper, bz - 0.55))])
-		out.append(["planks", Transform3D(Basis().scaled_local(Vector3(sx, 1.0, 1.1)), Vector3(x, upper - 0.05, bz - 0.05))])
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.55, 0.6, 0.35)
-	if rng.randf() < 0.7:
-		out.append(["chimney", Transform3D(Basis().scaled_local(Vector3(1.6, 2.0, 1.6)), Vector3(sx * 0.6, top + (ridge - top) * 0.5, -sz * 0.4))])
-	if bakery:
-		out.append(["stall-red", Transform3D(Basis(Vector3.UP, PI * 0.5).scaled_local(Vector3(2.2, 2.2, 2.2)), Vector3(sx, 0, nz * sz * 0.5 + 0.45))])
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-## Gasthaus: three storeys, the ground floor plaster with a wide door, timber above, red banners.
-func _inn(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := _cells(size.x, CELL, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
-		if side == "front":
-			return "wall-doorway-square-wide" if i == n / 2 else "wall-window-glass"
-		return "wall-window-shutters")
-	for f in [1, 2]:
-		_walls(out, nx, nz, sx, sz, f * FLOOR_H, FLOOR_H, func(side, i, n):
-			return "wall-wood-window-shutters" if side != "back" or i % 2 == 0 else "wall-wood")
-	var top := 3 * FLOOR_H
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.6, 0.6, 0.4)
-	for i: int in [0, nx - 1]:
-		var x := -nx * sx * 0.5 + (i + 0.5) * sx
-		out.append(["banner-red", Transform3D(Basis(Vector3.UP, -PI * 0.5).scaled_local(Vector3(2.0, 2.4, 2.0)), Vector3(x, FLOOR_H + 0.3, nz * sz * 0.5 - 0.6))])
-	out.append(["chimney", Transform3D(Basis().scaled_local(Vector3(1.8, 2.4, 1.8)), Vector3(-sx, top + (ridge - top) * 0.45, 0.0))])
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-## Laubengasse house: an arcade of round arches on the ground floor, plaster storeys above.
-func _arcade(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := _cells(size.x, CELL, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
-		return "wall-arch" if side == "front" else "wall")
-	var upper := "wall-window-shutters" if rng.randf() < 0.5 else "wall-window-glass"
-	# Side walls: small windows in every other cell, so an end house shows no blank wall.
-	for f in [1, 2]:
-		_walls(out, nx, nz, sx, sz, f * FLOOR_H, FLOOR_H, func(side, i, n):
-			if side == "front" or side == "back":
-				return upper
-			return "wall-window-small" if i % 2 == 1 else "wall")
-	var top := 3 * FLOOR_H
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.6, 0.5, 0.3)
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-## Village church: a white nave with a steep roof and a tower with a tall pointed spire on the
-## front, facing the road.
-func _church(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := 2
-	var nz := _cells(size.y, 3.0)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	var nave_h := FLOOR_H * 1.9
-	_walls(out, nx, nz, sx, sz, 0.0, nave_h, func(side, i, n):
-		if side == "front":
-			return "wall-doorway-round"
-		return "wall-window-stone" if side != "back" else "wall")
-	var ridge := _roof(out, nx, nz, sx, sz, nave_h, 0.75, 0.15, 0.15, "roof-high")
-	# Tower: one cell wide, standing proud of the front.
-	var tw := 3.6
-	# Tower inside the footprint, flush with the front.
-	var tz := nz * sz * 0.5 - tw * 0.5
-	var storeys := 5
-	for f in storeys:
-		var y := f * FLOOR_H * 1.1
-		for side in 4:
-			var rot := -PI * 0.5 + side * PI * 0.5
-			var m := "wall-window-round" if f == storeys - 1 else ("wall-doorway-round" if f == 0 and side == 0 else "wall")
-			var b := Basis(Vector3.UP, rot).scaled_local(Vector3(tw, FLOOR_H * 1.1, tw))
-			out.append([m, Transform3D(b, Vector3(0, y, tz))])
-	var spire_y := storeys * FLOOR_H * 1.1
-	out.append(["roof-high-point", Transform3D(Basis().scaled_local(Vector3(tw * 1.05, 8.5, tw * 1.05)), Vector3(0, spire_y, tz))])
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, nave_h, ridge, 0.1)}
-
-
-## Mill on the pond: timber over a stone plinth, a water wheel on the pond side.
-func _mill(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := _cells(size.x, CELL, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
-		return "wall-door" if side == "front" and i == 0 else "wall-window-small")
-	_walls(out, nx, nz, sx, sz, FLOOR_H, FLOOR_H, func(side, i, n):
-		return "wall-wood-window-shutters" if side == "front" else "wall-wood-detail-cross")
-	var top := 2 * FLOOR_H
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.55, 0.4, 0.4)
-	# Water wheel on the back wall (the pond side), turning in the water.
-	out.append(["watermill", Transform3D(Basis(Vector3.UP, PI * 0.5).scaled_local(Vector3(3.0, 3.0, 3.0)), Vector3(0, 1.4, -nz * sz * 0.5 - 0.9))])
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-## Hay barn: dark timber with cross-braced boards, wide low roof.
-## Cheese and chocolate factory: a long plaster hall with big windows, timber upper floor and
-## two tall chimneys.
-func _factory(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := _cells(size.x, 2.5, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H * 1.2, func(side, i, n):
-		if side == "front" and i == n / 2:
-			return "wall-doorway-square-wide"
-		return "wall-window-glass")
-	_walls(out, nx, nz, sx, sz, FLOOR_H * 1.2, FLOOR_H, func(side, i, n):
-		return "wall-wood-window-shutters" if side == "front" or side == "back" else "wall-wood")
-	var top := FLOOR_H * 2.2
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.5, 0.3, 0.3)
-	for x: float in [-size.x * 0.3, size.x * 0.3]:
-		out.append(["chimney", Transform3D(Basis().scaled_local(Vector3(2.6, 6.0, 2.6)), Vector3(x, top, -sz * 0.6))])
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-## Village shop (cheese or chocolate): a small chalet with a big shop window and a striped
-## awning stall in front.
-func _shop(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := _cells(size.x, CELL, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
-		if side == "front":
-			return "wall-door" if i == 0 else "wall-window-glass"
-		return "wall")
-	_walls(out, nx, nz, sx, sz, FLOOR_H, FLOOR_H, func(side, i, n):
-		return "wall-wood-window-shutters" if side == "front" else "wall-wood")
-	var top := 2 * FLOOR_H
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.55, 0.6, 0.3)
-	out.append(["stall-red", Transform3D(Basis(Vector3.UP, PI * 0.5).scaled_local(Vector3(2.0, 2.0, 2.0)), Vector3(sx * 0.5, 0, nz * sz * 0.5 + 0.4))])
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-## Farmhouse: a big Emmental farmhouse, timber on a stone base, a huge low roof.
-func _farmhouse(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := _cells(size.x, CELL, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
-		if side == "front" and i == 1:
-			return "wall-door"
-		return "wall-window-shutters" if side == "front" else "wall")
-	_walls(out, nx, nz, sx, sz, FLOOR_H, FLOOR_H, func(side, i, n):
-		return "wall-wood-window-shutters" if side == "front" else "wall-wood-detail-cross")
-	var top := 2 * FLOOR_H
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.5, 0.9, 0.6)
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-func _barn(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := _cells(size.x, CELL, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H * 1.3, func(side, i, n):
-		if side == "front" and (i == n / 2 or i == n / 2 - 1):
-			return "wall-wood-doorway-square-wide"
-		return "wall-wood-detail-cross" if i % 2 == 0 else "wall-wood")
-	var top := FLOOR_H * 1.3
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.65, 0.4, 0.4)
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-## Schoolhouse: two plaster storeys with many windows and a small bell turret.
-func _school(size: Vector2, rng: RandomNumberGenerator) -> Dictionary:
-	var nx := _cells(size.x, CELL, true)
-	var nz := _cells(size.y)
-	var sx := size.x / nx
-	var sz := size.y / nz
-	var out: Array = []
-	_walls(out, nx, nz, sx, sz, 0.0, FLOOR_H, func(side, i, n):
-		if side == "front" and i == n / 2:
-			return "wall-doorway-round"
-		return "wall-window-glass")
-	_walls(out, nx, nz, sx, sz, FLOOR_H, FLOOR_H, func(side, i, n):
-		return "wall-window-glass")
-	var top := 2 * FLOOR_H
-	var ridge := _roof(out, nx, nz, sx, sz, top, 0.6, 0.3, 0.3)
-	out.append(["roof-point", Transform3D(Basis().scaled_local(Vector3(2.2, 3.0, 2.2)), Vector3(0, ridge - 0.2, 0))])
-	return {"modules": out, "gables": gable_mesh(nx, nz, sx, sz, top, ridge)}
-
-
-# ---------------------------------------------------------------- covered bridge
-
-## Emmental-style covered wooden bridge over pond_bridge around s = mid: timber side walls with
-## open windows, a roof, gable ends. Modules in world space.
-func covered_bridge(r, mid: float, half_len: float, road_hw: float) -> Dictionary:
-	var out: Array = []
-	var cell := 2.0
-	var n := int(round(half_len * 2.0 / cell))
-	var w := road_hw * 2.0 + 2.0
-	var h := 2.8
-	for k in n:
-		var s: float = mid - half_len + (k + 0.5) * half_len * 2.0 / n
-		var c: Vector3 = r.pos_at(s)
-		var yaw: float = r.heading_at(s)
-		var basis := Basis(Vector3.UP, yaw)
-		for side: float in [1.0, -1.0]:
-			# Walls stand on the +x edge of their cell: turn them to face out on each side.
-			var b := basis * Basis(Vector3.UP, 0.0 if side < 0.0 else PI)
-			var m := "wall-wood-window-small" if k % 2 == 1 else "wall-wood"
-			out.append([m, Transform3D(b.scaled_local(Vector3(w, h, cell * 1.02)), c)])
-		# Shingle roof: two low "roof" slopes meeting over the deck centre, with eaves.
-		for side: float in [-1.0, 1.0]:
-			var rb := basis * Basis(Vector3.UP, 0.0 if side < 0.0 else PI)
-			out.append(["roof", Transform3D(rb.scaled_local(Vector3(w * 0.5 + 0.6, 1.4, cell * 1.02)), c + basis * Vector3(side * (w * 0.25 + 0.3), h, 0))])
-	return {"modules": out}
 
 
 # ---------------------------------------------------------------- props

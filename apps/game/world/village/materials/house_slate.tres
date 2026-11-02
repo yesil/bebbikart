@@ -1,0 +1,23 @@
+[gd_resource type="ShaderMaterial" load_steps=6 format=3]
+
+[ext_resource type="Shader" path="res://world/village/house.gdshader" id="1"]
+[ext_resource type="Texture2D" path="res://assets/textures/RoofingTiles003/RoofingTiles003_1K-JPG_Color.jpg" id="2"]
+[ext_resource type="Texture2D" path="res://assets/textures/RoofingTiles003/RoofingTiles003_1K-JPG_NormalGL.jpg" id="3"]
+[ext_resource type="Texture2D" path="res://assets/textures/RoofingTiles003/RoofingTiles003_1K-JPG_Roughness.jpg" id="4"]
+[ext_resource type="Texture2D" path="res://assets/textures/RoofingTiles003/RoofingTiles003_1K-JPG_Displacement.jpg" id="5"]
+
+[resource]
+shader = ExtResource("1")
+shader_parameter/albedo_tex = ExtResource("2")
+shader_parameter/normal_tex = ExtResource("3")
+shader_parameter/rough_tex = ExtResource("4")
+shader_parameter/ao_tex = ExtResource("5")
+shader_parameter/tile_m = Vector2(2.2, 2.2)
+shader_parameter/albedo_gain = 1.6
+shader_parameter/normal_depth = 1.1
+shader_parameter/roughness_range = Vector2(0.45, 0.85)
+shader_parameter/ao_strength = 0.5
+shader_parameter/grime = 0.0
+shader_parameter/streaks = 0.0
+shader_parameter/patchiness = 0.1
+shader_parameter/wet_gloss = 0.7

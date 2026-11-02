@@ -64,8 +64,16 @@ func _run() -> void:
 	var overlay: Control = main.get("overlay")
 	if overlay != null:
 		overlay.get_parent().visible = false
+	var terrain: Node = main.find_child("Terrain", true, false)
+	if terrain == null or terrain.get("data") == null:
+		push_error("village_shots: the village terrain has no height data")
+		quit(1)
+		return
+	var data: Object = terrain.get("data")
+	var ground := func(x: float, z: float) -> float: return float(data.call("get_height", Vector3(x, 0.0, z)))
 	var c := VillageCourse.new()
-	for v in viewpoints(c, VillagePlan.new(c)):
+	var plan := VillagePlan.new(c)
+	for v in viewpoints(c, plan) + house_views(plan, ground):
 		if not only.is_empty() and not (v[0] in only):
 			continue
 		cam.global_position = v[1]
@@ -116,6 +124,35 @@ static func joins(c: VillageCourse, plan: VillagePlan) -> Array:
 		var s: float = sp[2]
 		var back := r.pos_at(maxf(0.0, s - 9.0))
 		out.append([sp[0], back + Vector3.UP * 2.6, r.pos_at(minf(r.length, s + 8.0)) + Vector3.UP * 0.4, 70.0])
+	return out
+
+
+## Close street views of the buildings, from about where a racer passes: "house_<kind>" for the
+## first building of each kind, three quarters from the front at chase-camera height, plus a
+## few chalets along the main street ("house_chalet_<n>"). ground(x, z) is the terrain height.
+static func house_views(plan: VillagePlan, ground: Callable) -> Array:
+	var out := []
+	var seen := {}
+	var chalets := 0
+	for b in plan.buildings:
+		var kind: String = b["kind"]
+		var name := "house_%s" % kind
+		if seen.has(kind):
+			if kind != "chalet" or chalets >= 3:
+				continue
+			chalets += 1
+			name = "house_chalet_%d" % chalets
+		seen[kind] = true
+		var size: Vector2 = b["size"]
+		var p: Vector2 = b["pos"]
+		var fwd := Vector2(sin(b["yaw"]), cos(b["yaw"]))
+		var rgt := Vector2(fwd.y, -fwd.x)
+		var reach := maxf(size.x, size.y) * 0.6 + 7.0
+		var cam: Vector2 = p + fwd * (size.y * 0.5 + reach * 0.8) + rgt * reach * 0.6
+		var look: Vector2 = p + fwd * size.y * 0.25
+		var top := 4.0 if kind != "church" else 9.0
+		out.append([name, Vector3(cam.x, float(ground.call(cam.x, cam.y)) + 2.2, cam.y),
+			Vector3(look.x, float(ground.call(look.x, look.y)) + top, look.y), 60.0])
 	return out
 
 

@@ -6,17 +6,20 @@ extends SceneTree
 ## - the terrain sits just under every road (never above it, never far below it off the decks)
 ## - no prop or building module stands on a road, outside the covered bridge
 ## - props stand on the ground, buildings neither float nor sink
+## - the Houses node keeps one record per building of the plan, in the plan's order, and they
+##   build without errors (world/village/chalet_builder.gd)
 
 const VillageCourse = preload("res://sim/village_course.gd")
 const VillagePlan = preload("res://world/village/village_plan.gd")
 const VillageTerrain = preload("res://world/village/village_terrain.gd")
 const InstancedModel = preload("res://world/village/instanced_model.gd")
+const VillageHouses = preload("res://world/village/village_houses.gd")
 const Course = preload("res://sim/course.gd")
 const Route = preload("res://sim/route.gd")
 
 const SCENE := "res://world/village/village_world.tscn"
 const PARTS := ["Terrain", "Roads", "Water/Pond", "Water/Brook", "Structures/Kicker", "Structures/CausewayRails",
-	"Structures/Square", "Buildings", "Props"]
+	"Structures/Square", "Buildings", "Buildings/Houses", "Props"]
 ## Props that belong at the roadside (their origin may sit this close to a road edge).
 const ROADSIDE := {"Lantern": 0.5, "Fence": 0.3}
 const PROP_GROUND := 0.35          # props may sit this far off the ground
@@ -48,6 +51,7 @@ func _init() -> void:
 		fails.append("world: only %d road containers" % roads.get_child_count())
 	_check_roads(course, plan, shape)
 	_check_models(world, course, plan, shape)
+	_check_houses(world, plan)
 	world.free()
 	_done()
 
@@ -144,3 +148,25 @@ func _check_models(world: Node, course: VillageCourse, plan: VillagePlan, shape:
 			hi = maxf(hi, g)
 		if hi - lo > 2.5:
 			fails.append("building %s at (%.0f, %.0f) stands on a %.1f m slope" % [b["kind"], b["pos"].x, b["pos"].y, hi - lo])
+
+
+func _check_houses(world: Node, plan: VillagePlan) -> void:
+	var h := world.get_node_or_null("Buildings/Houses") as VillageHouses
+	if h == null:
+		return
+	if h.kinds.size() != plan.buildings.size():
+		fails.append("houses: %d records for %d buildings of the plan; re-run tools/bake_village.gd" % [h.kinds.size(), plan.buildings.size()])
+		return
+	for i in plan.buildings.size():
+		var b: Dictionary = plan.buildings[i]
+		var k := i * VillageHouses.FIELDS
+		if h.kinds[i] != b["kind"] or Vector2(h.houses[k], h.houses[k + 2]).distance_to(b["pos"]) > 0.01:
+			fails.append("houses: record %d is a %s at (%.1f, %.1f), the plan has a %s at (%.1f, %.1f); re-run tools/bake_village.gd" % [
+				i, h.kinds[i], h.houses[k], h.houses[k + 2], b["kind"], b["pos"].x, b["pos"].y])
+			return
+	if h.bridge.is_empty():
+		fails.append("houses: no covered bridge cells")
+	var built = VillageHouses.build(h.kinds, h.houses, h.bridge, h.bridge_cell, h.bridge_half_width)
+	for e in built.errors:
+		fails.append("houses: " + e)
+	notes.append("%d buildings and %d bridge cells: %d vertices" % [h.kinds.size(), h.bridge.size() / 4, built.vertex_count()])
