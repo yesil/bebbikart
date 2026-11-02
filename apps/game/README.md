@@ -111,13 +111,13 @@ Sweep flags:
   - `camera_blockers.gd`: the village boxes the chase cameras keep out of (see **Camera** below).
 - `tools/camera_check.gd`: headless test of the camera blockers (no village house box on a road, pulled-in cameras outside every house), exit 1 on failure: `godot --headless --path . --script res://tools/camera_check.gd`.
 - `world/duel_screen.gd`, `ui/duel_hud.gd`: the split screen and the halves' HUD (see **The line**).
-- `ui/race_hud.gd`: what sits over the halves: problems in red for the facilitator, and the podium when a session ends. Racer colours come from its palette in join order.
+- `ui/race_hud.gd`: what sits over the halves: the leaderboard (the top 6 with their picture, name and best time; top right on the full screen, under the crown on the split screen; a picture missing after 10 s shows red and is reported), problems in red for the facilitator, and the podium when a session ends. Racer colours come from its palette in join order.
 - `main.gd` / `main.tscn`: wires net → sim → views and draws the debug overlay.
 - `tools/sweep.gd`: the headless balance sweep.
 - `tools/duel_check.gd`: headless check of the line: one player alone (full screen, left half only), then six who stop coming after a while (the split turns on once two play and off `splitHoldMs` after the last lap), the champion who rests, one-lap runs without bumps, two racers waiting for green at once in grid slots of their own (not inside each other), steering reaching the racers (steered forks, arrows caught), then the split screen and HUD driven for a few frames. Exit 1 on a broken rule: `godot --headless --path . --script res://tools/duel_check.gd`.
 - `tools/verdict_check.gd`: the real mock duel with kit racers: while a half shows a lap's verdict (new champion, the time, OOPS!) its racer is still in the shot; prints each verdict's seconds without the racer and exits 1 above 0.2 s or if no verdict showed: `godot --headless --fixed-fps 60 --path . --script res://tools/verdict_check.gd -- --kit --racers=4 [--secs=240]`.
 - `tools/start_crowd_check.gd`: groups of 4, 6 and 8 pressing Go together on both tracks (with the start countdown), with the bots steering (`--steer=wild|kid|off`; wild swings from edge to edge): start bumps, early crashes and release spread; exits 1 if the crowd knocks racers off.
-- `tools/hud_check.gd` (windowed): renders the podium from test data; exits 1 if it is missing or doesn't fit the screen.
+- `tools/hud_check.gd` (windowed): renders the leaderboard (full and split screen, with a picture that never comes) and the podium from test data; exits 1 if either is missing, doesn't fit the screen, covers the crown, or a missing picture isn't shown and reported.
 - `tools/roster_hold_check.gd` (headless, no server): a racer never changes in the middle of a run. The designer's review rounds send up to 3 better versions of a ready racer (new packages, same drawings); one that arrives while the racer's kart is on the track waits until the kart has left it, and the next run has its ride drawing sticker at once.
 - `tools/session_check.gd`: against a running server (`-- --server[=URL]`), checks the options menu shows the phone address the server prints (with its QR code), clicks New session and switches the track there and back like the game manager; exits 1 if a step doesn't reach its state within 20 s.
 - `tools/menu_check.gd` (windowed): opens the options menu in English and German, mock and server mode (idle, running, starting a new session, with the phone address and QR code) and saves screenshots with `--out=DIR`; exits 1 if the menu doesn't fit the screen or the join column doesn't say why there is no code (mock mode, server unreachable). `--server=http://localhost:8080` also shows that server's real address and code; any QR reader can decode the saved `menu_*_join*.png`.
@@ -245,8 +245,8 @@ through each other and the autopilot ignores the other kart.
   drives; the other half's racer is left out; drawn at half rate, the two halves' cams taking
   turns frame by frame), name, lap time, best lap, record, BOOST! while a
   boost arrow's boost lasts, its own start lights and the lap's verdict for
-  `duelResultMs`; the crown and the line top centre. `ui/race_hud.gd` adds problems and the
-  podium on top.
+  `duelResultMs`; the crown and the line top centre. `ui/race_hud.gd` adds the leaderboard,
+  problems and the podium on top.
 - **Performance (Mac M3):** each half has half the pixels, so the 3D pixel count is the same as
   full screen; what doubles is culling, draw calls and the sun's shadow cascades. In split screen
   the sun casts two cascades within 80 m (instead of the preset's distance and four), vegetation
