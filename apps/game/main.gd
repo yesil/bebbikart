@@ -326,6 +326,9 @@ func _build_scene() -> void:
 func _setup_race_hud() -> void:
 	hud = RaceHud.new()
 	hud.local_bests = assets == null
+	hud.on_podium = func() -> void:
+		if audio != null:
+			audio.podium()
 	if assets != null:
 		hud.avatar_of = assets.avatar_for
 		assets.problem.connect(func(text: String): hud.problem(text))
@@ -961,17 +964,24 @@ func _outgoing(type: String, pl: Dictionary) -> void:
 			return  # its half stays a moment on a racer still cheering or slumping
 		Messages.GAME_RUN_FINISHED, Messages.GAME_RUN_FAILED:
 			var fv = views.get(pl["runId"])
+			var ok := type == Messages.GAME_RUN_FINISHED
 			if fv != null:
 				# On a loop the best lap ranks, also for a run that failed after some laps.
 				var ms := int(pl["bestLapMs"]) if pl.has("bestLapMs") else int(pl.get("elapsedMs", 0))
-				hud.run_result(fv.racer.player_id, type == Messages.GAME_RUN_FINISHED, ms)
-				if duel_sides.has(pl["runId"]):
-					_duel_verdict(pl["runId"], fv.racer.player_id, type == Messages.GAME_RUN_FINISHED, ms, String(pl.get("reason", "")))
-				# Each racer's best (a loop's best lap, also from a run that failed after a lap).
 				var pid: String = fv.racer.player_id
-				var timed := type == Messages.GAME_RUN_FINISHED or pl.has("bestLapMs")
+				# Judged before this lap goes into bests: the HUD and the sound say the same.
+				var verdict := _verdict(pid, ok, ms)
+				hud.run_result(pid, ok, ms)
+				if duel_sides.has(pl["runId"]):
+					_duel_verdict(pl["runId"], pid, verdict, ms, String(pl.get("reason", "")))
+				if audio != null:
+					audio.run_end(pl["runId"], String(verdict["kind"]))
+				# Each racer's best (a loop's best lap, also from a run that failed after a lap).
+				var timed := ok or pl.has("bestLapMs")
 				if timed and ms > 0 and (not bests.has(pid) or ms < int(bests[pid])):
 					bests[pid] = ms
+			else:
+				push_error("run %s ended with no racer view: no verdict, no end sound" % pl["runId"])
 	match type:
 		Messages.GAME_RUN_FINISHED:
 			if pl.has("bestLapMs"):
@@ -1124,28 +1134,46 @@ func _tag_side_layers(n: Node, side: String) -> void:
 		_tag_side_layers(c, side)
 
 
-## A lap ended: its half shows the verdict, judged against the crown as it stood (the
-## server's queue.updated with the new champion comes after it).
-func _duel_verdict(run_id: String, pid: String, ok: bool, ms: int, reason: String) -> void:
+## A lap's verdict, judged against the crown as it stood (the server's queue.updated with the
+## new champion comes after it) and the racer's own best before this lap. kind: "champion" (beat
+## the crown, or the session's first lap), "record" (the champion beat their own record),
+## "keeps" (the champion, slower than their record), "best" (their own best, short of the
+## crown), "short" or "failed". The duel HUD and the audio director both go by it.
+func _verdict(pid: String, ok: bool, ms: int) -> Dictionary:
+	if not ok:
+		return {"kind": "failed"}
+	var c: Dictionary = queue_state.get("champion", {})
+	if c.is_empty() or ms < int(c["timeMs"]):
+		var own: bool = not c.is_empty() and String(c["playerId"]) == pid
+		return {"kind": "record" if own else "champion"}
+	if String(c["playerId"]) == pid:
+		return {"kind": "keeps"}
+	var pb := bests.has(pid) and ms < int(bests[pid])  # a new best of their own (not their first lap)
+	return {"kind": "best" if pb else "short", "gap": (ms - int(c["timeMs"])) / 1000.0, "champion": String(c["nickname"])}
+
+
+## A lap ended: its half shows the verdict.
+func _duel_verdict(run_id: String, pid: String, verdict: Dictionary, ms: int, reason: String) -> void:
 	var side: String = duel_sides[run_id] if duel_screen.split else "left"
 	# The chocolate coins taken on the lap, under the verdict.
 	var v = views.get(run_id)
 	if v != null and not v.racer.coins.is_empty():
 		duel_hud.coins_result(side, I18n.f("duel.coins_lap", [v.racer.coins_taken, v.racer.coins.size()]))
-	if not ok:
-		duel_hud.result(side, I18n.t("hud.oops").to_upper() + "!", I18n.t("fail." + reason) if reason != "" else "", false)
-		return
-	var c: Dictionary = queue_state.get("champion", {})
 	var time := "%.2f s" % (ms / 1000.0)
-	var pb := bests.has(pid) and ms < int(bests[pid])  # a new best of their own (not their first lap)
-	if c.is_empty() or ms < int(c["timeMs"]):
-		var own: bool = not c.is_empty() and String(c["playerId"]) == pid
-		duel_hud.result(side, I18n.t("duel.new_record" if own else "duel.new_champion"), time, true)
-	elif String(c["playerId"]) == pid:
-		duel_hud.result(side, time, I18n.f("duel.keeps", [nicks.get(pid, "?")]), false)
-	else:
-		var gap := (ms - int(c["timeMs"])) / 1000.0
-		duel_hud.result(side, time, I18n.f("duel.new_best_short" if pb else "duel.short", [gap, c["nickname"]]), false)
+	match String(verdict["kind"]):
+		"failed":
+			duel_hud.result(side, I18n.t("hud.oops").to_upper() + "!", I18n.t("fail." + reason) if reason != "" else "", false)
+		"champion":
+			duel_hud.result(side, I18n.t("duel.new_champion"), time, true)
+		"record":
+			duel_hud.result(side, I18n.t("duel.new_record"), time, true)
+		"keeps":
+			duel_hud.result(side, time, I18n.f("duel.keeps", [nicks.get(pid, "?")]), false)
+		"best", "short":
+			duel_hud.result(side, time, I18n.f("duel.new_best_short" if verdict["kind"] == "best" else "duel.short",
+				[verdict["gap"], verdict["champion"]]), false)
+		_:
+			push_error("duel: unknown verdict %s" % JSON.stringify(verdict))
 
 
 

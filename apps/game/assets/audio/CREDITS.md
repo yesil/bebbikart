@@ -9,8 +9,6 @@ All audio here is CC0 1.0 (public domain) except `sfx/cheer.wav` (CC BY 4.0) and
 | `music/countryside_sunny_city_climax.ogg` | `sunny_city_climax_bpm135.ogg` | [Sunny City](https://opengameart.org/content/sunny-city) | MintoDog | CC0 1.0 |
 | `music/village_pure_raceway.ogg` | `pure_raceway_bpm160.ogg` | [Pure Raceway](https://opengameart.org/content/pure-raceway) | MintoDog | CC0 1.0 |
 | `music/village_pure_raceway_climax.ogg` | `pure_raceway_climax_bpm175.ogg` | [Pure Raceway](https://opengameart.org/content/pure-raceway) | MintoDog | CC0 1.0 |
-| `sfx/finish_jingle.ogg` | `jingles_SAX07.ogg` | [Music Jingles](https://kenney.nl/assets/music-jingles) | Kenney | CC0 1.0 (`licenses/Kenney_music-jingles.txt`) |
-| `sfx/best_lap_jingle.ogg` | `jingles_STEEL07.ogg` | [Music Jingles](https://kenney.nl/assets/music-jingles) | Kenney | CC0 1.0 (`licenses/Kenney_music-jingles.txt`) |
 | `sfx/start.ogg` | `confirmation_001.ogg` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | Kenney | CC0 1.0 (`licenses/Kenney_interface-sounds.txt`) |
 | `sfx/lap.ogg` | `tick_001.ogg` | [Interface Sounds](https://kenney.nl/assets/interface-sounds) | Kenney | CC0 1.0 (`licenses/Kenney_interface-sounds.txt`) |
 | `sfx/land.ogg` | `impactSoft_heavy_000.ogg` | [Impact Sounds](https://kenney.nl/assets/impact-sounds) | Kenney | CC0 1.0 (`licenses/Kenney_impact-sounds.txt`) |

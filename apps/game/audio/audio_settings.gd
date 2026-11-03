@@ -1,6 +1,7 @@
 # Audio buses and their volumes. The buses are made in code (no default_bus_layout.tres),
-# once per process: Master → Music, Sfx, Ambience. Music carries the only effect, a low-pass
-# the director closes in the rain.
+# once per process: Master → Music, Sfx, Ambience. Music carries two effects: a low-pass the
+# director closes in the rain, and an amplify it turns down to dip the music under a race-end
+# cue (both live on the bus, so they never touch the volume the options menu sets).
 # Volumes are linear 0..1 per bus, saved to user://audio.cfg. The options menu owns the sliders
 # and calls set_volume / get_volume.
 extends RefCounted
@@ -9,6 +10,7 @@ const BUSES := ["Master", "Music", "Sfx", "Ambience"]
 const PATH := "user://audio.cfg"
 const DEFAULTS := {"Master": 0.8, "Music": 0.7, "Sfx": 0.8, "Ambience": 0.6}
 const LOWPASS_SLOT := 0  # effect index on the Music bus
+const DIP_SLOT := 1      # the dip (AudioEffectAmplify) on the Music bus
 
 
 ## Creates the buses if missing and applies the saved volumes. Returns "" or an error text.
@@ -25,6 +27,7 @@ static func ensure_buses() -> String:
 			lp.cutoff_hz = 20000.0
 			AudioServer.add_bus_effect(i, lp, LOWPASS_SLOT)
 			AudioServer.set_bus_effect_enabled(i, LOWPASS_SLOT, false)
+			AudioServer.add_bus_effect(i, AudioEffectAmplify.new(), DIP_SLOT)
 	return _load()
 
 

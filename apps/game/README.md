@@ -304,6 +304,36 @@ through each other and the autopilot ignores the other kart.
   ranges are 0.8 of the preset, and each camera has its own rain volume with half the drops.
   Measure with `tools/bench.gd -- --racers=4 --track=village`.
 
+## Race-end sounds
+
+A lap's end gets one cue for its verdict (`main.gd` `_verdict`, the same one the half's HUD
+shows), played by `audio/audio_director.gd` (`END_CUES`):
+
+| Verdict | Cue | Music dips | Then |
+|---|---|---|---|
+| NEW CHAMPION! / NEW RECORD! | `end_record.ogg`: the crown's motif, landing on a held chord and a button (5.6 s) | -15 dB | a big crowd (two cheers) after the hit, the racer's horn after the button |
+| a personal best, short of the crown | `end_best.ogg`: climbing steps to a ringing chord (3 s) | -11 dB | the crowd, then the horn |
+| any other finish (also the champion keeping the crown) | `end_finish.ogg`: short and bright (2.6 s) | -9 dB | the crowd, then the horn |
+| OOPS! | `failed.ogg` (the bump), then `end_oops.ogg`: a soft trombone "aww" (2.3 s) | -8 dB | nothing |
+| the podium at a session's end | `end_podium.ogg`: the crown's motif in full (7.9 s) | -15 dB | three cheers |
+
+- **One at a time:** a bigger cue (record over best over finish over oops) cuts a smaller one off
+  with a quick fade, together with its crowd and horn; a smaller one coming while a bigger one
+  sounds is left out, and its racer only honks once the bigger one is over. Both halves can end
+  their laps a second apart, so this decides what the room hears.
+- **The dip** is an `AudioEffectAmplify` on the Music bus (`audio_settings.gd` `DIP_SLOT`), so
+  it never touches the volume set in the options menu. It goes down in 0.15 s, holds until half
+  a second before the cue ends, and while the music is about to switch (the climax to the
+  paddock tune after the last racer) so the old tune doesn't swell back first, then comes back
+  over about 1.5 s.
+- **The cues** are short brass fanfares composed for the game, all in F major, which shares its
+  notes with the village's D minor and the countryside's F major. `scripts/race-end-cues.js`
+  holds the notes and renders them (FluidSynth, the MuseScore General soundfont, ffmpeg with
+  libvorbis): `SOUNDFONT=/path/to/MuseScore_General.sf2 bun scripts/race-end-cues.js`. Credits
+  and loudness in `assets/audio/CREDITS.md`.
+- A best lap in the middle of a run (runs of more than one lap, the tools) gets a bright chime
+  (`end_best_lap.ogg`) and a small dip; the lap that ends a run gets only its verdict's cue.
+
 ## Known issues and deviations
 
 - Split screen: the terrain's level of detail centres between the two cameras, so the far

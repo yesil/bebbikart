@@ -37,6 +37,9 @@ const NO_PICTURE := Color("#d62828")
 var avatar_of := Callable()
 ## Mock mode has no server leaderboard: bests come from the runs finished here.
 var local_bests := false
+## Called when the podium comes up (main.gd: the audio director's podium fanfare). Not called
+## when nobody finished the session, as no podium shows then.
+var on_podium := Callable()
 ## The screen is split in two halves (main.gd): the board sits under the crown, between them.
 var split := false
 ## The bottom edge of the crown at the top centre (main.gd, from ui/duel_hud.gd).
@@ -348,6 +351,8 @@ func _show_podium() -> void:
 	panel.set_meta("until", _t + PODIUM_S)
 	add_child(panel)
 	_podium = panel
+	if on_podium.is_valid():
+		on_podium.call()
 
 
 # ---------------------------------------------------------------- helpers
