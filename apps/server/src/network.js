@@ -40,17 +40,18 @@ const rank = (name) => (name === "en0" ? 0 : name === "en1" ? 1 : name.startsWit
 const SOCKETFILTERFW = "/usr/libexec/ApplicationFirewall/socketfilterfw";
 const FIREWALL_SETTINGS = "System Settings › Network › Firewall › Options";
 
-async function socketfilterfw(...args) {
-  const proc = Bun.spawn([SOCKETFILTERFW, ...args], { stdout: "pipe", stderr: "pipe" });
+/** The output of a read-only system tool; throws when it fails. */
+async function output(cmd) {
+  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  if (code !== 0)
-    throw new Error(`${SOCKETFILTERFW} ${args.join(" ")} exited ${code}: ${err.trim()}`);
+  if (code !== 0) throw new Error(`${cmd.join(" ")} exited ${code}: ${err.trim()}`);
   return out;
 }
+const socketfilterfw = (...args) => output([SOCKETFILTERFW, ...args]);
 
 /**
  * What the macOS firewall does to phones connecting to `program` (read only, no admin rights):
@@ -79,6 +80,40 @@ export async function firewallState(program = process.execPath, run = socketfilt
     blocked: null,
     note: `the macOS firewall is on: if this Mac asks whether ${path} may accept incoming connections, click Allow`,
   };
+}
+
+/**
+ * What on this Mac may stop phones without the server being able to read it: a VPN carrying its
+ * traffic (many drop local-network connections unless their app allows them), and CrowdStrike
+ * Falcon, whose firewall IT sets and which can block incoming connections on networks it doesn't
+ * trust. Throws when the system can't be asked.
+ * @returns {Promise<{ what: string, advice: string }[]>}
+ */
+export async function suspectsOnMac(run = output) {
+  if (process.platform !== "darwin") return [];
+  const found = [];
+  let route = "";
+  try {
+    route = await run(["/sbin/route", "-n", "get", "default"]);
+  } catch (err) {
+    if (!/not in table/.test(err.message)) throw err; // no default route: no network at all
+  }
+  const iface = route.match(/interface: (\S+)/)?.[1];
+  if (iface && /^(utun|ipsec|ppp|tun|tap)/.test(iface))
+    found.push({
+      what: `a VPN (${iface})`,
+      advice: `a VPN carries this Mac's traffic (${iface}), and many stop phones on the local network: allow LAN connections in the VPN app (Proton VPN: "Allow LAN connections") or disconnect it`,
+    });
+  const extensions = await run(["/usr/bin/systemextensionsctl", "list"]);
+  if (
+    extensions.split("\n").some((l) => /crowdstrike/i.test(l) && l.includes("[activated enabled]"))
+  )
+    found.push({
+      what: "CrowdStrike Falcon",
+      advice:
+        "CrowdStrike Falcon runs on this Mac; its firewall is set by IT, can block incoming connections on networks it doesn't trust, and the server can't read it. If phones can't open the page even on a phone's hotspot, it is Falcon: use a Mac without it, or ask IT",
+    });
+  return found;
 }
 
 /** Where phones open the site: the server itself, or Vite under bun run dev (phoneVitePort), which
@@ -116,12 +151,15 @@ export function createReach({
   logError,
   nets = networkInterfaces,
   firewall = firewallState,
+  suspects = suspectsOnMac,
   everyMs = 3000,
 }) {
   let lan = settings.lanAuto ? lanAddress(nets()) : null;
   let fw = { blocked: null, note: null };
+  let maybe = []; // suspectsOnMac(): what may stop phones, unreadable
   let phoneFrom = null; // the first other device that opened the server on this address
-  let firewallChecks = 0;
+  let guardChecks = 0;
+  let started = false; // the first check goes into the banner, later changes into the log
 
   /** Where phones open the site now; null when the Mac has no network address. */
   const url = () => (settings.lanAuto && !lan ? null : phoneUrl(settings));
@@ -140,20 +178,40 @@ export function createReach({
       ];
     if (fw.blocked) return [`PHONES ARE BLOCKED: ${fw.blocked}.`];
     if (phoneFrom) return [];
-    return [`No phone has opened it yet. ${ISOLATION_HINT}`];
+    return [
+      `No phone has opened it yet. ${ISOLATION_HINT}`,
+      ...maybe.map((m) => `MAY BLOCK PHONES: ${m.advice}.`),
+    ];
   }
 
-  async function checkFirewall() {
+  /** Reads the firewall and the suspects; after start-up, says what changed. */
+  async function checkGuards() {
     const was = fw.blocked;
     try {
       fw = await firewall();
     } catch (err) {
       logError(`[network] ERROR: can't read the macOS firewall state: ${err.message}`);
+    }
+    const before = maybe;
+    try {
+      maybe = await suspects();
+    } catch (err) {
+      logError(
+        `[network] ERROR: can't check this Mac for a VPN or security software: ${err.message}`,
+      );
+    }
+    if (!started) {
+      started = true;
       return;
     }
     if (fw.blocked && fw.blocked !== was)
       logError(`[network] ERROR: phones can't reach the server: ${fw.blocked}.`);
     else if (!fw.blocked && was) log("[network] the macOS firewall lets phones in again");
+    for (const m of maybe)
+      if (!before.some((b) => b.what === m.what) && !phoneFrom)
+        logError(`[network] MAY BLOCK PHONES: ${m.advice}.`);
+    for (const b of before)
+      if (!maybe.some((m) => m.what === b.what)) log(`[network] ${b.what} is gone`);
   }
 
   function checkAddress() {
@@ -175,18 +233,18 @@ export function createReach({
       `[network] THE PHONE ADDRESS CHANGED: phones now open ${url()} (${lan.iface})${before ? `, not ${before}` : ""}. Phones on the old address must scan the new code on the big screen.`,
     );
     for (const line of problemLines()) logError(`[network] ${line}`);
-    checkFirewall();
+    checkGuards();
   }
 
-  const ready = checkFirewall();
+  const ready = checkGuards();
   const timer = setInterval(() => {
     checkAddress();
-    // The firewall is read through a program, so less often than the address.
-    if (++firewallChecks % 10 === 0) checkFirewall();
+    // The firewall and the suspects are read through programs, so less often than the address.
+    if (++guardChecks % 10 === 0) checkGuards();
   }, everyMs);
 
   return {
-    /** Resolves once the firewall has been read the first time. */
+    /** Resolves once the firewall and the suspects have been read the first time. */
     ready,
     url,
     network,

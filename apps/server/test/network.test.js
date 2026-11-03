@@ -1,13 +1,21 @@
-// Phones reaching the server (network.js): the address, the firewall, and the first phone.
+// Phones reaching the server (network.js): the address, the firewall, a VPN or Falcon, and the
+// first phone.
 import { expect, test } from "bun:test";
-import { clientAddress, createReach, firewallState, lanAddress, NETWORK } from "../src/network.js";
+import {
+  clientAddress,
+  createReach,
+  firewallState,
+  lanAddress,
+  NETWORK,
+  suspectsOnMac,
+} from "../src/network.js";
 
 const v4 = (address, internal = false) => ({ family: "IPv4", address, internal });
 const LO = { lo0: [v4("127.0.0.1", true)] };
 const WIFI = { ...LO, en0: [v4("172.24.240.193")] };
 const OPEN = async () => ({ blocked: null, note: null });
 
-function reachOn(nets, { firewall = OPEN, settings = {} } = {}) {
+function reachOn(nets, { firewall = OPEN, suspects = async () => [], settings = {} } = {}) {
   const box = { nets, logs: [], errors: [] };
   const reach = createReach({
     settings: {
@@ -21,6 +29,7 @@ function reachOn(nets, { firewall = OPEN, settings = {} } = {}) {
     logError: (l) => box.errors.push(l),
     nets: () => box.nets,
     firewall,
+    suspects: () => suspects(box),
     everyMs: 60_000,
   });
   box.reach = reach;
@@ -123,7 +132,7 @@ test("a firewall that blocks the server is a problem; one that can't be read is 
   await blocked.reach.ready;
   expect(blocked.reach.network()).toBe(NETWORK.firewall);
   expect(blocked.reach.banner()[0]).toContain("PHONES ARE BLOCKED");
-  expect(blocked.errors[0]).toContain("blocks all incoming connections");
+  expect(blocked.errors).toEqual([]); // the banner says it at start-up, the log only changes
   blocked.reach.stop();
 
   const unreadable = reachOn(WIFI, {
@@ -182,4 +191,65 @@ test("firewallState reads socketfilterfw's answers", async () => {
   await expect(
     firewallState(process.execPath, answers({ "--getglobalstate": "huh" })),
   ).rejects.toThrow("unexpected firewall state");
+});
+
+test("suspectsOnMac: a VPN carrying the traffic and CrowdStrike Falcon", async () => {
+  if (process.platform !== "darwin") return;
+  const mac =
+    ({ route, extensions }) =>
+    async (cmd) => {
+      if (cmd[0] === "/sbin/route") {
+        if (route === null)
+          throw new Error(
+            "route -n get default exited 1: route: writing to routing socket: not in table",
+          );
+        return route;
+      }
+      return extensions;
+    };
+  const NONE =
+    "1 extension(s)\n*\t*\tJ6S6Q257EK\tch.protonvpn.mac.WireGuard-Extension (6.5.2)\tProton VPN WireGuard\t[activated enabled]\n";
+  expect(
+    await suspectsOnMac(
+      mac({ route: "   route to: default\n  interface: en0\n", extensions: NONE }),
+    ),
+  ).toEqual([]);
+  expect(await suspectsOnMac(mac({ route: null, extensions: NONE }))).toEqual([]);
+  const vpn = await suspectsOnMac(mac({ route: "  interface: utun4\n", extensions: NONE }));
+  expect(vpn.map((m) => m.what)).toEqual(["a VPN (utun4)"]);
+  expect(vpn[0].advice).toContain("Allow LAN connections");
+  const falcon = await suspectsOnMac(
+    mac({
+      route: "  interface: en0\n",
+      extensions: `${NONE}*\t*\tX9E956P446\tcom.crowdstrike.falcon.Agent (7.20)\tAgent\t[activated enabled]\n`,
+    }),
+  );
+  expect(falcon.map((m) => m.what)).toEqual(["CrowdStrike Falcon"]);
+  // An old copy waiting to be removed doesn't count.
+  const old = await suspectsOnMac(
+    mac({
+      route: "  interface: en0\n",
+      extensions: `${NONE}\t\tX9E956P446\tcom.crowdstrike.falcon.Agent (6.1)\tAgent\t[terminated waiting to uninstall on reboot]\n`,
+    }),
+  );
+  expect(old).toEqual([]);
+});
+
+test("what may block phones is in the banner, and a VPN that connects later is logged", async () => {
+  const FALCON = { what: "CrowdStrike Falcon", advice: "CrowdStrike Falcon runs on this Mac" };
+  const VPN = { what: "a VPN (utun4)", advice: "a VPN carries this Mac's traffic (utun4)" };
+  const box = reachOn(WIFI, { suspects: (b) => b.suspects });
+  box.suspects = [FALCON];
+  await box.reach.ready;
+  expect(box.reach.banner()).toContain("MAY BLOCK PHONES: CrowdStrike Falcon runs on this Mac.");
+  expect(box.reach.network()).toBe(NETWORK.noPhoneYet);
+  expect(box.errors).toEqual([]);
+  box.suspects = [FALCON, VPN];
+  box.nets = { ...LO, en0: [v4("172.24.240.194")] }; // a change makes it read the suspects again
+  box.reach.check();
+  await Bun.sleep(10);
+  expect(box.errors.at(-1)).toBe(
+    "[network] MAY BLOCK PHONES: a VPN carries this Mac's traffic (utun4).",
+  );
+  box.reach.stop();
 });
