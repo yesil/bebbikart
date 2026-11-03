@@ -320,8 +320,10 @@ shows), played by `audio/audio_director.gd` (`END_CUES`):
 
 - **One at a time:** a bigger cue (record over best over finish over oops) cuts a smaller one off
   with a quick fade, together with its crowd and horn; a smaller one coming while a bigger one
-  sounds is left out, and its racer only honks once the bigger one is over. Both halves can end
-  their laps a second apart, so this decides what the room hears.
+  sounds is left out: its racer gets a short ding at once and honks once the bigger one is over.
+  Both halves can end their laps a second apart, so this decides what the room hears. The crowd,
+  horns and dings of the cues have 4 voices of their own, so coins and cow bells never crowd
+  them out.
 - **The dip** is an `AudioEffectAmplify` on the Music bus (`audio_settings.gd` `DIP_SLOT`), so
   it never touches the volume set in the options menu. It goes down in 0.15 s, holds until half
   a second before the cue ends, and while the music is about to switch (the climax to the

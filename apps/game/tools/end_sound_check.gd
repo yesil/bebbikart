@@ -1,9 +1,10 @@
 extends SceneTree
 ## Headless check of the race-end sounds (audio/audio_director.gd) in the real mock race: every
 ## lap that ends gets its verdict's cue (main.gd _verdict -> AudioDirector.VERDICT_CUE), cues never
-## stack (a smaller one never starts while a bigger or equal one sounds), the music dips under a
-## cue to its depth and comes back after it, the crowd cheers come at their times, and the podium
-## at a session's end gets its fanfare. main.gd reads the same user args (pass --kit).
+## stack (a smaller one never starts while a bigger or equal one sounds, its racer gets a ding
+## instead), the music dips under a cue to its depth and comes back after it, the crowd cheers
+## come at their times, and the podium at a session's end gets its fanfare. main.gd reads the
+## same user args (pass --kit).
 ##   godot --headless --fixed-fps 60 --path apps/game --script res://tools/end_sound_check.gd \
 ##     -- --kit --racers=4 [--secs=240]
 ## Exits 1 if a rule is broken or no lap ended. Game time throughout (the director's _now).
@@ -88,6 +89,10 @@ func _check_log(entries: Array) -> void:
 				if last_cue.is_empty() or float(e["t"]) >= float(last_cue["t"]) + float(last_cue["len"]) \
 						or int(e["rank"]) > int(last_cue["rank"]):
 					problems.append("%s cue at %.2f s was left out with no bigger cue playing" % [e["kind"], e["t"]])
+				# Its racer still hears something at once (an OOPS! has had its bump).
+				var ding: Dictionary = entries[i + 1] if i + 1 < entries.size() else {}
+				if e["kind"] != "oops" and (ding.get("what", "") != "ding" or ding.get("run", "") != e["run"]):
+					problems.append("%s cue for %s at %.2f s was left out without a ding" % [e["kind"], e["run"], e["t"]])
 	if ends == 0:
 		problems.append("no lap ended in %.0f s" % _secs)
 	# Crowd cheers at their planned times, for the cues nothing cut off.

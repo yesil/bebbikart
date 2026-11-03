@@ -7,14 +7,16 @@
 # record or champion, a climbing one for a personal best, a short one for any other finish, a soft
 # "aww" for OOPS!; the session's podium gets the crown's fanfare in full. Cues never stack: a
 # bigger one cuts a smaller one off, a smaller one coming during a bigger one is left out (its
-# racer still honks). The music dips under a cue for its whole length (an Amplify on the Music
-# bus, audio_settings.gd), the crowd cheers just after the hit and the racer's horn comes once the
-# fanfare has had its say. The cues are rendered by scripts/race-end-cues.js.
+# racer gets a short ding at once and honks once the bigger one is over). The music dips under a
+# cue for its whole length (an Amplify on the Music bus, audio_settings.gd), the crowd cheers just
+# after the hit and the racer's horn comes once the fanfare has had its say. The cues are rendered
+# by scripts/race-end-cues.js.
 # Each racer sounds like its ride: RacerSpec.sound picks the engine loop (putter, rocket, hooves…),
 # its pitch, and a horn played on a perfect boost and at the finish. A racer without a sound
 # (older specs) is logged once and stays silent; nothing is guessed.
 # CPU: 2 music streams, 3 engine voices (only the followed racer and the 2 nearest the camera), 3 ambience loops, a pool of 12 one-shots,
-# 2 cue players, a low-pass and an amplify (the dip) on the Music bus. Decisions run at 10 Hz.
+# 2 cue players and 4 voices of their own for the cues' crowd, horns and dings, a low-pass and an
+# amplify (the dip) on the Music bus. Decisions run at 10 Hz.
 # Every file is loaded at setup; a missing one is an error on screen and in the log.
 extends Node
 
@@ -34,6 +36,7 @@ const SFX := {
 	"start": "sfx/start.ogg",
 	"lap": "sfx/lap.ogg",
 	"best_lap": "sfx/end_best_lap.ogg",
+	"ding": "sfx/end_best_lap.ogg",   # a lap end whose cue is left out under a bigger one
 	"cheer": "sfx/cheer.wav",
 	"failed": "sfx/failed.ogg",
 	"boost": "sfx/boost.ogg",
@@ -80,10 +83,10 @@ const VERDICT_CUE := {"champion": "record", "record": "record", "best": "best", 
 	"short": "finish", "failed": "oops"}
 # Per-sound level (dB) and minimum gap between plays (s). The cheer file is quiet (about -29
 # LUFS), hence its boost; the roadside crowd ("crowd") is the same file kept far back.
-const LEVEL := {"start": -10.0, "lap": -8.0, "best_lap": -3.0, "cheer": 8.0,
+const LEVEL := {"start": -10.0, "lap": -8.0, "best_lap": -3.0, "ding": -6.0, "cheer": 8.0,
 	"failed": -6.0, "boost": -6.0, "bump": -8.0, "land": -8.0, "splash": -4.0, "thunder": -3.0,
 	"moo": -3.0, "baa": -4.0, "boing": -5.0, "cowbell": -15.0, "coin": -9.0, "crowd": -15.0}
-const GAP := {"start": 0.5, "lap": 0.3, "best_lap": 1.0, "cheer": 0.0,
+const GAP := {"start": 0.5, "lap": 0.3, "best_lap": 1.0, "ding": 0.0, "cheer": 0.0,
 	"failed": 0.3, "boost": 0.15, "bump": 0.4, "land": 0.3, "splash": 0.5, "thunder": 0.0,
 	"moo": 0.8, "baa": 0.4, "boing": 0.3, "cowbell": 0.8, "coin": 0.05, "crowd": 2.5}
 
@@ -104,6 +107,7 @@ const BEST_LAP_DIP := -5.0
 const CUE_CUT := 300.0          # dB/s a cue fades out when a bigger one cuts it off
 const LOG_MAX := 400            # cue_log entries kept
 const VOICES := 12
+const END_VOICES := 4           # the cues' own: their crowd and horns never wait for coins
 const ALP_SEGS := ["farm", "cobbles", "ridge", "alpbach"]   # village: where cow bells ring
 const COWBELL_EVERY := Vector2(2.0, 5.5)
 const ENGINES := 3
@@ -128,14 +132,15 @@ var _dip: AudioEffectAmplify    # on the Music bus: the dip under a cue
 var _dip_depth := 0.0           # dB the music dips to while a cue holds it
 var _dip_until := 0.0           # the dip holds until then (and while a music switch is pending)
 var _voices: Array[AudioStreamPlayer] = []
+var _end_voices: Array[AudioStreamPlayer] = []
 var _cues: Array[AudioStreamPlayer] = []   # two, so a cue cut off can fade under the next
 var _cue := 0                   # the deck of the cue playing (or last played)
 var _cue_rank := 0
 var _cue_until := 0.0           # when the cue playing ends
 var _cue_id := 0                # numbers each cue, so a cut one's crowd and horn are dropped too
 var _later: Array = []          # [{at, cue, what, fn}] crowd cheers and horns placed after a cue's hit
-## What the end cues did, for tools/end_sound_check.gd: {t, what (run_end, cue, left_out, cheer,
-## horn, start), verdict, kind, run, rank, len, id}. The last LOG_MAX entries.
+## What the end cues did, for tools/end_sound_check.gd: {t, what (run_end, cue, left_out, ding,
+## cheer, horn, start), verdict, kind, run, rank, len, id}. The last LOG_MAX entries.
 var cue_log: Array = []
 var _last := {}                 # sound -> time it last played
 var _engines: Array[AudioStreamPlayer] = []
@@ -217,6 +222,11 @@ func setup(p_sim, p_track: String, p_camera: Node3D, mute: bool) -> bool:
 		p.bus = "Sfx"
 		add_child(p)
 		_cues.append(p)
+	for i in END_VOICES:
+		var p := AudioStreamPlayer.new()
+		p.bus = "Sfx"
+		add_child(p)
+		_end_voices.append(p)
 	for i in ENGINES:
 		var p := AudioStreamPlayer.new()
 		p.bus = "Sfx"
@@ -360,11 +370,14 @@ func _cue_play(kind: String, run_id: String) -> void:
 	var c: Dictionary = END_CUES[kind]
 	var horn: Dictionary = _horn_sound(run_id) if run_id != "" and float(c["horn"]) >= 0.0 else {}
 	if _now < _cue_until and int(c["rank"]) <= _cue_rank:
-		# A bigger moment is still sounding: this racer only honks, once it is over.
+		# A bigger moment is still sounding: this racer gets a ding now (its HUD verdict pops up
+		# with it) and honks once the bigger one is over. An OOPS! has had its bump already.
 		print("audio: %s cue for %s left out under a playing cue (rank %d)" % [kind, run_id, _cue_rank])
 		_log({"what": "left_out", "kind": kind, "run": run_id, "rank": int(c["rank"]), "id": _cue_id})
+		if kind != "oops" and _start_in(_end_voices, "ding", LEVEL["ding"], 1.0):
+			_log({"what": "ding", "kind": kind, "run": run_id, "id": _cue_id})
 		if not horn.is_empty():
-			_later.append({"at": _cue_until, "cue": _cue_id, "what": "horn", "fn": _horn_play.bind(run_id, horn)})
+			_later.append({"at": _cue_until, "cue": _cue_id, "what": "horn", "fn": _horn_play.bind(run_id, horn, _end_voices)})
 		return
 	if _now < _cue_until:
 		# A smaller cue is sounding (or about to start): it fades out under this one
@@ -389,9 +402,9 @@ func _cue_play(kind: String, run_id: String) -> void:
 	else:
 		p.play()
 	for ch in c["cheer"]:
-		_later.append({"at": _now + float(ch[0]), "cue": _cue_id, "what": "cheer", "fn": _start.bind("cheer", LEVEL["cheer"], float(ch[1]))})
+		_later.append({"at": _now + float(ch[0]), "cue": _cue_id, "what": "cheer", "fn": _start_in.bind(_end_voices, "cheer", LEVEL["cheer"], float(ch[1]))})
 	if not horn.is_empty():
-		_later.append({"at": _now + float(c["horn"]), "cue": _cue_id, "what": "horn", "fn": _horn_play.bind(run_id, horn)})
+		_later.append({"at": _now + float(c["horn"]), "cue": _cue_id, "what": "horn", "fn": _horn_play.bind(run_id, horn, _end_voices)})
 	_dip_for(float(c["dip"]), start + length - DIP_TAIL_S)
 	_log({"what": "cue", "kind": kind, "run": run_id, "rank": int(c["rank"]), "len": start + length, "id": _cue_id})
 	print("audio: %s cue%s at %.2f s (%.1f s, music %+.0f dB)" % [kind, " for " + run_id if run_id != "" else "", _now, length, float(c["dip"])])
@@ -555,22 +568,21 @@ static func _coin_sound() -> AudioStreamWAV:
 func _play(key: String, pitch: float = 1.0) -> bool:
 	if _now - float(_last.get(key, -100.0)) < GAP[key]:
 		return false
-	if _start(key, LEVEL[key], pitch):
+	if _start_in(_voices, key, LEVEL[key], pitch):
 		_last[key] = _now
 		return true
 	return false
 
 
-## Starts a one-shot on a free voice; false if all are busy.
-func _start(key: String, db: float, pitch: float) -> bool:
-	for p in _voices:
+## Starts a one-shot on a free voice of the pool; false if all are busy.
+func _start_in(pool: Array[AudioStreamPlayer], key: String, db: float, pitch: float) -> bool:
+	for p in pool:
 		if not p.playing:
 			p.stream = _streams["sfx:" + key]
 			p.volume_db = db
 			p.pitch_scale = pitch
 			p.play()
 			return true
-	print("audio: all %d voices busy, %s left out" % [VOICES, key])
 	return false
 
 
@@ -588,7 +600,7 @@ func _near(run_id: String) -> bool:
 func _horn(run_id: String) -> void:
 	var h := _horn_sound(run_id)
 	if not h.is_empty():
-		_horn_play(run_id, h)
+		_horn_play(run_id, h, _voices)
 
 
 ## A racer's horn stream and pitch ({} if it has no sound), looked up now: a horn placed after
@@ -603,12 +615,12 @@ func _horn_sound(run_id: String) -> Dictionary:
 	return {"stream": _streams["horn:" + String(so["horn"])], "pitch": float(so["pitch"])}
 
 
-func _horn_play(run_id: String, h: Dictionary) -> void:
+func _horn_play(run_id: String, h: Dictionary, pool: Array[AudioStreamPlayer]) -> void:
 	if _now - float(_horn_last.get(run_id, -100.0)) < HORN_RACER_GAP:
 		return
 	if _now - float(_last.get("horn", -100.0)) < HORN_GAP:
 		return
-	for p in _voices:
+	for p in pool:
 		if not p.playing:
 			_last["horn"] = _now
 			_horn_last[run_id] = _now
