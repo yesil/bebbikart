@@ -42,6 +42,7 @@ var _braced := false
 var _body: Node3D
 var _was_air := false
 var _was_bumped := false
+var _was_knocked := false # hit a cow, sheep, cheese wheel or hay bale (sim/obstacles.gd)
 
 
 func setup(p_racer, spec: Dictionary, drawing: Texture2D, p_nickname: String) -> void:
@@ -118,6 +119,10 @@ func sync() -> void:
 	if bumped and not _was_bumped:
 		toy.bump()
 	_was_bumped = bumped
+	var knocked: bool = racer.obstacle_t > 0.0
+	if knocked and not _was_knocked:
+		toy.bump()
+	_was_knocked = knocked
 
 
 ## Half the racer's footprint (x across, y along the road), metres: the sim's own (its built

@@ -177,6 +177,52 @@ godot --headless --path . --script res://tools/village_world_check.gd
 
 Look: the buildings are built in code at load (`chalet_builder.gd`, about 0.7 s on an M4 Max), merged per material in 96 m chunks; small pieces (geraniums, glazing bars, log ends, cut-out boards, rafters) sit in meshes on a 48 m grid without shadows, hidden 100 m from their centre. Geraniums are a lumpy leaf cushion plus round heads, with leaves and florets painted by `house_flowers.gdshader`. The Kenney kit (props only now) has its colour map recoloured to a Swiss palette at every bake (`village_kit.gd` `_recolour`). Close street views of each building kind: `tools/village_shots.gd` `house_*` viewpoints. Trees and flowers are the countryside's prepared plant meshes (`world/vegetation/meshes/`, from `tools/bake_world.gd`), so they sway with the wind. The village roads use their own calmer asphalt (`world/village/materials/road_asphalt.tres`, `VILLAGE_ROAD` in the bake): the shared texture's stones and red flecks stood out in the village sun. Animals are skinned models posed on their rest pose for the MultiMesh (`instanced_model.gd`).
 
+### Village surprises
+
+Cows wander onto the road and graze there, sheep cross it in little flocks, cheese wheels roll across and a cart drops hay bales, at random times and places (contracts §2j). Steering round them costs nothing; hitting one knocks the kart about (about 1.4 s); hands off, the autopilot slows down and steers round them (about 0.5 s each). Both halves share them, like the weather.
+
+| File | What |
+|---|---|
+| `sim/obstacles.gd` | Where and when they turn up (`VillageCourse.obstacle_spots`), how they move, what a kart hits, what the autopilot sees ahead |
+| `world/obstacle_views.gd` | Draws them: the animals turning smoothly and watching the karts, cheese wheels, hay bales, the "!" over each group, the "MOO!" a hit pops up, a puff of wool when a sheep is hit |
+| `world/toy_animal.gd` | The toy cow (Swiss dairy cow with a brass bell) and Valais Blacknose sheep, built from the racer kit's parts (each moving part one merged, vertex-coloured mesh, cached) and moved in code: walk, graze and chew, gallop or bounce off, look at karts, hop at a near miss, spin or tumble with dizzy eyes when hit |
+| `tools/obstacle_check.gd` | Hands off, kid-steered and wild-thumbed karts with and without them: met and hit per lap, the time a hit and a careful pass cost, no new fails |
+| `tools/obstacle_shots.gd` | Screenshots (windowed): each kind on its road, `--close` the cow and sheep up close and reacting to a knock, `--hit` the race camera round a kart hitting each kind |
+
+The game manager switches them on or off in the options menu ("Surprises on the road", kept for the next start); `--no-obstacles` leaves them out of a game run. The balance tools (sweep, village_laps, start_crowd_check) build their sims without them, so their baselines mean the same.
+
+```sh
+godot --headless --path . --script res://tools/obstacle_check.gd
+```
+
+### Chocolate coins
+
+Every racer gets its own gold-foil chocolate coins on the village road: seven short lines of five, laid afresh each lap at random places on the plain stretches (never on a fork's way, its run-in, a boost strip, the start or the roundabout), straight, slanting across the road or curving. Each coin counts (the half's plate shows "12/35"); a whole line taken surges the kart like a boost arrow, a little less. Hands off, the autopilot doesn't go for them. In a split screen each half shows only its own racer's coins (`DuelScreen.COIN_LAYER`, which the other half's camera leaves out). A kid steering through them gains about 1.5 s a lap (`tools/coin_check.gd`).
+
+| File | What |
+|---|---|
+| `sim/coins.gd` | Lays a lap of lines from `VillageCourse.coin_ranges` |
+| `sim/racer.gd` `_catch_coins` | Takes them, surges the kart on a whole line; bots go for them |
+| `world/coin_views.gd` | The spinning coins, each racer's on its side's layer; a taken one jumps and spins away |
+| `tools/coin_check.gd` | Hands off and kid-steered karts with and without coins; 500 layouts checked |
+
+The coin's "bling" is made in `audio/audio_director.gd` (`_coin_sound`), no file. `--no-coins` leaves them out of a game run; the balance tools build their sims without them.
+
+```sh
+godot --headless --path . --script res://tools/coin_check.gd
+```
+
+### Village life
+
+`world/village_life.gd` makes the village busy without touching the race: a crowd of toy racers parked along the start line, the main street, the church hill, the mill, the dairy and the square, facing the oncoming karts, turning their heads to each kart and cheering, waving or clapping as it passes (the crowd's cheer plays for the kart the music follows); red, white and yellow bunting across the main street, the start line, the cobbles and the square, fluttering harder in the wind; pigeons on the roundabout's island that take off as a kart comes round, circle the fountain and settle again; two hot-air balloons drifting over the valley; and cow bells while the followed kart is out on the alp.
+
+The crowd is the session's own racers in server mode (each ready racer stands in up to three places, different groups first; a racer leaving the session leaves the crowd) and the kit's sample racers in mock mode. The places are found once the village plan is laid out (clear of houses, water and every road's corridor, on flat ground, 15 m apart). `--no-life` leaves it all out.
+
+```sh
+godot --path . --resolution 1280x720 --script res://tools/village_life_shots.gd -- --kit --out=/tmp/life
+```
+
+
 ## Balance snapshot
 
 Results from `sweep --builds=60 --seeds=2`, solo racers with perfect boosts (before thumb steering: the sweep now steers with `--steer=kid`), on the 2026-10-31 course redesign (arc-built routes, Y-split forks).

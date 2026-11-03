@@ -52,6 +52,14 @@ var free_north := 0.0
 var roundabout := {}
 ## The forks' ways and the side each leaves on (sim/forks.gd ways()).
 var forks := {}
+## Village surprises (sim/obstacles.gd): where cows, sheep, cheese wheels and hay bales may turn
+## up, {seg, a, b (metres along it), kinds}. Plain stretches only, clear of the start, the boost
+## arrows and the run-in to each fork.
+var obstacle_spots: Array = []
+## Chocolate coins (sim/coins.gd): where their lines may lie, {seg, a, b (metres along it)}.
+## Plain stretches only: clear of the start, the boost arrows, the roundabout, the forks and
+## the run-in to each (a kid steering for a fork's side needs that road free).
+var coin_ranges: Array = []
 
 
 func _init() -> void:
@@ -74,6 +82,25 @@ func _init() -> void:
 		_error("loop misses the start line by %.2f m" % miss)
 	for e in Course.stretch_errors(segments, NAME):
 		_error(e)
+	# Over the church hill past the boost arrows, the farm track, the cobbles by the dairy, the
+	# alp ridge, past the mountain stream (a cheese wheel group runs up to 11 m past its own spot).
+	var hill_end: float = (segments["hills2"]["route"] as Route).length - Tuning.FORK_APPROACH_M - 5.0
+	obstacle_spots = [
+		{"seg": "hills2", "a": 48.0, "b": hill_end, "kinds": ["cow", "hay", "cheese"]},
+		{"seg": "farm", "a": 8.0, "b": 32.0, "kinds": ["cow", "sheep"]},
+		{"seg": "cobbles", "a": 5.0, "b": 12.0, "kinds": ["sheep", "cheese"]},
+		{"seg": "ridge", "a": 12.0, "b": 78.0, "kinds": ["cow", "sheep"]},
+		{"seg": "alpbach", "a": 24.0, "b": 40.0, "kinds": ["cow", "sheep"]},
+	]
+	var seg_len := func(id: String) -> float: return (segments[id]["route"] as Route).length
+	coin_ranges = [
+		{"seg": "hills2", "a": 36.0, "b": seg_len.call("hills2") - Tuning.FORK_APPROACH_M * 0.75},
+		{"seg": "farm", "a": 3.0, "b": seg_len.call("farm") - 3.0},
+		{"seg": "cobbles", "a": 2.0, "b": seg_len.call("cobbles") - 2.0},
+		{"seg": "ridge", "a": 4.0, "b": seg_len.call("ridge") - 4.0},
+		{"seg": "alpbach", "a": 2.0, "b": seg_len.call("alpbach") - Tuning.FORK_APPROACH_M * 0.75},
+		{"seg": "bends", "a": 3.0, "b": float(roundabout["s0"]) - 4.0},
+	]
 	forks = Forks.ways(self)
 	for e in Forks.errors(forks):
 		_error(e)

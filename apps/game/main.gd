@@ -11,6 +11,9 @@
 #   --screenshot=path.png [--shot-at=SEC], --log=none|summary|full,
 #   --kit (mock mode: fake racers built with the racer kit from res://racer_kit/samples, in turn),
 #   --quality=low|medium|high (default: last pick in the options menu, else medium),
+#   --no-obstacles (village: no cows, sheep, cheese wheels or hay bales turn up on the road),
+#   --no-coins (village: no chocolate coins on the road),
+#   --no-life (village: no crowd, bunting, pigeons or balloons),
 #   --language=en|de (default: last pick in the options menu, else config.language; server mode
 #   sends it to the server so every phone follows it)
 # One way to race (contracts §2i, king of the hill): the racers take turns from a line, one lap
@@ -51,6 +54,11 @@ const AudioDirector = preload("res://audio/audio_director.gd")
 const DuelScreen = preload("res://world/duel_screen.gd")
 const DuelHud = preload("res://ui/duel_hud.gd")
 const SteerMarks = preload("res://world/steer_marks.gd")
+const Obstacles = preload("res://sim/obstacles.gd")
+const ObstacleViews = preload("res://world/obstacle_views.gd")
+const Coins = preload("res://sim/coins.gd")
+const CoinViews = preload("res://world/coin_views.gd")
+const VillageLife = preload("res://world/village_life.gd")
 
 ## Graphics presets (options menu, --quality=low|medium|high). render_height caps the 3D
 ## resolution (0 = native; upscaled with MetalFX on Metal, FSR elsewhere), so a fullscreen 5K
@@ -116,6 +124,7 @@ var language_sent := ""
 var _village_plan = null   # world/village/village_plan.gd, built on a worker for the camera blockers
 var _plan_task := -1       # WorkerThreadPool task building it; -1 when none is running
 var _plan_terrain: Node = null
+var village_life: VillageLife = null   # the village's crowd, bunting, pigeons and balloons
 ## The line and the halves (contracts §2i).
 var duel_screen: DuelScreen          # the split screen's halves and their cameras
 var duel_hud: DuelHud                # names, times, lights, verdicts per half; the crown and the line
@@ -123,6 +132,7 @@ var duel_sides := {}                 # runId -> "left" | "right" (run.start side
 var queue_state := {}                # last queue.updated
 var bests := {}                      # playerId -> best time (on a loop, best lap) in ms this session
 var _front_was := {}                 # side -> instance id of the racer view its camera showed from the front last frame, 0 if none
+var obstacle_views: ObstacleViews    # the village surprises on the road (sim/obstacles.gd), or null
 
 
 func _ready() -> void:
@@ -165,6 +175,24 @@ func _ready() -> void:
 		return
 	sim = Sim.new(course, config, seed_)
 	sim.solo = true  # every run has its own start lights in its half; karts pass through each other
+	# Village surprises: cows, sheep, cheese wheels and hay bales turn up on the road at random
+	# (the game manager can switch them off in the options menu; --no-obstacles leaves them out).
+	if course.get("obstacle_spots") != null and not args.has("no-obstacles"):
+		sim.obstacles = Obstacles.new(course, seed_ * 13 + 5)
+		var bad: String = sim.obstacles.check()
+		if bad != "":
+			push_error("village surprises: " + bad)
+			get_tree().quit(1)
+			return
+		sim.obstacles.enabled = bool(_saved_setting("game", "surprises", true))
+	# Chocolate coins: each racer's own lines of coins to steer through, new ones every lap.
+	if course.get("coin_ranges") != null and not args.has("no-coins"):
+		sim.coins = Coins.new(course)
+		var bad: String = sim.coins.check()
+		if bad != "":
+			push_error("chocolate coins: " + bad)
+			get_tree().quit(1)
+			return
 	if args.has("weather"):
 		var w: Array = FORCED.get(args["weather"], [0.0, 0.0])
 		sim.weather.force(w[0], w[1], 30.0)
@@ -233,6 +261,24 @@ func _build_scene() -> void:
 		push_error("steering marks: " + marks_err)
 		_result(("steering marks: " + marks_err).left(160))
 		hud.problem("steering marks: " + marks_err)
+	if sim.obstacles != null:
+		obstacle_views = ObstacleViews.new()
+		add_child(obstacle_views)
+		var ob_err := obstacle_views.setup(sim)
+		if ob_err != "":
+			push_error("village surprises: " + ob_err)
+			_result(("village surprises: " + ob_err).left(160))
+			hud.problem("village surprises: " + ob_err)
+	if sim.coins != null:
+		var coin_views := CoinViews.new()
+		add_child(coin_views)
+		var coin_err := coin_views.setup(sim, func(rid: String) -> String: return String(duel_sides.get(rid, "")) if duel_screen != null and duel_screen.split else "")
+		if coin_err != "":
+			push_error("chocolate coins: " + coin_err)
+			_result(("chocolate coins: " + coin_err).left(160))
+			hud.problem("chocolate coins: " + coin_err)
+	if track == "village" and not args.has("no-life"):
+		_setup_village_life()
 	fx = WeatherFx.new()
 	add_child(fx)
 	fx.setup(sim.weather, env, sun)
@@ -303,11 +349,23 @@ func _make_menu() -> void:
 	menu.quit_pressed.connect(_quit)
 	menu.quality_chosen.connect(func(id: String): apply_quality(id); _save_setting("graphics", "quality", id))
 	menu.language_chosen.connect(_choose_language)
+	menu.surprises_toggled.connect(_toggle_surprises)
+	menu.set_surprises(sim.obstacles != null and sim.obstacles.enabled, sim.obstacles != null)
 	if quality != "":
 		menu.set_quality(quality)
 	if assets != null:
 		menu.set_session(net.session_status)
 		menu.set_join_server(net.http_base())  # the phone address and QR code (GET /api/join)
+
+
+## Options menu: the village surprises on or off (kept for the next start). Off, no new ones turn
+## up; the ones on the road leave in their own time.
+func _toggle_surprises(on: bool) -> void:
+	if sim.obstacles == null:
+		return
+	sim.obstacles.enabled = on
+	_save_setting("game", "surprises", on)
+	print("village surprises: %s" % ("on" if on else "off"))
 
 
 ## --kit: every sample RacerSpec in res://racer_kit/samples, validated. False (and quits with the
@@ -655,6 +713,31 @@ func _finish_village_blockers() -> void:
 	camera.blockers = b
 	duel_screen.set_blockers(b)
 	duel_hud.set_blockers(b)
+	if village_life != null:
+		var err := village_life.place(_village_plan, func(x: float, z: float) -> float: return float(data.call("get_height", Vector3(x, 0.0, z))))
+		if err != "":
+			push_error("village life: " + err)
+			_result(("village life: " + err).left(160))
+			hud.problem("village life: " + err)
+
+
+## The village's crowd (the session's own racers in server mode, the kit's samples in mock mode),
+## bunting, pigeons and balloons. Placed once the village plan is laid out.
+func _setup_village_life() -> void:
+	village_life = VillageLife.new()
+	add_child(village_life)
+	village_life.setup(course, sim)
+	village_life.on_cheer = func() -> void: audio.crowd_cheer()
+	if assets != null:
+		assets.racer_ready.connect(func(pid: String) -> void: village_life.add_racer(pid, assets.spec_for(pid)))
+		return
+	for path in SpecFolders.list(SpecFolders.SAMPLES):
+		var spec = JSON.parse_string(FileAccess.get_file_as_string(path))
+		if typeof(spec) != TYPE_DICTIONARY:
+			push_error("village life: %s is not a JSON object" % path)
+			hud.problem("village life: %s is not a JSON object" % path)
+			continue
+		village_life.add_racer(path.get_file(), spec)
 
 
 ## A shot of each village fork from just before its split, looking down both branches.
@@ -839,6 +922,11 @@ func _on_roster(roster: Array) -> void:
 		colors[pid] = hud.color_for(pid)
 	if assets != null:
 		assets.update(roster)
+	# Server mode: the crowd is the session's racers (mock mode's is the kit's samples).
+	if village_life != null and assets != null:
+		for pid in village_life.racers():
+			if not still.has(pid):
+				village_life.remove_racer(pid)
 
 
 func _on_racer_ready(player_id: String) -> void:
@@ -848,7 +936,12 @@ func _on_racer_ready(player_id: String) -> void:
 
 func _outgoing(type: String, pl: Dictionary) -> void:
 	match type:
-		"sim.boost", "sim.bump", "sim.fork":
+		"sim.boost", "sim.bump", "sim.fork", "sim.obstacle_spawned", "sim.coin":
+			return
+		"sim.obstacle":
+			print("surprise: %s hit a %s (%.1f s)" % [_nick_of(pl["runId"]), pl["kind"], run_time])
+			if obstacle_views != null:
+				obstacle_views.on_hit(pl)
 			return
 		"sim.removed":
 			var v: Node = views.get(pl["runId"])
@@ -913,6 +1006,8 @@ func _process(delta: float) -> void:
 	racing.sort_custom(func(a, b): return a.lap + a.progress() > b.lap + b.progress())
 	_update_duel(delta)
 	audio.follow_run = follow_run
+	if village_life != null:
+		village_life.follow_run = follow_run
 	for id in views:
 		views[id].parked = sim.on_grid(id)
 		views[id].sync()
@@ -1033,6 +1128,10 @@ func _tag_side_layers(n: Node, side: String) -> void:
 ## server's queue.updated with the new champion comes after it).
 func _duel_verdict(run_id: String, pid: String, ok: bool, ms: int, reason: String) -> void:
 	var side: String = duel_sides[run_id] if duel_screen.split else "left"
+	# The chocolate coins taken on the lap, under the verdict.
+	var v = views.get(run_id)
+	if v != null and not v.racer.coins.is_empty():
+		duel_hud.coins_result(side, I18n.f("duel.coins_lap", [v.racer.coins_taken, v.racer.coins.size()]))
 	if not ok:
 		duel_hud.result(side, I18n.t("hud.oops").to_upper() + "!", I18n.t("fail." + reason) if reason != "" else "", false)
 		return

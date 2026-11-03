@@ -115,6 +115,7 @@ export const RUN_EVENT_KINDS = /** @type {const} */ ([
   "bumped_other",
   "missed_exit", // loop tracks: went round the roundabout again
   "scrape", // held along a road's rail, e.g. blown or slid against it (contracts §2g)
+  "obstacle", // village surprises: hit a cow, sheep, cheese wheel or hay bale, or slowed down for one hands off (§2j)
 ]);
 /** Languages the game and phones speak. The game manager picks one on the big screen (config.language). */
 export const LANGUAGES = /** @type {const} */ (["en", "de"]);

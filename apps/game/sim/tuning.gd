@@ -127,6 +127,29 @@ const BOOST_PERFECT_S := 1.2
 const BOOST_ARROW_HALF := 1.1     # half width of a strip (m)
 const BOOST_ARROW_CATCH := 0.3    # the kart's centre may be this far outside the strip and still catch it
 
+# Village surprises (sim/obstacles.gd): cows, sheep, cheese wheels and hay bales on the road. A
+# kart that hits one keeps OBSTACLE_KEEP of its speed, hops, is kicked aside and drives at
+# OBSTACLE_RECOVER_MULT for OBSTACLE_RECOVER_S. Hands off, the autopilot steers round what it
+# sees within OBSTACLE_SEE_M (+ 1 m per m/s) and slows to OBSTACLE_SLOW_V within OBSTACLE_SLOW_M
+# of one, so a kid who steers past early keeps full speed.
+const OBSTACLE_KEEP := 0.15
+const OBSTACLE_HOP_VY := 2.4
+const OBSTACLE_KICK_VD := 2.5
+const OBSTACLE_WOBBLE := 0.3
+const OBSTACLE_RECOVER_S := 2.0
+const OBSTACLE_RECOVER_MULT := 0.55
+const OBSTACLE_SEE_M := 24.0
+const OBSTACLE_SLOW_M := 20.0
+const OBSTACLE_SLOW_V := 12.0
+const OBSTACLE_MARGIN := 0.5      # metres the autopilot keeps from one, beyond the kart's side
+# Chocolate coins (sim/coins.gd): lines of coins on the road for a steering kid. A kart's centre
+# within COIN_CATCH of a coin (beyond its own half width and half length) takes it; a whole line
+# taken surges the kart like a boost arrow, a little less.
+const COIN_CATCH := 0.35
+const COIN_LINE_BOOST := 0.3
+const COIN_LINE_BOOST_S := 1.0
+const COIN_LINE_KICK := 1.04       # speed multiplier the moment a line is complete
+
 # Collisions. Each racer is its footprint rectangle along its yaw, as wide and long as its built
 # toy (main.gd measures it). Sizes are clamped so a big hat or wings never make a racer a wall.
 # Headless tools and mock racers pass DEFAULT_SIZE.

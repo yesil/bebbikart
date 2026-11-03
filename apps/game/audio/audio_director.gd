@@ -35,6 +35,14 @@ const SFX := {
 	"land": "sfx/land.ogg",
 	"splash": "sfx/splash.ogg",
 	"thunder": "ambience/thunder.ogg",
+	# Village surprises (sim/obstacles.gd): a kart hits a cow, a sheep or a cheese wheel; a cow
+	# bell when a cow turns up. Village life (world/village_life.gd): the roadside crowd's cheer,
+	# cow bells on the alp.
+	"moo": "racers/horn_moo.wav",
+	"baa": "sfx/sheep_baa.ogg",
+	"boing": "racers/horn_boing.wav",
+	"crowd": "sfx/cheer.wav",
+	"cowbell": "racers/horn_bell.wav",
 }
 const AMBIENCE := {
 	"countryside": "ambience/countryside_birds.ogg",
@@ -44,9 +52,11 @@ const AMBIENCE := {
 }
 # Per-sound level (dB) and minimum gap between plays (s).
 const LEVEL := {"start": -10.0, "lap": -8.0, "best_lap": -4.0, "finish": -2.0, "cheer": -6.0,
-	"failed": -6.0, "boost": -6.0, "bump": -8.0, "land": -8.0, "splash": -4.0, "thunder": -3.0}
+	"failed": -6.0, "boost": -6.0, "bump": -8.0, "land": -8.0, "splash": -4.0, "thunder": -3.0,
+	"moo": -3.0, "baa": -4.0, "boing": -5.0, "cowbell": -15.0, "coin": -9.0, "crowd": -15.0}
 const GAP := {"start": 0.5, "lap": 0.3, "best_lap": 3.0, "finish": 3.0, "cheer": 3.0,
-	"failed": 2.0, "boost": 0.15, "bump": 0.4, "land": 0.3, "splash": 0.5, "thunder": 0.0}
+	"failed": 2.0, "boost": 0.15, "bump": 0.4, "land": 0.3, "splash": 0.5, "thunder": 0.0,
+	"moo": 0.8, "baa": 0.4, "boing": 0.3, "cowbell": 0.8, "coin": 0.05, "crowd": 2.5}
 
 const RACERS_DIR := "racers/"   # engine_<name>.wav loops and horn_<name>.wav one-shots
 const HORN_DB := -4.0
@@ -61,6 +71,8 @@ const PADDOCK_DB := -4.5        # paddock music sits lower (about 60%)
 const DUCK_DB := -6.0           # music under a finish
 const DUCK_S := 2.0
 const VOICES := 12
+const ALP_SEGS := ["farm", "cobbles", "ridge", "alpbach"]   # village: where cow bells ring
+const COWBELL_EVERY := Vector2(2.0, 5.5)
 const ENGINES := 3
 const ENGINE_RANGE := 45.0      # metres from the camera where an engine fades out
 const DRY_CUTOFF := 20000.0
@@ -90,6 +102,7 @@ var _thunder_t := 20.0
 var _was_air := false
 var _was_water := false
 var _rng := RandomNumberGenerator.new()
+var _cowbell_at := 0.0
 var _horn_last := {}            # run_id -> time of its last horn
 var _no_sound := {}             # player_id -> true once its missing sound was logged
 var _music_bus := -1
@@ -125,6 +138,8 @@ func setup(p_sim, p_track: String, p_camera: Node3D, mute: bool) -> bool:
 			if s == null:
 				problems.append("missing audio file %s" % path)
 			_streams["%s:%s" % [kind, n]] = s
+	# A chocolate coin's "bling" (sim/coins.gd) is made here, not loaded: two quick bell notes.
+	_streams["sfx:coin"] = _coin_sound()
 	if not problems.is_empty():
 		_show_errors(problems)
 		return false
@@ -191,6 +206,27 @@ func on_event(type: String, pl: Dictionary) -> void:
 		"sim.bump":
 			if _near(pl["hitter"]) or _near(pl["victim"]):
 				_play("bump")
+		"sim.obstacle":
+			_play("bump")
+			match String(pl["kind"]):
+				"cow":
+					_play("moo", _rng.randf_range(0.9, 1.05))
+					_play("cowbell", 1.3)    # its bell clangs as it spins
+				"sheep":
+					_play("baa", _rng.randf_range(0.95, 1.15))
+				"cheese":
+					_play("boing", 0.9)
+				"hay":
+					_play("land", 0.7)
+		"sim.obstacle_spawned":
+			if pl["kind"] == "cow":
+				_play("cowbell", _rng.randf_range(0.95, 1.1))
+		"sim.coin":
+			if _near(pl["runId"]):
+				# Each coin of a line a little higher; the whole line surges like a boost arrow.
+				_play("coin", 1.0 + 0.07 * (int(pl["inLine"]) - 1))
+				if pl["lineDone"]:
+					_play("boost", 1.15)
 
 
 func _physics_process(_delta: float) -> void:
@@ -223,6 +259,26 @@ func _process(delta: float) -> void:
 	_decide_music()
 	_update_engines()
 	_update_weather()
+	_update_alp()
+
+
+# ---------------------------------------------------------------- village life
+
+## The roadside crowd cheers the kart the music follows (world/village_life.gd).
+func crowd_cheer() -> void:
+	if not _music.is_empty():
+		_play("crowd", _rng.randf_range(0.95, 1.1))
+
+
+## Cow bells now and then while the followed kart is out on the alp (village).
+func _update_alp() -> void:
+	if track != "village" or _now < _cowbell_at:
+		return
+	var r: Racer = sim.by_run.get(follow_run)
+	if r == null or not r.seg_id in ALP_SEGS:
+		return
+	_play("cowbell", _rng.randf_range(0.85, 1.2))
+	_cowbell_at = _now + _rng.randf_range(COWBELL_EVERY.x, COWBELL_EVERY.y)
 
 
 # ---------------------------------------------------------------- music
@@ -284,6 +340,29 @@ func _fade_music(delta: float) -> void:
 
 
 # ---------------------------------------------------------------- one-shots
+
+## A chocolate coin's "bling": B5 then E6, a sine with a soft octave, each note dying away.
+static func _coin_sound() -> AudioStreamWAV:
+	var rate := 44100
+	var n := int(rate * 0.26)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var step := 0.07
+	for i in n:
+		var t := float(i) / rate
+		var second := t >= step
+		var f := 1318.5 if second else 987.8
+		var tn := t - step if second else t
+		var env := minf(1.0, tn / 0.003) * exp(-tn * (11.0 if second else 22.0))
+		var a := (sin(TAU * f * t) * 0.7 + sin(TAU * f * 2.0 * t) * 0.18) * env
+		data.encode_s16(i * 2, int(clampf(a, -1.0, 1.0) * 30000.0))
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = rate
+	w.stereo = false
+	w.data = data
+	return w
+
 
 ## Plays a one-shot unless it played too recently or all voices are busy (dropped, not queued).
 func _play(key: String, pitch: float = 1.0) -> bool:

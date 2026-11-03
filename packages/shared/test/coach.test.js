@@ -189,6 +189,24 @@ test("scraping a wall or a missed exit on that stretch gets its own tip", () => 
   expect(exit.key).toBe("loss_missed_exit");
 });
 
+test("cows, sheep and cheese on the road get their own tip", () => {
+  const events = [
+    { kind: "obstacle", section: "crossing", stretch: "farm", atMs: 22_000, timeLostMs: 1_400 },
+    { kind: "slow_corner", section: "crossing", stretch: "farm", atMs: 23_000, timeLostMs: 300 },
+  ];
+  const run = village({ events });
+  const tipEn = coachTip(run, DEFAULT_BUILD, { elapsedMs: 50_000 }, "en", [
+    st("farm", 6_800, { bestMs: 5_000 }),
+  ]);
+  expect(tipEn).toMatchObject({ key: "loss_obstacle", stretch: "farm" });
+  expect(tipEn.text).toBe("Lost 1.8 s to cows and cheese on the muddy farm track. Steer round!");
+  expect(
+    coachTip(run, DEFAULT_BUILD, { elapsedMs: 50_000 }, "de", [
+      st("farm", 6_800, { bestMs: 5_000 }),
+    ]).text,
+  ).toBe("1.8 s wegen Kühen und Käse auf dem matschigen Feldweg. Lenk drum!");
+});
+
 test("the one way off the road left: blown over the causeway's low wall", () => {
   const failed = village({ outcome: "failed", failReason: "off_track", failStretch: "causeway" });
   const fail = coachTip(failed, DEFAULT_BUILD, undefined, "en", []);

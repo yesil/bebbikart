@@ -129,6 +129,22 @@ var laps_max := 0
 var stretch_log: Array = []
 var best_stretches: Array = [] # the best lap's (payload form)
 var lap_weather := {}          # weather seen on this lap (game.run.lap weatherSeen)
+# Village surprises (sim/obstacles.gd): set by Sim.add_run when the game has them on.
+var obstacles = null
+var obstacle_t := 0.0          # knocked about by one: its time loss goes to the `obstacle` event
+var obstacle_kind := ""        # what it hit last (cow, sheep, cheese, hay)
+var obstacles_hit := 0
+var obstacle_care := false     # hands off, slowed down for one this tick
+var dodge_side := 0            # the side it is passing the surprise ahead on (-1, 1), 0 when none
+var dodging := false           # hands off, swerving round one: it steers as sharply as a thumb
+# Chocolate coins (sim/coins.gd): set by Sim.add_run when the game has them on. Laid afresh each
+# lap; the counts are this lap's (coins_run: the whole run's).
+var coin_layout = null
+var coins: Array = []          # this lap's, {seg, s, d, line, taken}
+var coins_lap := -1            # the lap they were laid for
+var coins_taken := 0
+var coin_lines := 0            # whole lines taken
+var coins_run := 0
 
 
 ## `course` is sim/course.gd or sim/village_course.gd (same segment interface; a loop track has `loop`).
@@ -340,18 +356,49 @@ func bot_steer(arrows := true, forks := true) -> void:
 
 
 ## Bots (mock players, the sweep): the lane a kid who knows the track steers to, or null to leave
-## it to the autopilot: onto a boost arrow strip coming up, else towards its stars' way at a fork.
-## `arrows` / `forks`: whether it goes for each at all.
+## it to the autopilot: onto a boost arrow strip coming up (or the next chocolate coin), else
+## towards its stars' way at a fork. `arrows` / `forks`: whether it goes for each at all.
 func bot_lane(arrows := true, forks := true):
+	var x = null
 	if arrows:
 		var ar := _arrow_ahead(maxf(12.0, v * 1.5))
 		if not ar.is_empty():
-			return clampf(float(ar[0]) / steer_lim(), -1.0, 1.0)
-	if forks and fork_ahead_m() <= Tuning.FORK_APPROACH_M * 0.7:
+			x = clampf(float(ar[0]) / steer_lim(), -1.0, 1.0)
+		else:
+			var co = _coin_ahead(maxf(10.0, v * 1.2))
+			if co != null:
+				x = clampf(float(co) / steer_lim(), -1.0, 1.0)
+	if x == null and forks and fork_ahead_m() <= Tuning.FORK_APPROACH_M * 0.7:
 		var i := next_fork_idx()
 		var star: Dictionary = course_ref.segments[star_path[i]]
-		return 0.8 * Forks.lean(course_ref.forks[star["fork"]], star["choice"])
-	return null
+		x = 0.8 * Forks.lean(course_ref.forks[star["fork"]], star["choice"])
+	# ...and round a cow, sheep, cheese wheel or hay bale in the way.
+	var dodge = _dodge(d if x == null else float(x) * steer_lim())
+	if dodge != null:
+		return clampf(float(dodge) / steer_lim(), -1.0, 1.0)
+	return x
+
+
+## The lane of the next chocolate coin not taken yet within `reach` metres on this segment or
+## the next, or null.
+func _coin_ahead(reach: float):
+	if coins.is_empty() or not detour.is_empty():
+		return null
+	var next_id: String = segs[seg_idx + 1]["id"] if seg_idx < segs.size() - 1 else ""
+	var best := reach
+	var lane = null
+	for c in coins:
+		if c["taken"]:
+			continue
+		var ds := INF
+		if c["seg"] == seg_id:
+			ds = float(c["s"]) - ls
+		elif c["seg"] == next_id:
+			ds = route().length - ls + float(c["s"])
+		if ds > -0.5 and ds < best:
+			best = ds
+			lane = float(c["d"])
+	return lane
 
 
 # ---------------------------------------------------------------- planning
@@ -391,6 +438,7 @@ func _plan(corner_f: float, decel: float, horizon := -1.0) -> Array:
 
 func _replan_lane(sim) -> void:
 	follow_v = -1.0
+	dodging = false
 	if kid_steering():
 		pass_side = 0.0
 		return  # the thumb sets d_target (step)
@@ -411,6 +459,13 @@ func _replan_lane(sim) -> void:
 	if not ar.is_empty():
 		var clear := absf(float(ar[0])) - Tuning.BOOST_ARROW_HALF - Tuning.BOOST_ARROW_CATCH - 0.3
 		home = minf(home, clear) if int(ar[1]) > 0 else maxf(home, -clear)
+	# Cows, sheep, cheese wheels and hay bales on the road (sim/obstacles.gd): round them first.
+	var dodge = _dodge(clampf(home, -hw, hw))
+	if dodge != null:
+		pass_side = 0.0
+		d_target = dodge
+		dodging = true
+		return
 	var ahead = sim.racer_ahead(self, 4.0 + 0.6 * v, 2.0)
 	if ahead == null or ahead.v >= v - 0.3:
 		pass_side = 0.0
@@ -439,6 +494,57 @@ func _replan_lane(sim) -> void:
 		return
 	pass_side = best_side
 	d_target = clampf(ahead.d + best_side * off, -hw - 0.5, hw + 0.5)
+
+
+## The lane round the surprises ahead (sim/obstacles.gd) nearest to `want`, or null when `want`
+## is clear (or nothing is ahead). Looks OBSTACLE_SEE_M (+ 1 m per m/s) ahead, at where each
+## item will be when the kart gets there; items just beyond the first one count too.
+func _dodge(want: float):
+	if obstacles == null:
+		return null
+	var blocks: Array = obstacles.ahead(self, Tuning.OBSTACLE_SEE_M + v)
+	if blocks.is_empty():
+		return null
+	var first: float = blocks[0][0]
+	var spans: Array[Vector2] = []
+	for b in blocks:
+		if float(b[0]) > first + 10.0:
+			break
+		var w: float = float(b[2]) + radius + Tuning.OBSTACLE_MARGIN
+		spans.append(Vector2(b[1].x - w, b[1].y + w))
+	if _clear(want, spans):
+		dodge_side = 0
+		return null
+	var lim := rail_lim() - 0.05
+	var best = null
+	for sp in spans:
+		for c in [sp.x, sp.y]:
+			var cc := clampf(c, -lim, lim)
+			if not _clear(cc, spans):
+				continue
+			# Keep to the side it chose (no swapping sides late), else the lane nearest `want`.
+			var keeps := dodge_side != 0 and signf(cc - (sp.x + sp.y) * 0.5) == dodge_side
+			var best_keeps := best != null and dodge_side != 0 and signf(float(best) - (sp.x + sp.y) * 0.5) == dodge_side
+			if best == null or (keeps and not best_keeps) or (keeps == best_keeps and absf(cc - want) < absf(float(best) - want)):
+				best = cc
+	if best != null:
+		dodge_side = 1 if float(best) > (spans[0].x + spans[0].y) * 0.5 else -1
+	if best == null:
+		# No clear lane (it never leaves none on purpose): the side of the road with more room.
+		var lo := spans[0].x
+		var hi := spans[0].y
+		for sp in spans:
+			lo = minf(lo, sp.x)
+			hi = maxf(hi, sp.y)
+		best = -lim if lo + lim > lim - hi else lim
+	return best
+
+
+static func _clear(x: float, spans: Array[Vector2]) -> bool:
+	for sp in spans:
+		if x > sp.x and x < sp.y:
+			return false
+	return true
 
 
 # ---------------------------------------------------------------- step
@@ -473,6 +579,7 @@ func step(sim) -> void:
 		boost_amt = 0.0
 	recover_t = maxf(0.0, recover_t - dt)
 	bumped_t = maxf(0.0, bumped_t - dt)
+	obstacle_t = maxf(0.0, obstacle_t - dt)
 	noise_t -= dt
 	if noise_t <= 0.0:
 		noise_t = 1.0
@@ -545,6 +652,13 @@ func step(sim) -> void:
 		tv *= 0.85  # gone round again by mistake: the racer slows while finding the exit
 	if follow_v >= 0.0:
 		tv = minf(tv, follow_v + 0.2)
+	# Hands off, the autopilot takes care round animals and cheese on the road: a kid steering
+	# past keeps full speed.
+	obstacle_care = false
+	if obstacles != null and not kid_steering() and tv > Tuning.OBSTACLE_SLOW_V \
+			and not obstacles.ahead(self, Tuning.OBSTACLE_SLOW_M).is_empty():
+		tv = Tuning.OBSTACLE_SLOW_V
+		obstacle_care = true
 
 	# ---- longitudinal
 	if not airborne:
@@ -566,7 +680,7 @@ func step(sim) -> void:
 	wind_lat = wind_a * exp_now
 	vd += wind_lat * dt
 	if not airborne:
-		var steered := kid_steering()
+		var steered := kid_steering() or dodging
 		var corr_max: float = (Tuning.LAT_CORR_BASE + Tuning.LAT_CORR_PER_GRIP * st["grip"]) * rain_true
 		if steered:
 			corr_max = (Tuning.STEER_LAT_ACCEL + Tuning.STEER_LAT_ACCEL_PER_GRIP * st["grip"]) * rain_true
@@ -671,6 +785,14 @@ func step(sim) -> void:
 
 	# ---- vertical
 	var ground: float = sim.course.surface_y(seg, ls)
+	if coin_layout != null:
+		if coins_lap != lap:
+			coins_lap = lap
+			coins = coin_layout.lay(hash(run_id) + lap * 7919, path)
+			coins_taken = 0
+			coin_lines = 0
+		if y - ground < 1.0:
+			_catch_coins(sim)
 	if airborne:
 		vy -= Tuning.GRAVITY * dt
 		y += vy * dt
@@ -785,6 +907,32 @@ func _catch_arrows(sim) -> void:
 		sim.emit("sim.boost", {"runId": run_id, "kind": "boost_perfect"})
 
 
+## Chocolate coins under the kart (sim/coins.gd): each counts; the last of a line surges it.
+func _catch_coins(sim) -> void:
+	for c in coins:
+		if c["taken"] or c["seg"] != seg_id or not detour.is_empty():
+			continue
+		if absf(ls - float(c["s"])) > half_len + Tuning.COIN_CATCH or absf(d - float(c["d"])) > radius + Tuning.COIN_CATCH:
+			continue
+		c["taken"] = true
+		coins_taken += 1
+		coins_run += 1
+		var done := true
+		var in_line := 0
+		for o in coins:
+			if int(o["line"]) == int(c["line"]):
+				if o["taken"]:
+					in_line += 1
+				else:
+					done = false
+		if done:
+			coin_lines += 1
+			boost_amt = maxf(boost_amt, Tuning.COIN_LINE_BOOST)
+			boost_t = maxf(boost_t, Tuning.COIN_LINE_BOOST_S)
+			v *= Tuning.COIN_LINE_KICK
+		sim.emit("sim.coin", {"runId": run_id, "line": c["line"], "inLine": in_line, "lineDone": done})
+
+
 func got_bumped(other_player: String) -> void:
 	bumped_t = Tuning.BUMPED_WINDOW_S
 	bumped_by = other_player
@@ -800,9 +948,29 @@ func bumped_other(other_player: String) -> void:
 	_add_event({"kind": "bumped_other", "section": section, "atMs": elapsed_ms(), "otherPlayerId": other_player})
 
 
+## Knocked about by a cow, a sheep, a cheese wheel or a hay bale (sim/obstacles.gd): most of the
+## speed gone, a hop, a kick aside (`away`: -1 or 1 across the road) and a wobbly while after.
+func hit_obstacle(_sim, kind: String, away: float) -> void:
+	obstacles_hit += 1
+	obstacle_kind = kind
+	obstacle_t = Tuning.OBSTACLE_RECOVER_S + 0.5
+	v *= Tuning.OBSTACLE_KEEP
+	vd = away * Tuning.OBSTACLE_KICK_VD
+	if not airborne:
+		airborne = true
+		jump_air = false
+		vy = Tuning.OBSTACLE_HOP_VY
+	wobble += Tuning.OBSTACLE_WOBBLE
+	recover_t = maxf(recover_t, Tuning.OBSTACLE_RECOVER_S)
+	recover_mult = Tuning.OBSTACLE_RECOVER_MULT
+	_episode_force("obstacle")
+
+
 # ---------------------------------------------------------------- time-loss events
 
 func _cause(k: float, exposure: float) -> String:
+	if obstacle_t > 0.0 or obstacle_care:
+		return "obstacle"
 	if slipping:
 		return "slip"
 	if scraping:
@@ -860,7 +1028,7 @@ func _close_episode() -> void:
 	if episode.is_empty():
 		return
 	var ms := int(round(float(episode["loss"]) * 1000.0))
-	if ms >= Tuning.EVENT_MIN_LOSS_MS or episode["kind"] == "bumped" or episode["kind"] == "bad_landing":
+	if ms >= Tuning.EVENT_MIN_LOSS_MS or episode["kind"] in ["bumped", "bad_landing", "obstacle"]:
 		var e := {"kind": episode["kind"], "section": episode["section"], "stretch": episode["stretch"],
 			"atMs": episode["atMs"], "timeLostMs": ms}
 		if String(episode["other"]) != "":

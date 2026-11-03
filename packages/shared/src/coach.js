@@ -174,6 +174,7 @@ export const COACH_COPY = {
     loss_scrape: "Lost {s} s scraping the wall {where}. Steer away!",
     loss_bumped: "Lost {s} s to bumps {where}. Wait for a quiet track!",
     loss_missed_exit: "Lost {s} s going round the roundabout again!",
+    loss_obstacle: "Lost {s} s to cows and cheese {where}. Steer round!",
     close: "So close to your best! Go again?",
     // Rule 3: first finish or new best, plus one experiment.
     best_try_arrows: "New best! Steer over the glowing arrows for a boost!",
@@ -199,6 +200,7 @@ export const COACH_COPY = {
     loss_scrape: "{s} s an der Mauer geschrammt {where}. Lenk weg!",
     loss_bumped: "{s} s durch Rempler {where}. Warte auf freie Bahn!",
     loss_missed_exit: "{s} s verloren, nochmal um den Kreisel!",
+    loss_obstacle: "{s} s wegen Kühen und Käse {where}. Lenk drum!",
     close: "Ganz knapp an deiner Bestzeit! Nochmal?",
     best_try_arrows: "Neue Bestzeit! Fahr über die Leuchtpfeile für einen Boost!",
     best_try_route: "Neue Bestzeit! {n} Sterne {ability} und du nimmst {alt}!",
@@ -219,7 +221,7 @@ const FAIL_EVENT_KEYS = [
   "bumped",
 ];
 // Loss events whose fix isn't the stretch's star: they get their own tip.
-const OWN_TIP_EVENTS = ["bumped", "missed_exit", "scrape"];
+const OWN_TIP_EVENTS = ["bumped", "missed_exit", "scrape", "obstacle"];
 const LOSS_EVENT_KEYS = [
   "slip",
   "water_slow",
