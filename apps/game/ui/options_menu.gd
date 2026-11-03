@@ -5,9 +5,12 @@
 # In server mode picking a track starts a new session on it right away, and "New session" starts
 # over on the same track: the karts on the track stop, the leaderboard starts empty, the racers
 # stay. Neither asks a question.
-# The phone address comes from the server (GET /api/join, asked each time the menu opens): the
-# address it prints at start-up, http://<the Mac's Wi-Fi IP>:8080. Without it (mock mode, server
-# unreachable, an old server) the menu says why in red instead of showing a code.
+# The phone address comes from the server (GET /api/join, asked when the menu opens and again
+# every few seconds while it is open): the address it prints, http://<the Mac's Wi-Fi IP>:8080,
+# which follows the Mac to another network. Without it (mock mode, server unreachable, no
+# network, an old server) the menu says why in red instead of showing a code. Under the code it
+# says what the server knows about phones getting through: the firewall stops them, or none has
+# yet (on a guest Wi-Fi that keeps devices apart, none ever will).
 # Every string comes from ui/i18n.gd; main.gd rebuilds the menu when the language changes.
 extends CanvasLayer
 
@@ -27,8 +30,10 @@ const COL_W := 440.0         # a column's width for the wrapping notes
 const JOIN_W := 330.0        # the join column's notes
 const QR_PX := 300.0         # the QR code's size on a 1080p screen, quiet zone included
 const QUIET := 4             # light modules around the code
-const RETRY_S := 3.0         # while open, ask an unreachable server again this often
+const RETRY_S := 3.0         # while open, ask the server again this often (new address, first phone)
 const RED := Color(1.0, 0.45, 0.4)
+# GET /api/join `network` (apps/server/src/network.js NETWORK).
+const NETWORKS := ["no_network", "firewall", "no_phone_yet", "phone_seen"]
 
 var _panel: PanelContainer
 var _fullscreen: CheckButton
@@ -339,7 +344,7 @@ func _fetch_join() -> void:
 		return
 	if _join_busy:
 		return
-	if not _join_qr.visible:
+	if _join_note.text == "":
 		_join_url.visible = false
 		_join_note.text = I18n.t("menu.join_loading")
 		_join_note.modulate = Color(1, 1, 1, 0.75)
@@ -363,20 +368,26 @@ func _on_join(result: int, code: int, _headers: PackedStringArray, body: PackedB
 	var why := ""
 	if not (j is Dictionary):
 		why = "not JSON"
+	elif not (String(j.get("network", "")) in NETWORKS):
+		why = "no network state"
+	elif j.network == "no_network":
+		_join_problem(I18n.t("menu.join_no_network"))
 	elif not (j.get("url") is String) or String(j.url) == "":
 		why = "no url"
 	elif not (j.get("qr") is Array) or (j.qr as Array).is_empty():
 		why = "no QR code"
-	if why == "":
-		why = show_join(String(j.url), j.qr, bool(j.get("phoneSite", true)))
+	else:
+		why = show_join(String(j.url), j.qr, bool(j.get("phoneSite", true)), String(j.network))
 	if why != "":
 		push_error("options menu: GET %s/api/join: %s" % [_join_base, why])
 		_join_problem(I18n.f("error.join_bad", [_join_base, why]))
+	_join_retry = RETRY_S
 
 
-## The phone address, its QR code (rows of "0"/"1", 1 dark) and whether the phone site is
-## built. Returns why it can't be shown ("" when shown).
-func show_join(url: String, rows: Array, phone_site: bool) -> String:
+## The phone address, its QR code (rows of "0"/"1", 1 dark), whether the phone site is built
+## and what the server knows about phones reaching it (one of NETWORKS, not "no_network").
+## Returns why it can't be shown ("" when shown).
+func show_join(url: String, rows: Array, phone_site: bool, network: String) -> String:
 	var tex := qr_texture(rows)
 	if tex == null:
 		return "broken QR code"
@@ -394,8 +405,15 @@ func show_join(url: String, rows: Array, phone_site: bool) -> String:
 		_join_note.modulate = RED
 	else:
 		_join_qr.visible = true
-		_join_note.text = I18n.t("menu.join_note") if phone_site else I18n.t("menu.join_no_site")
-		_join_note.modulate = Color(1, 1, 1, 0.75) if phone_site else RED
+		if not phone_site:
+			_join_note.text = I18n.t("menu.join_no_site")
+		elif network == "firewall":
+			_join_note.text = I18n.t("menu.join_firewall")
+		elif network == "no_phone_yet":
+			_join_note.text = I18n.t("menu.join_waiting")
+		else:
+			_join_note.text = I18n.t("menu.join_note")
+		_join_note.modulate = Color(1, 1, 1, 0.75) if phone_site and network != "firewall" else RED
 	return ""
 
 

@@ -4,7 +4,8 @@ extends SceneTree
 ##   godot --path apps/game --resolution 1920x1080 --script res://tools/menu_check.gd -- --out=DIR [--server=http://localhost:8080]
 ## Exits 1 if the menu doesn't fit the screen (with a margin) in English or German, mock or
 ## server mode, idle, running or starting a new session, or with the phone address and QR code;
-## or if the join column doesn't say why there is no code (mock mode, server unreachable).
+## or if the join column doesn't say why there is no code (mock mode, server unreachable) or
+## what stops the phones (firewall) or may (no phone yet: client isolation on guest Wi-Fi).
 ## --server: also ask that server for the phone address (GET /api/join) and show its QR code.
 ## Decode the saved menu_*_join*.png with any QR reader to check the code scans.
 
@@ -95,18 +96,28 @@ func _check_join(menu, name: String, state: String, server: String) -> void:
 			if note.text != I18n.t("menu.join_mock") or menu._join_qr.visible:
 				problems.append("%s: the join column doesn't say mock mode has no phones: %s" % [name, note.text])
 		"join":
-			# A server with no network (phones would open their own localhost) or no phone site.
-			menu.show_join("http://localhost:8080", SAMPLE_QR, true)
+			# PUBLIC_URL on localhost (phones would open their own), no phone site, the firewall.
+			menu.show_join("http://localhost:8080", SAMPLE_QR, true, "phone_seen")
 			if menu._join_qr.visible or note.text != I18n.t("menu.join_local") or note.modulate != OptionsMenu.RED:
 				problems.append("%s: a localhost address isn't shown as an error: %s" % [name, note.text])
-			menu.show_join(SAMPLE_URL, SAMPLE_QR, false)
+			menu.show_join(SAMPLE_URL, SAMPLE_QR, false, "phone_seen")
 			if not menu._join_qr.visible or note.text != I18n.t("menu.join_no_site") or note.modulate != OptionsMenu.RED:
 				problems.append("%s: a missing phone site isn't shown as an error: %s" % [name, note.text])
-			if menu.show_join(SAMPLE_URL, ["1"], true) == "":
+			menu.show_join(SAMPLE_URL, SAMPLE_QR, true, "firewall")
+			if not menu._join_qr.visible or note.text != I18n.t("menu.join_firewall") or note.modulate != OptionsMenu.RED:
+				problems.append("%s: a firewall blocking phones isn't shown as an error: %s" % [name, note.text])
+			menu.show_join(SAMPLE_URL, SAMPLE_QR, true, "phone_seen")
+			if note.text != I18n.t("menu.join_note") or note.modulate == OptionsMenu.RED:
+				problems.append("%s: a phone that got through doesn't show the plain note: %s" % [name, note.text])
+			if menu.show_join(SAMPLE_URL, ["1"], true, "phone_seen") == "":
 				problems.append("%s: a broken QR code was shown" % name)
-			var why: String = menu.show_join(SAMPLE_URL, SAMPLE_QR, true)
+			# Last, so the screenshot and the fit check have the longest note: the usual one at the
+			# start of an event, before any phone has got through.
+			var why: String = menu.show_join(SAMPLE_URL, SAMPLE_QR, true, "no_phone_yet")
 			if why != "":
 				problems.append("%s: the sample QR code wasn't shown: %s" % [name, why])
+			if note.text != I18n.t("menu.join_waiting") or note.modulate == OptionsMenu.RED:
+				problems.append("%s: no phone yet doesn't explain client isolation: %s" % [name, note.text])
 			await process_frame
 		"join_live":
 			for i in 600:  # up to ~10 s
