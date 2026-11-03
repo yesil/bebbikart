@@ -25,6 +25,7 @@
     "game:export": "bun scripts/game-export.js",
     "game:import": "bun scripts/godot-import.js",
     "game:templates": "bun scripts/godot-templates.js",
+    "audio:cues": "bun scripts/race-end-cues.js",
     "fake-game": "bun apps/server/scripts/fake-game.js",
     "sim-players": "bun apps/server/scripts/sim-players.js"
   },

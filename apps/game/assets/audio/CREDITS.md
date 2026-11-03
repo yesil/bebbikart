@@ -1,6 +1,6 @@
 # Audio credits
 
-All audio here is CC0 1.0 (public domain) except `sfx/cheer.wav` (CC BY 4.0) and `racers/horn_neigh.wav` (CC BY 3.0), which need the credits below. Licence texts are in `licenses/`. Files were renamed for the game. `sfx/cheer.wav` was cut to 4.5 s, faded and made mono 32 kHz. Other `sfx/`, `music/` and `ambience/` files are the originals. Every `racers/` file was converted to mono 32 kHz WAV and level-matched; the edits per file are noted in its row.
+All audio here is CC0 1.0 (public domain) except `sfx/cheer.wav` (CC BY 4.0) and `racers/horn_neigh.wav` (CC BY 3.0), which need the credits below, and the race-end cues `sfx/end_*.ogg`, which are composed for BebbiKart and rendered with the MIT-licensed MuseScore General soundfont (see Race-end cues). Licence texts are in `licenses/`. Files were renamed for the game. `sfx/cheer.wav` was cut to 4.5 s, faded and made mono 32 kHz. Other `sfx/`, `music/` and `ambience/` files are the originals. Every `racers/` file was converted to mono 32 kHz WAV and level-matched; the edits per file are noted in its row.
 
 | Path | Original file | Source | Author | Licence |
 |---|---|---|---|---|
@@ -25,6 +25,21 @@ All audio here is CC0 1.0 (public domain) except `sfx/cheer.wav` (CC BY 4.0) and
 | `ambience/village_fountain.ogg` | `water_flowing.ogg` | [30 CC0 SFX loops](https://opengameart.org/content/30-cc0-sfx-loops) | rubberduck | CC0 1.0 |
 | `ambience/thunder.ogg` | `sfx100v2_thunder_01.ogg` | [100 CC0 SFX #2](https://opengameart.org/content/100-cc0-sfx-2) | rubberduck | CC0 1.0 |
 | `ambience/countryside_birds.ogg` | `birds-isaiah658.ogg` | [Ambient Bird Sounds](https://opengameart.org/content/ambient-bird-sounds) | isaiah658 | CC0 1.0 |
+
+## Race-end cues (`sfx/end_*.ogg`)
+
+Short brass fanfares composed for BebbiKart, all in F major so they sit with the village (D minor) and countryside (F major) music they dip. `scripts/race-end-cues.js` holds the notes, renders them with FluidSynth and the MuseScore General soundfont, and levels them with ffmpeg (Vorbis, true peak under -1.5 dBFS). The director (`audio/audio_director.gd`, `END_CUES`) picks one per lap's verdict.
+
+| Path | Plays for | Length | Loudness |
+|---|---|---|---|
+| `sfx/end_record.ogg` | NEW CHAMPION! or NEW RECORD! (the crown's motif) | 5.6 s | -13 LUFS |
+| `sfx/end_best.ogg` | a personal best, short of the crown | 3.0 s | -13.5 LUFS |
+| `sfx/end_finish.ogg` | any other finished lap | 2.6 s | -14 LUFS |
+| `sfx/end_oops.ogg` | OOPS! (a failed lap), after `sfx/failed.ogg` | 2.3 s | -16 LUFS |
+| `sfx/end_podium.ogg` | the podium at a session's end (the crown's motif in full) | 7.9 s | -13 LUFS |
+| `sfx/end_best_lap.ogg` | a best lap in a run of more than one lap | 1.4 s | -14 LUFS |
+
+Soundfont: MuseScore General by S. Christian Collins, based on Fluid (R3) by Frank Wen and FluidR3 Mono by Michael Cowgill, MIT (`licenses/MuseScore_General-MIT.txt`).
 
 ## Racer engines and horns (`racers/`)
 
