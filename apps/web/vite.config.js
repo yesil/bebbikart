@@ -9,10 +9,11 @@ export default defineConfig({
     port: 5173,
     // Never move to another port silently: bun run dev frees 5173 or says what holds it.
     strictPort: true,
+    // xfwd: the server sees which phone a call came from (network.js), not just Vite.
     proxy: {
-      "/api": "http://localhost:8080",
-      "/assets": "http://localhost:8080",
-      "/ws": { target: "ws://localhost:8080", ws: true },
+      "/api": { target: "http://localhost:8080", xfwd: true },
+      "/assets": { target: "http://localhost:8080", xfwd: true },
+      "/ws": { target: "ws://localhost:8080", ws: true, xfwd: true },
     },
   },
 });

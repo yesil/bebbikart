@@ -7,6 +7,7 @@ import { createMockClient } from "@bebbikart/asset-pipeline";
 import { DEFAULT_CONFIG } from "@bebbikart/shared";
 import { loadSettings } from "../src/env.js";
 import { startServer } from "../src/index.js";
+import { NETWORK } from "../src/network.js";
 import { qrRows } from "../src/qr.js";
 
 const URL = "http://192.168.1.23:8080";
@@ -100,6 +101,7 @@ let settings;
 beforeAll(() => {
   settings = {
     ...loadSettings({}),
+    lanAuto: false, // the address is set below, not read from this Mac's network
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-qr-")),
     webDist: mkdtempSync(join(tmpdir(), "bk-qr-web-")), // empty: the phone site isn't built
@@ -120,6 +122,7 @@ test("GET /api/join: the phone address, its QR code, and whether the phone site 
   expect(join.url).toBe(URL);
   expect(join.qr).toEqual(qrRows(URL));
   expect(join.phoneSite).toBe(false);
+  expect(Object.values(NETWORK)).toContain(join.network);
 });
 
 test("GET /api/join under bun run dev: Vite's address, whose phone site needs no build", async () => {

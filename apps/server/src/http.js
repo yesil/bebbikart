@@ -7,8 +7,8 @@ import {
   RENDER_KEYS,
   SessionStartBodySchema,
 } from "@bebbikart/shared";
-import { phoneUrl } from "./env.js";
 import { ApiError } from "./errors.js";
+import { phoneUrl } from "./network.js";
 import { qrRows } from "./qr.js";
 
 const COOKIE = "bk_device";
@@ -48,7 +48,7 @@ function serveFile(root, rel) {
   return new Response(Bun.file(path), { headers: { "cache-control": "no-cache" } });
 }
 
-export function createHttp({ game, jobs, settings }) {
+export function createHttp({ game, jobs, settings, reach }) {
   const assetsDir = join(settings.dataDir, "assets");
 
   const me = (req) => game.mustPlayer(deviceIdOf(req));
@@ -68,17 +68,19 @@ export function createHttp({ game, jobs, settings }) {
   const routes = [
     ["GET", "/api/health", () => json({ ok: true, gameOnline: null })],
     // The phone address and its QR code, for the big screen's options menu: Vite's under bun run
-    // dev, else the server's own. phoneSite: false when the server would serve the phone site but
-    // it isn't built (the address then only shows how to build it).
+    // dev, else the server's own; null while the Mac has no network address. phoneSite: false
+    // when the server would serve the phone site but it isn't built (the address then only shows
+    // how to build it). network: what is known about phones reaching it (network.js NETWORK).
     [
       "GET",
       "/api/join",
       () => {
-        const url = phoneUrl(settings);
+        const url = reach.url();
         return json({
           url,
-          qr: qrRows(url),
+          qr: url === null ? null : qrRows(url),
           phoneSite: !!settings.phoneVitePort || existsSync(join(settings.webDist, "index.html")),
+          network: reach.network(),
         });
       },
     ],

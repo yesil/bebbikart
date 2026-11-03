@@ -27,7 +27,7 @@ This starts three things:
 | Phone site (Vite, hot reload) | `http://<mac-ip>:5173` |
 | Godot game, connected with `--server` | a window on the Mac |
 
-The server prints the phone URL at start-up: Vite's on :5173 under `bun run dev`, its own :8080 otherwise (it detects the Mac's Wi-Fi IP; set `PUBLIC_URL` to override). The big screen shows the same address with a QR code in its options menu (Esc), for people to scan with the phone camera; it says in red when it can't (mock mode, server unreachable, no network, phone site not built).
+The server prints the phone URL at start-up: Vite's on :5173 under `bun run dev`, its own :8080 otherwise (it detects the Mac's Wi-Fi IP and follows it when the Mac changes network; set `PUBLIC_URL` to override). Until a phone has opened it, it says the address is unproven; it logs the first phone that gets through, and says in capitals when the address changes, the Mac has no network, or the macOS firewall blocks phones. The big screen shows the same address with a QR code in its options menu (Esc), for people to scan with the phone camera; it says in red when it can't (mock mode, server unreachable, no network, phone site not built).
 A session starts automatically so you can race straight away. A session lasts `sessionMinutes` (30); when it runs out the next one starts right away with a fresh leaderboard, and a server that boots on an ended session starts a new one. With `BK_AUTOSTART=0` the session stays ended until the game manager or the admin API starts the next one, and phones show "This race is over".
 
 On the phone (same Wi-Fi as the Mac), open `http://<mac-ip>:5173`:
@@ -126,7 +126,7 @@ The garage has a **New drawings** button to redo a racer's photos without resett
 | Var | Default | |
 |---|---|---|
 | `PORT` | `8080` | |
-| `PUBLIC_URL` | `http://<wifi-ip>:8080` | Used in asset URLs and the printed join URL |
+| `PUBLIC_URL` | `http://<wifi-ip>:8080` | Used in asset URLs and the printed join URL; when set, it stays as given (no network detection) |
 | `BK_GAME_KEY` | `bebbikart-dev` | Game must send the same key (`--game-key=` or `BK_GAME_KEY`) |
 | `BK_ADMIN_PIN` | `1234` | Header `x-admin-pin` for `/api/admin/*` |
 | `BK_AUTOSTART` | `1` | Keep a session running: start one at boot and the next one when time runs out |
@@ -142,7 +142,11 @@ curl -H 'x-admin-pin: 1234' localhost:8080/api/admin/players                   #
 
 ## Troubleshooting
 
-- **Phone can't load the page:** same Wi-Fi? Guest networks often block device-to-device traffic. Check the IP the server printed, and the macOS firewall prompt.
+- **Phone can't load the page:** same Wi-Fi? Then the Wi-Fi most likely keeps its devices apart (client isolation, usual on guest Wi-Fi, hotels and offices): the phone's request never reaches the Mac, so the server can't log anything about it. The server warns about the firewall and a missing network itself. To tell isolation apart, check that the server still says `No phone has opened it yet` while the phone times out. Ways round it:
+  - **A phone's Personal Hotspot.** Turn it on (iPhone: Settings › Personal Hotspot › Allow Others to Join), join it from the Mac and the other phones. Devices on an iPhone hotspot normally reach each other (try it with one phone first), and the drawings still get to Claude over mobile data. The server picks up the new address by itself: reopen the big screen's menu (Esc) for the new code. An iPhone hotspot takes only a handful of devices, so it suits a test or a small group.
+  - **A travel router** (or any Wi-Fi router you control, with its guest/isolation mode off): Mac and phones on it, the router's own internet from the venue's Wi-Fi (repeater mode) or a cable. The best fit for an event.
+  - **Another network** where phones can reach each other: ask the venue for the staff network or to turn client isolation off for the day.
+  - The Mac's own Wi-Fi sharing (System Settings › General › Sharing › Internet Sharing) only works when the Mac gets its internet another way (Ethernet, or an iPhone over USB): its Wi-Fi can't join the guest network and host one at once.
 - **"The big screen isn't connected yet" on Go!:** the game isn't connected. Its overlay says `SERVER online` when it is; check the game key.
 - **Racer stuck on "Looking at your drawing…":** see the server log (`[job] …`). Jobs time out after 300 s (`BK_JOB_TIMEOUT_MS`; the look, design, critique and refine passes take about 60 to 150 s) and the phone shows the error.
 - **Fresh start:** stop the server and delete `apps/server/data/`, or call the reset endpoint above.

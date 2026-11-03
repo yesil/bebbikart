@@ -1,25 +1,12 @@
 // Server settings: bebbikart.config.json (repo root or cwd) + env vars (game-server.md "Networking").
 import { existsSync, readFileSync } from "node:fs";
-import { networkInterfaces } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_CONFIG, mergeConfig } from "@bebbikart/shared";
+import { lanAddress } from "./network.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(here, "../../..");
-
-/** First non-internal IPv4 address, preferring en0/en1 (Wi-Fi on a Mac). */
-export function lanIp() {
-  const nets = networkInterfaces();
-  const names = Object.keys(nets).sort((a, b) => rank(a) - rank(b));
-  for (const name of names) {
-    for (const n of nets[name] ?? []) {
-      if (n.family === "IPv4" && !n.internal) return n.address;
-    }
-  }
-  return "localhost";
-}
-const rank = (name) => (name === "en0" ? 0 : name === "en1" ? 1 : name.startsWith("en") ? 2 : 3);
 
 function fileConfig() {
   for (const p of [
@@ -56,15 +43,6 @@ export const DOTENV_FILES = [
   join(REPO_ROOT, "packages/asset-pipeline/.env"),
 ];
 
-/** Where phones open the site: the server itself, or Vite under bun run dev (phoneVitePort), which
- * serves the phone site from source and forwards the rest to the server. */
-export function phoneUrl(settings) {
-  if (!settings.phoneVitePort) return settings.publicUrl;
-  const url = new URL(settings.publicUrl);
-  url.port = String(settings.phoneVitePort);
-  return url.origin;
-}
-
 export function loadSettings(env = process.env) {
   const port = Number(env.PORT ?? 8080);
   let config = mergeConfig(DEFAULT_CONFIG, fileConfig());
@@ -74,7 +52,13 @@ export function loadSettings(env = process.env) {
   return {
     port,
     config,
-    publicUrl: (env.PUBLIC_URL ?? `http://${lanIp()}:${port}`).replace(/\/$/, ""),
+    // Without PUBLIC_URL the address follows the Mac's network (network.js): localhost while the
+    // Mac has none, which only this Mac can open, so phones get no address then.
+    lanAuto: !env.PUBLIC_URL,
+    publicUrl: (env.PUBLIC_URL ?? `http://${lanAddress()?.ip ?? "localhost"}:${port}`).replace(
+      /\/$/,
+      "",
+    ),
     // Set by bun run dev (scripts/dev.js): phones go to Vite on this port, not to the server.
     phoneVitePort: env.BK_PHONE_VITE_PORT ? Number(env.BK_PHONE_VITE_PORT) : null,
     adminPin: env.BK_ADMIN_PIN ?? "1234",

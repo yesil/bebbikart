@@ -33,7 +33,7 @@ One small Bun process. It is the single source of truth for **who is playing, wh
 - **Uploads.** Save originals to `data/uploads/<playerId>/` and hand paths to the pipeline. Never serve the full-size originals. Only specs, game renders and the downscaled drawing copies are served via `/assets`. On session reset with `deleteUploadsOnReset`, delete uploads and assets.
 - **Design jobs.** In-process queue, 3 jobs at once. Call `runDesignJob(input, onStatus)` from `@bebbikart/asset-pipeline`. On `ready`, save `spec.json`, mark the player `ready`, push `player.updated` and `roster.updated`. 60 s timeout → `failed`, and the phone shows "Try again". `POST …/reroll` reruns it (max 3).
 - **Renders.** Accept `PUT /api/game/renders/:playerId/:key` from the game (PNG, `x-game-key`), save into the package, update the manifest, push `player.updated`.
-- **Networking.** Bind `0.0.0.0`. Plain **HTTP** on port 8080. Detect the Mac's LAN IP at startup (override with `PUBLIC_URL`) and use it for the join QR code at `GET /api/join-qr.svg`, which the big screen shows. HTTPS is out of scope for V1.
+- **Networking.** Bind `0.0.0.0`. Plain **HTTP** on port 8080. Detect the Mac's LAN IP at startup and follow it when the network changes (override with `PUBLIC_URL`); say loudly when phones can't reach it (no network, firewall) and that it is unproven until a phone gets through (`apps/server/src/network.js`) and use it for the join QR code at `GET /api/join-qr.svg`, which the big screen shows. HTTPS is out of scope for V1.
 - **Limits.** Upload size limit 15 MB. Nothing else.
 
 ## Task list

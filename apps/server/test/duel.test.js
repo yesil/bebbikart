@@ -21,6 +21,7 @@ const admin = () => ({ "x-admin-pin": settings.adminPin, "content-type": "applic
 beforeAll(() => {
   settings = {
     ...loadSettings({}),
+    lanAuto: false, // the address is set below, not read from this Mac's network
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-duel-")),
     designClient: createMockClient({ designId: "pair01" }),

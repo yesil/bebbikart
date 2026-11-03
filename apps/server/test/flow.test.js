@@ -18,6 +18,7 @@ let settings;
 beforeAll(() => {
   settings = {
     ...loadSettings({}),
+    lanAuto: false, // the address is set below, not read from this Mac's network
     port: 0,
     dataDir: mkdtempSync(join(tmpdir(), "bk-test-")),
     designClient: createMockClient({ designId: "pair01" }),
