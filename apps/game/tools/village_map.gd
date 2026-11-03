@@ -18,7 +18,7 @@ const STUB := 3.0
 const FORK_ANGLE := 15.0
 const FORK_PROBE := 12.0
 const END_ZONE := 8.0              # metres from a shared junction where adjacent roads may touch
-const LAP_RANGE := Vector2(380.0, 850.0)
+const LAP_RANGE := Vector2(380.0, 980.0)
 const SCALE := 3.0                 # SVG px per metre
 const MARGIN := 40.0               # metres round the course in the drawing
 
