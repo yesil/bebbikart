@@ -28,6 +28,7 @@ var _avatar_urls := {}   # playerId -> avatar_happy URL downloaded or being down
 var _requested := {}     # packageId -> true (download started)
 var _rendered := {}      # packageId -> true (render queued or done)
 var _queue: Array = []   # playerIds waiting for a render
+var _reviews: Array = []
 var _held := {}          # playerId -> latest RosterEntry with a new package, held while they race
 var _rendering := false
 var _renderer: AvatarRenderer
@@ -184,15 +185,29 @@ func _download_avatar(pid: String, path: String) -> void:
 
 
 ## One render at a time: each takes a few frames of the offscreen viewport.
+func review(request: Dictionary, reply: Callable) -> void:
+	_reviews.append({"request": request, "reply": reply})
+	_pump()
+
+
 func _pump() -> void:
-	if _rendering or _queue.is_empty():
+	if _rendering or (_queue.is_empty() and _reviews.is_empty()):
 		return
 	if not _renderer.can_render():
 		_fail("can't render racer images for the phones in headless mode (%d waiting)" % _queue.size())
 		_queue.clear()
+		for review_job in _reviews:
+			review_job.reply.call({"requestId": review_job.request.requestId, "ok": false, "error": "Racer reviews need a rendering display"})
+		_reviews.clear()
 		return
 	_rendering = true
-	while not _queue.is_empty():
+	while not _queue.is_empty() or not _reviews.is_empty():
+		if _queue.is_empty():
+			var review_job: Dictionary = _reviews.pop_front()
+			var result: Dictionary = await _renderer.render_review(review_job.request.spec)
+			result["requestId"] = review_job.request.requestId
+			review_job.reply.call(result)
+			continue
 		var pid: String = _queue.pop_front()
 		var spec := spec_for(pid)
 		if spec.is_empty():

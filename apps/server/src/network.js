@@ -20,8 +20,8 @@ export const ISOLATION_HINT =
   "another network, such as a phone's hotspot or a travel router (docs/local-testing.md).";
 
 /**
- * The Mac's address on the local network: the first non-internal IPv4, preferring en0/en1 (Wi-Fi
- * on a Mac). A self-assigned 169.254 address doesn't count: the Mac joined a network but got no
+ * The Mac's address on the local network: the first non-internal IPv4, preferring Ethernet over
+ * en0/en1 (Wi-Fi on a Mac). A self-assigned 169.254 address doesn't count: the Mac got no
  * address from it, and phones can't use it. Null when there is none.
  * @returns {{ ip: string, iface: string } | null}
  */
@@ -35,7 +35,7 @@ export function lanAddress(nets = networkInterfaces()) {
   }
   return null;
 }
-const rank = (name) => (name === "en0" ? 0 : name === "en1" ? 1 : name.startsWith("en") ? 2 : 3);
+const rank = (name) => (name === "en0" ? 1 : name === "en1" ? 2 : name.startsWith("en") ? 0 : 3);
 
 const SOCKETFILTERFW = "/usr/libexec/ApplicationFirewall/socketfilterfw";
 const FIREWALL_SETTINGS = "System Settings › Network › Firewall › Options";

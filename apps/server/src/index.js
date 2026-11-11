@@ -24,6 +24,7 @@ export function startServer(settings = loadSettings(), { log = console.log } = {
   const jobs = createJobs({
     game,
     settings,
+    renderer: settings.designClient ? null : { name: "game", render: (spec) => hub.render(spec) },
     log,
     logError: log === console.log ? console.error : log,
   });

@@ -51,7 +51,7 @@ func _connect() -> void:
 	_ws = WebSocketPeer.new()
 	# A roster of 20 racers with specs is well over the 64 KB default.
 	_ws.inbound_buffer_size = 4 * 1024 * 1024
-	_ws.outbound_buffer_size = 1024 * 1024
+	_ws.outbound_buffer_size = 16 * 1024 * 1024
 	_ws.max_queued_packets = 4096
 	var err := _ws.connect_to_url(url)
 	status = "connecting"

@@ -27,7 +27,7 @@ This starts three things:
 | Phone site (Vite, hot reload) | `http://<mac-ip>:5173` |
 | Godot game, connected with `--server` | a window on the Mac |
 
-The server prints the phone URL at start-up: Vite's on :5173 under `bun run dev`, its own :8080 otherwise (it detects the Mac's Wi-Fi IP and follows it when the Mac changes network; set `PUBLIC_URL` to override). Until a phone has opened it, it says the address is unproven; it logs the first phone that gets through, and says in capitals when the address changes, the Mac has no network, or the macOS firewall blocks phones. The big screen shows the same address with a QR code in its options menu (Esc), for people to scan with the phone camera; it says in red when it can't (mock mode, server unreachable, no network, phone site not built).
+The server prints the phone URL at start-up: Vite's on :5173 under `bun run dev`, its own :8080 otherwise (it prefers the Mac's Ethernet IP over Wi-Fi and follows it when the Mac changes network; set `PUBLIC_URL` to override). With the event router connected over Ethernet, phones on **Zukunftstag 2026** use the Mac's router-side address (currently `192.168.1.2`), even while the Mac uses office Wi-Fi for internet. Until a phone has opened it, it says the address is unproven; it logs the first phone that gets through, and says in capitals when the address changes, the Mac has no network, or the macOS firewall blocks phones. The big screen shows the same address with a QR code in its options menu (Esc), for people to scan with the phone camera; it says in red when it can't (mock mode, server unreachable, no network, phone site not built).
 A session starts automatically so you can race straight away. A session lasts `sessionMinutes` (30); when it runs out the next one starts right away with a fresh leaderboard, and a server that boots on an ended session starts a new one. With `BK_AUTOSTART=0` the session stays ended until the game manager or the admin API starts the next one, and phones show "This race is over".
 
 On the phone (same Wi-Fi as the Mac), open `http://<mac-ip>:5173`:
@@ -126,7 +126,7 @@ The garage has a **New drawings** button to redo a racer's photos without resett
 | Var | Default | |
 |---|---|---|
 | `PORT` | `8080` | |
-| `PUBLIC_URL` | `http://<wifi-ip>:8080` | Used in asset URLs and the printed join URL; when set, it stays as given (no network detection) |
+| `PUBLIC_URL` | `http://<lan-ip>:8080` | Used in asset URLs and the printed join URL; when set, it stays as given (no network detection) |
 | `BK_GAME_KEY` | `bebbikart-dev` | Game must send the same key (`--game-key=` or `BK_GAME_KEY`) |
 | `BK_ADMIN_PIN` | `1234` | Header `x-admin-pin` for `/api/admin/*` |
 | `BK_AUTOSTART` | `1` | Keep a session running: start one at boot and the next one when time runs out |

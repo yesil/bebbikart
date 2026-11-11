@@ -393,6 +393,7 @@ const MSG_ADMIN_TO_SERVER = [
 ]
 const MSG_GAME_TO_SERVER = [
 	"hello",
+	"game.rendered",
 	"game.run.started",
 	"game.run.grid",
 	"game.run.progress",
@@ -441,6 +442,7 @@ const MSG_SERVER_TO_GAME = [
 	"session.updated",
 	"config.updated",
 	"error",
+	"render.request",
 	"welcome",
 	"roster.updated",
 	"run.start",

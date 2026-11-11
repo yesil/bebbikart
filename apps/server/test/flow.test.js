@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMockClient } from "@bebbikart/asset-pipeline";
-import { DEFAULT_BUILD, DEFAULT_CONFIG, makeMsg } from "@bebbikart/shared";
+import { DEFAULT_BUILD, DEFAULT_CONFIG, DEFAULT_SPEC, makeMsg } from "@bebbikart/shared";
 import { loadSettings, REPO_ROOT } from "../src/env.js";
 import { startServer } from "../src/index.js";
 
@@ -31,6 +31,35 @@ beforeAll(() => {
   settings.publicUrl = base;
 });
 afterAll(() => srv?.stop());
+
+test("review renders go to the connected game, correlate replies, and fail on disconnect", async () => {
+  const game = client({}, { role: "game", gameKey: settings.gameKey });
+  await game.start();
+  await game.wait("welcome");
+  const first = srv.hub.render(DEFAULT_SPEC);
+  const second = srv.hub.render({ ...DEFAULT_SPEC, title: "Second review" }).catch((err) => err);
+  const a = (await game.wait("render.request", (p) => p.spec.title === DEFAULT_SPEC.title)).payload;
+  const b = (await game.wait("render.request", (p) => p.spec.title === "Second review")).payload;
+  expect(a.requestId).not.toBe(b.requestId);
+  game.send("gameToServer", "game.rendered", {
+    requestId: b.requestId,
+    ok: false,
+    error: "review render failed",
+  });
+  expect((await second).message).toBe("review render failed");
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB";
+  game.send("gameToServer", "game.rendered", {
+    requestId: a.requestId,
+    ok: true,
+    front: png,
+    side: png,
+  });
+  expect(await first).toEqual({ front: png, side: png });
+  const pending = srv.hub.render(DEFAULT_SPEC).catch((err) => err);
+  game.ws.close();
+  expect((await pending).message).toContain("disconnected");
+  await expect(srv.hub.render(DEFAULT_SPEC)).rejects.toThrow("must be connected");
+});
 
 /** A WS client that records messages and can wait for one by type. */
 function client(headers, hello) {

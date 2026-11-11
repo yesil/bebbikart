@@ -94,6 +94,30 @@ func render_all(spec: Dictionary, player_id: String, drawing: Texture2D = null) 
 	return out
 
 
+func render_review(spec: Dictionary) -> Dictionary:
+	if not can_render():
+		return {"ok": false, "error": "Racer reviews need a rendering display"}
+	if _vp == null:
+		await ready
+	var racer := RacerBuilder.build(spec)
+	if racer == null:
+		return {"ok": false, "error": "Invalid racer spec: " + ", ".join(RacerBuilder.last_errors)}
+	racer.show_name_tag(false)
+	racer.set_process(false)
+	_vp.add_child(racer)
+	racer.snap_pose("happy")
+	var out := {"ok": true}
+	for view in ["front", "side"]:
+		_frame_hero(racer, HERO_DIR if view == "front" else Vector3(-1.0, 0.12, 0.0))
+		var img := await _shot(HERO_SIZE)
+		if img == null:
+			racer.queue_free()
+			return {"ok": false, "error": "No image from the racer review viewport"}
+		out[view] = "data:image/png;base64," + Marshalls.raw_to_base64(img.save_png_to_buffer())
+	racer.queue_free()
+	return out
+
+
 ## Renders only the hero image of a spec to `png_path`. Returns the absolute path, or "" on failure.
 ## view "side" looks at the racer's left flank instead of the 3/4 front view.
 func render_hero(spec: Dictionary, png_path: String, drawing: Texture2D = null, view := "hero") -> String:

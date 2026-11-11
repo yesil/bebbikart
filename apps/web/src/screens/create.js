@@ -64,10 +64,10 @@ export function Create({ ctx, only }) {
           me: await api("PATCH", "/api/players/me", { nickname: name.trim() }),
         });
       await uploadDrawings(files.character, files.vehicle, setProgress);
+      dispatch({ type: "redo", on: false });
       // player.updated (processing) arrives over WS; refresh in case the socket is down.
       const st = await api("GET", "/api/state");
       if (st.me) dispatch({ type: "me", me: st.me });
-      dispatch({ type: "redo", on: false });
     } catch (err) {
       dispatch({ type: "toast", text: errorText(err) });
     } finally {

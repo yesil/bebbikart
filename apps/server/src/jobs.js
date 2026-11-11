@@ -9,7 +9,13 @@ const MAX_UPLOAD = 15 * 1024 * 1024;
 const MAX_REROLLS = 3;
 const now = () => new Date().toISOString();
 
-export function createJobs({ game, settings, log = console.log, logError = console.error }) {
+export function createJobs({
+  game,
+  settings,
+  renderer,
+  log = console.log,
+  logError = console.error,
+}) {
   const queue = [];
   let active = 0;
   // Claude from env (ANTHROPIC_API_KEY). Tests inject a client; there is no mock or fallback at runtime.
@@ -103,6 +109,7 @@ export function createJobs({ game, settings, log = console.log, logError = conso
       result = await Promise.race([
         runDesignJob(input, onStatus, {
           client,
+          renderer,
           log: (m) => log(`[job] ${job.id} ${m}`),
           onImproved,
         }),

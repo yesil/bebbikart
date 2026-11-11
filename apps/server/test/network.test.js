@@ -36,7 +36,15 @@ function reachOn(nets, { firewall = OPEN, suspects = async () => [], settings = 
   return box;
 }
 
-test("lanAddress: Wi-Fi first, never a VPN or self-assigned address, null without a network", () => {
+test("lanAddress: Ethernet before Wi-Fi, skipping self-assigned addresses, null without a network", () => {
+  expect(lanAddress({ ...WIFI, en11: [v4("192.168.1.2")] })).toEqual({
+    ip: "192.168.1.2",
+    iface: "en11",
+  });
+  expect(lanAddress({ ...WIFI, en11: [v4("169.254.12.7")] })).toEqual({
+    ip: "172.24.240.193",
+    iface: "en0",
+  });
   expect(lanAddress({ utun4: [v4("10.8.0.2")], ...WIFI })).toEqual({
     ip: "172.24.240.193",
     iface: "en0",
@@ -95,12 +103,26 @@ test("the address follows the Mac to another network, loudly, and the phone has 
   const { reach } = box;
   await reach.ready;
   reach.sawClient("172.24.240.50");
+  box.nets = { ...WIFI, en11: [v4("192.168.1.2")] };
+  reach.check();
+  expect(reach.url()).toBe("http://192.168.1.2:8080");
+  expect(reach.network()).toBe(NETWORK.noPhoneYet);
+  expect(box.errors[0]).toContain(
+    "THE PHONE ADDRESS CHANGED: phones now open http://192.168.1.2:8080 (en11), not http://172.24.240.193:8080",
+  );
+  reach.sawClient("192.168.1.100");
+  box.nets = WIFI;
+  reach.check();
+  expect(reach.url()).toBe("http://172.24.240.193:8080");
+  expect(reach.network()).toBe(NETWORK.noPhoneYet);
   box.nets = { ...LO, en0: [v4("172.20.10.4")] }; // the Mac joins a phone's hotspot
   reach.check();
   expect(reach.url()).toBe("http://172.20.10.4:8080");
   expect(reach.network()).toBe(NETWORK.noPhoneYet);
-  expect(box.errors[0]).toContain(
-    "THE PHONE ADDRESS CHANGED: phones now open http://172.20.10.4:8080 (en0), not http://172.24.240.193:8080",
+  expect(box.errors).toContainEqual(
+    expect.stringContaining(
+      "THE PHONE ADDRESS CHANGED: phones now open http://172.20.10.4:8080 (en0), not http://172.24.240.193:8080",
+    ),
   );
   box.nets = LO;
   reach.check();

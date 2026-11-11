@@ -1,5 +1,5 @@
 // WebSocket hub (contracts §7): hello/welcome per role, typed routing, presence.
-import { makeMsg, parseMsg, ROLE_CHANNELS, WS_CLOSE_UNAUTHORIZED } from "@bebbikart/shared";
+import { makeMsg, newId, parseMsg, ROLE_CHANNELS, WS_CLOSE_UNAUTHORIZED } from "@bebbikart/shared";
 
 export function createHub({ settings, log = console.log }) {
   /** @type {ReturnType<import("./game.js").createGame>} */
@@ -8,6 +8,15 @@ export function createHub({ settings, log = console.log }) {
   const admins = new Set();
   let gameWs = null;
   let gameTrack = null; // the course the connected game has loaded (its hello), null = follows config
+  const renders = new Map();
+
+  function failRenders(message) {
+    for (const pending of renders.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(message));
+    }
+    renders.clear();
+  }
 
   function send(ws, channel, type, payload) {
     let msg;
@@ -43,6 +52,20 @@ export function createHub({ settings, log = console.log }) {
     toGame(type, payload) {
       if (gameWs) send(gameWs, "serverToGame", type, payload);
     },
+    render(spec) {
+      if (!gameWs)
+        return Promise.reject(new Error("The game must be connected to render racer reviews"));
+      const requestId = newId("message");
+      const msg = makeMsg("serverToGame", "render.request", { requestId, spec });
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          renders.delete(requestId);
+          reject(new Error("The game did not render the racer review within 60 seconds"));
+        }, 60_000);
+        renders.set(requestId, { resolve, reject, timer });
+        gameWs.send(JSON.stringify(msg));
+      });
+    },
 
     /** Bun.serve `websocket` handlers. ws.data = { deviceId?, role? } set at upgrade. */
     websocket: {
@@ -62,6 +85,15 @@ export function createHub({ settings, log = console.log }) {
         if (type === "hello") return;
         if (role === "game") {
           if (ws !== gameWs) return;
+          if (type === "game.rendered") {
+            const pending = renders.get(payload.requestId);
+            if (!pending) return;
+            renders.delete(payload.requestId);
+            clearTimeout(pending.timer);
+            if (payload.ok) pending.resolve({ front: payload.front, side: payload.side });
+            else pending.reject(new Error(payload.error));
+            return;
+          }
           if (type.startsWith("game.config.") || type.startsWith("game.session.")) {
             try {
               game.managerCommand(type, payload);
@@ -101,6 +133,7 @@ export function createHub({ settings, log = console.log }) {
           admins.delete(ws);
         } else if (role === "game" && ws === gameWs) {
           gameWs = null;
+          failRenders("The game disconnected while rendering racer reviews");
           log("[ws] game disconnected");
           game.abortAllRuns("game_disconnected");
         }
@@ -141,6 +174,7 @@ export function createHub({ settings, log = console.log }) {
         log("[ws] a new game connected; replacing the old one");
         const old = gameWs;
         gameWs = null;
+        failRenders("The game was replaced while rendering racer reviews");
         old.close(4000, "replaced by another game");
         game.abortAllRuns("game_replaced");
       }

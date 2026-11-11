@@ -787,6 +787,8 @@ func _physics_process(_delta: float) -> void:
 func _handle(msg: Dictionary) -> void:
 	var pl = msg["payload"]  # Dictionary, or a bare Array for roster.updated
 	match msg["type"]:
+		"render.request":
+			assets.review(pl, func(result: Dictionary): net.send("game.rendered", result))
 		Messages.RUN_START:
 			# A loop run races the laps the server gave it (run.start lapsPerRun), never a default.
 			var laps := int(pl.get("lapsPerRun", 0))

@@ -4,6 +4,7 @@ import { ForkChoiceSchema } from "./build.js";
 import { ConfigSchema } from "./config.js";
 import { PROTOCOL_VERSION } from "./enums.js";
 import { newId } from "./ids.js";
+import { RacerSpecSchema } from "./racer-spec.js";
 import {
   CoachTipSchema,
   DuelResultSchema,
@@ -34,6 +35,10 @@ import {
 const ms = z.number().int().nonnegative();
 const empty = z.object({});
 const progress = z.number().min(0).max(1);
+const reviewImage = z
+  .string()
+  .max(8 * 1024 * 1024)
+  .regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/);
 
 const hello = z.discriminatedUnion("role", [
   z.object({ role: z.literal("phone") }), // the bk_device cookie identifies the device
@@ -97,6 +102,15 @@ export const CHANNELS = {
   },
   gameToServer: {
     hello,
+    "game.rendered": z.discriminatedUnion("ok", [
+      z.object({
+        requestId: z.string(),
+        ok: z.literal(true),
+        front: reviewImage,
+        side: reviewImage,
+      }),
+      z.object({ requestId: z.string(), ok: z.literal(false), error: z.string().max(1000) }),
+    ]),
     "game.run.started": z.object({ runId: z.string() }),
     // The run is on the start grid in its half; it leaves (game.run.started) in goInMs
     // (config.startCountdownMs).
@@ -215,6 +229,7 @@ export const CHANNELS = {
   },
   serverToGame: {
     ...broadcasts,
+    "render.request": z.object({ requestId: z.string(), spec: RacerSpecSchema }),
     welcome: z.object({
       session: SessionSchema,
       config: ConfigSchema,

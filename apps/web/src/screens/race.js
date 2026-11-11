@@ -298,6 +298,7 @@ export function Result({ ctx }) {
             onClose=${() => setPeek(false)} />`
         : null
     }
+    <button class="ghost" onClick=${() => dispatch({ type: "redo", on: true })}>📷 ${COPY.garage.newDrawings}</button>
     <div class="go-bar-space" aria-hidden="true"></div>
     <div class="go-bar two">
       <button class="ghost" onClick=${() => dispatch({ type: "clearResult", coach: r.coach })}>${COPY.result.change}</button>
