@@ -1,73 +1,70 @@
 # BebbiKart
 
-A one-time kart game for kids: drawings become 3D racers, phones coach, the computer drives.
-The plan lives in [`docs/`](docs/README.md); the shared rules are in [`docs/contracts.md`](docs/contracts.md).
+A local multiplayer kart game: kids' drawings become 3D racers, phones steer,
+and a Godot game runs on the big screen. Racers are designed with Claude.
 
 ## Setting up a Mac
 
-Everything the build needs is in the repo (game assets, Godot `.import` and `.uid` files, the
-generated Godot copies of the contracts). What a fresh clone does not have: the API key, the
-release build, Godot's import cache (`apps/game/.godot/`) and the server's data (racers,
-leaderboard, uploads in `apps/server/data/`, which starts empty).
+Requires [Bun 1.4+](https://bun.sh), the standard
+[Godot 4.7.2](https://github.com/godotengine/godot/releases/tag/4.7.2-stable)
+with `godot` on your PATH, and an Anthropic API key.
+Audio generation needs FluidSynth, FFmpeg with `libvorbis`, and the
+[MuseScore General soundfont](https://ftp.osuosl.org/pub/musescore/soundfont/MuseScore_General/)
+(see [audio build notes](scripts/race-end-cues.js)).
 
-1. **Git**: `xcode-select --install` (Command Line Tools), and access to the GitHub repo.
-2. **Bun 1.4** or newer ([bun.sh](https://bun.sh)): `curl -fsSL https://bun.sh/install | bash`
-3. **Godot 4.7.2**, the standard build (not .NET), with `godot` on the PATH:
-   `brew install --cask godot` installs it and links `godot`. Check with `godot --version`
-   (`4.7.2.stable…`). If Homebrew has moved on, take `Godot_v4.7.2-stable_macos.universal.zip`
-   from the [4.7.2 release](https://github.com/godotengine/godot/releases/tag/4.7.2-stable), put
-   `Godot.app` in `/Applications` and link
-   `ln -s /Applications/Godot.app/Contents/MacOS/Godot /opt/homebrew/bin/godot`.
-4. **Godot's export templates** for that exact version (1.3 GB; `bun run play` needs them). In the
-   clone, `bun run game:templates` downloads them from the Godot release, checks their SHA-512 and
-   installs them in `~/Library/Application Support/Godot/export_templates/4.7.2.stable/`. Or open the
-   project once (`godot -e --path apps/game`) and use Editor → Manage Export Templates → Download
-   and Install.
-5. **The Anthropic API key** (racers are designed from drawings by Claude; the server refuses to
-   start without it). Put it in `packages/asset-pipeline/.env`, which is git-ignored:
-   ```
-   ANTHROPIC_API_KEY=sk-ant-...
-   ```
-   The server also reads `apps/server/.env`, `.env` at the repo root, or the environment.
-6. Install and play:
-   ```bash
-   bun install
-   bun run play
-   ```
-   The first `bun run play` imports every asset and exports the release build, which takes a few
-   minutes; later runs only re-export when a file in `apps/game` changed. macOS asks whether `bun`
-   may accept incoming connections: allow it, or phones can't reach the Mac.
+From the repo root:
 
-To bring the racers and leaderboard from another Mac, stop the server there and copy its
-`apps/server/data/` folder over before starting. Keep the clone at the same path on both Macs:
-the database stores the design jobs' uploads by absolute path.
+```sh
+bun install --frozen-lockfile
+cp .env.example .env
+```
 
-For development, `bun run dev` runs the server :8080, the phone site on Vite :5173 and the game on
-Godot's debug runtime. It imports the game first when Godot doesn't know all its classes yet, as
-right after cloning (under a minute), and so do `dev:game`, `game:mock` and `maps:*`. To try the
-whole thing with a phone on the same Wi-Fi, see [`docs/local-testing.md`](docs/local-testing.md).
+Set `ANTHROPIC_API_KEY` and `SOUNDFONT` (path to `MuseScore_General.sf2`) in `.env`,
+then generate the game assets and play:
 
-| Command | What it does |
-|---|---|
-| `bun run dev` | Starts server, phone site and game together; when one stops, all three stop. A server or Vite left over from an earlier run of this clone is stopped first; anything else on :8080 or :5173 is named in the error |
-| `bun run play` | Real play on the big screen: built phone site on :8080 and the game's release build (no debug runtime); exports the game when needed |
-| `bun run game:export` | Exports the game's release build to `apps/game/export/BebbiKart.app` (needs Godot's export templates) |
-| `bun run start` | Builds the phone site and serves everything from the server on :8080 |
-| `bun run dev:game` / `game:mock` | Godot game against the server / in mock mode |
-| `bun run game:templates` | Installs Godot's export templates for the installed Godot (1.3 GB, once per Godot version) |
-| `bun run game:import` | Imports the game in Godot when its class cache lacks a `class_name` (a fresh clone, or a pull that added one) |
-| `bun run fake-game` | Stand-in game for testing phones without Godot |
-| `bun run test` | Runs all Bun tests |
-| `bun run lint` / `bun run format` | Biome check / fix |
-| `bun run kit:export` | Regenerates `apps/game/net/protocol.gd`, `data/racer_kit.json`, `data/pkg_default/spec.json` (committed; run it after changing `packages/shared`) |
+```sh
+bun run setup
+bun run game:templates
+bun run play
+```
+
+Setup downloads dependencies and texture sources, then generates worlds, maps,
+samples and sound cues. Build outputs stay ignored. The first play exports the
+macOS game; allow a few minutes.
+Join phones to the same local network, allow Bun's incoming connections, and
+open the phone URL printed by the server (`http://<mac-ip>:8080`). The game's
+options menu (Esc) also shows a QR code. Quit the game or press Ctrl+C to stop.
+
+Drawing uploads go to Anthropic and incur API usage charges. Keep `.env` local;
+racers, uploads and the leaderboard live in `apps/server/data/`. Both are ignored by Git.
+Use a trusted local network: the default admin PIN is `1234` (`BK_ADMIN_PIN`)
+and the game key is `bebbikart-dev` (`BK_GAME_KEY`).
+
+## Development
+
+| Command              | Purpose                                                       |
+| -------------------- | ------------------------------------------------------------- |
+| `bun run dev`        | Server on :8080, phone site on :5173, Godot game              |
+| `bun run game:mock`  | Game preview without a server or API key                      |
+| `bun run start`      | Build and serve the phone site on :8080                       |
+| `bun run dev:game`   | Connect the debug game to the server                          |
+| `bun run test`       | Run Bun tests                                                 |
+| `bun run lint`       | Check JavaScript formatting and lint                          |
+| `bun run setup`      | Regenerate assets and install the Terrain3D native dependency |
+| `bun run kit:export` | Regenerate Godot contracts after changing `packages/shared`   |
 
 ## Layout
 
+```text
+apps/game/                Godot game
+apps/server/              Bun server, WebSockets and racer jobs
+apps/web/                 Phone site and admin console (Preact + Vite)
+packages/shared/          Schemas, protocol and racer kit
+packages/asset-pipeline/  Drawings → RacerSpec
 ```
-packages/shared/          zod schemas, enums, config, messages, racer kit, coach tips (WS1)
-  testing/                fixtures (@bebbikart/shared/testing) and MSW handlers (@bebbikart/shared/msw)
-packages/asset-pipeline/  drawing → RacerSpec designer (WS5)
-apps/server/              Bun game server (WS2)
-apps/web/                 phone site + /admin, Preact + htm on Vite (WS4)
-apps/game/                big-screen game, Godot 4 (WS3)
-```
+
+[Local testing and settings](docs/local-testing.md) ·
+[Game controls](apps/game/README.md) ·
+[Contracts](docs/contracts.md) ·
+[Asset credits](apps/game/assets/CREDITS.md) ·
+[Audio credits](apps/game/assets/audio/CREDITS.md)

@@ -1,6 +1,0 @@
-[gd_scene format=3]
-
-[ext_resource type="ArrayMesh" path="res://world/vegetation/meshes/flower_4_group.res" id="1_8vs1r"]
-
-[node name="Flower_4_Group" type="MeshInstance3D" unique_id=596474653]
-mesh = ExtResource("1_8vs1r")

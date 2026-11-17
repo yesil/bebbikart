@@ -8,9 +8,8 @@ On a new Mac, first install Bun, Godot 4.7.2 with its export templates and the A
 [Setting up a Mac](../README.md#setting-up-a-mac).
 
 ```bash
-bun install            # also links the asset pipeline into the server
-bun run kit:export     # Godot copies of the contracts
-cd apps/game && godot --headless --import && cd ../..   # first time / after pulling
+bun install --frozen-lockfile
+bun run setup          # dependencies, generated contracts, maps, worlds and audio
 ```
 
 ## Run it

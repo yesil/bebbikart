@@ -4,6 +4,9 @@ The kiosk game: toy-world course, 60 Hz driving sim, weather, and a mock network
 
 ## Run
 
+First run `bun run setup` from the repo root to install dependencies and generate
+the worlds, textures and audio (see the [setup instructions](../../README.md#setting-up-a-mac)).
+
 From `apps/game`:
 
 ```sh
@@ -142,7 +145,7 @@ Sweep flags:
 - **No fallbacks:** a missing scene, texture or model stops the bake (nothing is saved) and the game quits with an error.
 - Local add-on patches are listed in `assets/CREDITS.md`.
 
-Current results (2026-10-31, M4 Max, 1920×1080, 20 racers, vsync off): about 105–120 fps on average (the 120 looks like the display's cap); 1% low 94–102 fps across the follow, wide and fork cameras. The world check covers about 5,000 scattered and 35,000 ground-cover instances, 16 grounded landmarks and 3,270 road samples. Screenshots are in `docs/screenshots/`.
+Current results (2026-10-31, M4 Max, 1920×1080, 20 racers, vsync off): about 105–120 fps on average (the 120 looks like the display's cap); 1% low 94–102 fps across the follow, wide and fork cameras. The world check covers about 5,000 scattered and 35,000 ground-cover instances, 16 grounded landmarks and 3,270 road samples. Generate screenshots locally with `tools/shots.gd`; `docs/` is ignored.
 
 ## Village circuit (second track)
 

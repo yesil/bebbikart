@@ -5,15 +5,12 @@
 // Run with `bun run kit:export` after changing packages/shared.
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { DEFAULT_BUILD } from "../src/build.js";
+import { DEFAULT_CONFIG } from "../src/config.js";
+import { DEFAULT_SPEC } from "../src/default-spec.js";
 import * as enums from "../src/enums.js";
-import {
-  DEFAULT_BUILD,
-  DEFAULT_CONFIG,
-  DEFAULT_SPEC,
-  MESSAGE_TYPES,
-  RACER_KIT,
-  SPEC_LIMITS,
-} from "../src/index.js";
+import { MESSAGE_TYPES } from "../src/messages.js";
+import { RACER_KIT, SPEC_LIMITS } from "../src/racer-kit.js";
 
 const gameDir = join(import.meta.dir, "../../../apps/game");
 

@@ -2,20 +2,22 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://rutrimen40ox"
-path="res://.godot/imported/village_map.svg-41ec76ff80ccc0d468c293fdde304869.ctex"
+uid="uid://cvpcl7xjx2ylg"
+path.s3tc="res://.godot/imported/PathRocks_Diffuse.png-ecab76fc22a0a14772dc73419a55559b.s3tc.ctex"
+path.etc2="res://.godot/imported/PathRocks_Diffuse.png-ecab76fc22a0a14772dc73419a55559b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
-source_file="res://docs/village_map.svg"
-dest_files=["res://.godot/imported/village_map.svg-41ec76ff80ccc0d468c293fdde304869.ctex"]
+source_file="res://assets/nature/quaternius/PathRocks_Diffuse.png"
+dest_files=["res://.godot/imported/PathRocks_Diffuse.png-ecab76fc22a0a14772dc73419a55559b.s3tc.ctex", "res://.godot/imported/PathRocks_Diffuse.png-ecab76fc22a0a14772dc73419a55559b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -23,7 +25,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -38,6 +40,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

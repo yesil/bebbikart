@@ -8,6 +8,7 @@
     "apps/web"
   ],
   "scripts": {
+    "setup": "bun scripts/setup.js",
     "dev": "bun scripts/dev.js",
     "dev:server": "bun run --cwd apps/server dev",
     "dev:web": "bun run --cwd apps/web dev",

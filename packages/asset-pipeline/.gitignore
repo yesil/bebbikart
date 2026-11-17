@@ -6,3 +6,7 @@ out-before/
 out-after/
 *.log
 out-*/
+samples/pair*.jpg
+samples/tricky-scribble.jpg
+samples/tricky-blank-page.jpg
+samples/tricky-both-on-one-page.jpg

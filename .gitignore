@@ -4,6 +4,8 @@ dist/
 apps/server/data/
 out/
 .env
+.env.*
+!.env.example
 .DS_Store
 apps/game/.godot/
 *.import
@@ -17,3 +19,5 @@ apps/game/.godot/
 
 # Transfer bundles and patches moved between machines by hand: never part of the game.
 .xfer/
+.build/
+packages/shared/src/track-maps/
